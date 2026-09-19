@@ -30,8 +30,15 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# Environment & Secrets (CRITICAL)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env*.local
+*.pem
+*.key
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +48,10 @@ example
 # generated native folders
 /ios
 /android
+
+# Test artifacts and personal recordings
+test-output/
+fixtures/live_captures/
+*.log
+*.jks
+*.keystore

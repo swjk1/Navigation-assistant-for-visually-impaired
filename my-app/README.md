@@ -1,56 +1,104 @@
-# Welcome to your Expo app 👋
+# Perception Engine (Person 1)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The Perception Engine handles real-time camera capture, spatial object recognition, OCR reading, and hazard detection for the indoor assistive navigation system.
 
-## Get started
+> **Integration note:** This module lives inside `my-app/` (Expo SDK 57). Paths below are relative to `my-app/` unless stated otherwise.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Setup & Installation
 
-2. Start the app
+### 1. Environment Configuration
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Ensure your API keys are protected. Never commit `.env` or hardcode keys.
 
 ```bash
-npm run reset-project
+cd my-app
+cp .env.example .env
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Open `.env` and add your valid Google Gemini API key:
 
-### Other setup steps
+```env
+EXPO_PUBLIC_GEMINI_API_KEY=AIzaSy...
+GEMINI_API_KEY=AIzaSy...
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 2. Verify Security Guardrails
 
-## Learn more
+Check that `.env` is ignored by git before staging files:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+git status --ignored
+# Verify .env appears under "Ignored files"
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 3. Install Dependencies
 
-## Join the community
+```bash
+npm install
+npx expo install expo-camera
+```
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Architecture (Person 1 scope)
+
+```text
+Camera (640×480 JPEG @ 0.4)
+        │ Base64
+        ▼
+perceptionEngine.js  →  Gemini 2.0 Flash
+        │ raw JSON
+        ▼
+schemaValidator.js   →  verified PerceptionFrame
+        │
+        ▼
+Person 2 (Mapping) / Person 3 (Guidance)
+```
+
+Latency budget (round-trip ≤ 1500 ms): capture ≤ 150 ms · inference+parse ≤ 1200 ms · schema ≤ 15 ms.
+
+---
+
+## Step documentation
+
+| Step | Doc | Snapshot |
+| --- | --- | --- |
+| 1 Hardware & secrets | [docs/person1/STEP_01_HARDWARE.md](docs/person1/STEP_01_HARDWARE.md) | `snapshots/snapshot_step1_hardware.json` |
+| 2 Perception service | *pending* | `snapshots/snapshot_step2_perception_frame.json` |
+| 3 Schema & edge cases | *pending* | `snapshots/snapshot_step3_edge_cases.json` |
+| 4 Latency profile | *pending* | `snapshots/snapshot_step4_latency_profile.json` |
+| 5 Integration contract | *pending* | `snapshots/snapshot_step5_final_contract.json` |
+
+---
+
+## Testing & Snapshots
+
+### Run Edge Case & Latency Regressions
+
+```bash
+node test/run_edge_case_tests.js
+```
+
+*(Available after Step 3.)*
+
+### Snapshot Structure
+
+Every pipeline stage produces a frozen JSON snapshot in `/snapshots`:
+
+* `snapshot_step1_hardware.json` — Hardware & camera verification metrics
+* `snapshot_step2_perception_frame.json` — Base live perception response
+* `snapshot_step3_edge_cases.json` — Regression results across hazards, drop-offs, and signs
+* `snapshot_step4_latency_profile.json` — Processing times and token efficiency
+* `snapshot_step5_final_contract.json` — Validated contract signed off for Person 2
+
+---
+
+## Public contract (after Step 5)
+
+```js
+import { getLatestPerceptionFrame } from './src/index.js';
+```
+
+Persons 2 and 3 should depend only on `PerceptionFrame` from `src/types/perception.ts` and the exported getter / mocks — not on Gemini or camera internals.

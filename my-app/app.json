@@ -8,7 +8,10 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow camera access so the navigation assistant can detect doors, stairs, signs, and hazards."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +20,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
     },
     "web": {
       "output": "static",
@@ -31,6 +35,14 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera for indoor navigation hazard and sign detection.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ]
     ],

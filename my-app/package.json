@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.19",
     "expo": "~57.0.24",
+    "expo-camera": "~57.0.5",
     "expo-constants": "~57.0.19",
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
@@ -37,7 +38,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:step1": "node test/run_step1_timing.mjs"
   },
   "private": true
 }
