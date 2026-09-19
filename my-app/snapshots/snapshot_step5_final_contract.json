@@ -1,0 +1,298 @@
+{
+  "step": 5,
+  "name": "final_contract_person2_handover",
+  "status": "contract_verified",
+  "timestamp": 1789839507036,
+  "timedAt": "2026-09-19T17:38:27.037Z",
+  "prdReviewQuestion": "Can Person 2 consume getLatestPerceptionFrame() with zero schema errors?",
+  "reviewAnswers": {
+    "getLatestPerceptionFrameExported": true,
+    "mockFixturesAvailable": true,
+    "zeroSchemaErrorsAcrossMocks": true,
+    "canPerson2ConsumeWithZeroSchemaErrors": true,
+    "doorAt11OClock": true,
+    "room204ForDestinationConfirm": true,
+    "analyzeAndStoreCachesLatest": true,
+    "publicFrameHasNoMeta": true,
+    "speakableLinesCappedAt5": true
+  },
+  "signOff": {
+    "person1": "verified",
+    "person2": "ready_for_integration",
+    "person3": "ready_for_tts_lines"
+  },
+  "publicApi": [
+    "getLatestPerceptionFrame",
+    "getLatestTeammateHandoff",
+    "analyzeAndStore",
+    "getMockPerceptionFrame",
+    "getMockTeammateHandoff",
+    "listNavAnchors",
+    "listObstacles",
+    "listReadableSigns",
+    "listSpeakableLines",
+    "toPublicPerceptionFrame",
+    "buildTeammateHandoff"
+  ],
+  "scenarios": {
+    "hallway": {
+      "objectCount": 3,
+      "textCount": 1,
+      "immediateHazard": false,
+      "navAnchorCount": 2,
+      "obstacleCount": 0,
+      "signs": [
+        "ROOM 204"
+      ],
+      "speakableLines": [
+        "Door at 11 o'clock, about 3.5 meters.",
+        "Sign at 1 o'clock, about 4.0 meters.",
+        "Sign reads ROOM 204."
+      ],
+      "speechPriority": "guidance",
+      "schemaErrors": 0
+    },
+    "stairs": {
+      "objectCount": 1,
+      "textCount": 0,
+      "immediateHazard": true,
+      "navAnchorCount": 1,
+      "obstacleCount": 0,
+      "signs": [],
+      "speakableLines": [
+        "Descending stairs ahead within 3 meters. Stop.",
+        "Stairs at 12 o'clock, about 2.0 meters."
+      ],
+      "speechPriority": "hazard",
+      "schemaErrors": 0
+    },
+    "trashcan": {
+      "objectCount": 1,
+      "textCount": 0,
+      "immediateHazard": true,
+      "navAnchorCount": 0,
+      "obstacleCount": 1,
+      "signs": [],
+      "speakableLines": [
+        "Obstacle in path within 3 meters.",
+        "Trashcan at 12 o'clock, about 1.5 meters."
+      ],
+      "speechPriority": "hazard",
+      "schemaErrors": 0
+    },
+    "clear_hallway": {
+      "objectCount": 2,
+      "textCount": 0,
+      "immediateHazard": false,
+      "navAnchorCount": 0,
+      "obstacleCount": 0,
+      "signs": [],
+      "speakableLines": [],
+      "speechPriority": "guidance",
+      "schemaErrors": 0
+    },
+    "blurry": {
+      "objectCount": 0,
+      "textCount": 0,
+      "immediateHazard": false,
+      "navAnchorCount": 0,
+      "obstacleCount": 0,
+      "signs": [],
+      "speakableLines": [],
+      "speechPriority": "guidance",
+      "schemaErrors": 0
+    }
+  },
+  "examples": {
+    "hallwayFrame": {
+      "timestamp": 1789839507035,
+      "latencyMs": 0,
+      "objects": [
+        {
+          "label": "door",
+          "confidence": 0.92,
+          "box": {
+            "x": 0.18,
+            "y": 0.22,
+            "width": 0.28,
+            "height": 0.55
+          },
+          "clockPosition": "11 o'clock",
+          "approxDistanceMeters": 3.5
+        },
+        {
+          "label": "wall",
+          "confidence": 0.88,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 0.15,
+            "height": 1
+          },
+          "clockPosition": "9 o'clock",
+          "approxDistanceMeters": 1.2
+        },
+        {
+          "label": "sign",
+          "confidence": 0.85,
+          "box": {
+            "x": 0.55,
+            "y": 0.18,
+            "width": 0.2,
+            "height": 0.12
+          },
+          "clockPosition": "1 o'clock",
+          "approxDistanceMeters": 4
+        }
+      ],
+      "text": [
+        {
+          "text": "ROOM 204",
+          "confidence": 0.91,
+          "box": {
+            "x": 0.55,
+            "y": 0.18,
+            "width": 0.2,
+            "height": 0.12
+          }
+        }
+      ],
+      "floorDetected": true,
+      "immediateHazard": false,
+      "hazardDescription": null
+    },
+    "hallwayHandoff": {
+      "frame": {
+        "timestamp": 1789839507037,
+        "latencyMs": 0,
+        "objects": [
+          {
+            "label": "door",
+            "confidence": 0.92,
+            "box": {
+              "x": 0.18,
+              "y": 0.22,
+              "width": 0.28,
+              "height": 0.55
+            },
+            "clockPosition": "11 o'clock",
+            "approxDistanceMeters": 3.5
+          },
+          {
+            "label": "wall",
+            "confidence": 0.88,
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0.15,
+              "height": 1
+            },
+            "clockPosition": "9 o'clock",
+            "approxDistanceMeters": 1.2
+          },
+          {
+            "label": "sign",
+            "confidence": 0.85,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            },
+            "clockPosition": "1 o'clock",
+            "approxDistanceMeters": 4
+          }
+        ],
+        "text": [
+          {
+            "text": "ROOM 204",
+            "confidence": 0.91,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            }
+          }
+        ],
+        "floorDetected": true,
+        "immediateHazard": false,
+        "hazardDescription": null
+      },
+      "navAnchors": [
+        {
+          "label": "door",
+          "confidence": 0.92,
+          "box": {
+            "x": 0.18,
+            "y": 0.22,
+            "width": 0.28,
+            "height": 0.55
+          },
+          "clockPosition": "11 o'clock",
+          "approxDistanceMeters": 3.5
+        },
+        {
+          "label": "sign",
+          "confidence": 0.85,
+          "box": {
+            "x": 0.55,
+            "y": 0.18,
+            "width": 0.2,
+            "height": 0.12
+          },
+          "clockPosition": "1 o'clock",
+          "approxDistanceMeters": 4
+        }
+      ],
+      "obstacles": [],
+      "signs": [
+        "ROOM 204"
+      ],
+      "speakableLines": [
+        "Door at 11 o'clock, about 3.5 meters.",
+        "Sign at 1 o'clock, about 4.0 meters.",
+        "Sign reads ROOM 204."
+      ],
+      "speechPriority": "guidance"
+    },
+    "stairsSpeakable": [
+      "Descending stairs ahead within 3 meters. Stop.",
+      "Stairs at 12 o'clock, about 2.0 meters."
+    ],
+    "latestAfterAnalyze": {
+      "timestamp": 1789839507036,
+      "latencyMs": 0,
+      "objects": [
+        {
+          "label": "door",
+          "confidence": 0.9,
+          "box": {
+            "x": 0.18,
+            "y": 0.22,
+            "width": 0.28,
+            "height": 0.55
+          },
+          "clockPosition": "11 o'clock",
+          "approxDistanceMeters": 0.7
+        }
+      ],
+      "text": [
+        {
+          "text": "ROOM 204",
+          "confidence": 0.9,
+          "box": {
+            "x": 0.55,
+            "y": 0.18,
+            "width": 0.2,
+            "height": 0.12
+          }
+        }
+      ],
+      "floorDetected": false,
+      "immediateHazard": false,
+      "hazardDescription": null
+    }
+  },
+  "failures": []
+}

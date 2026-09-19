@@ -8,7 +8,10 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 
 class AnalyzeOptions : Record {
   @Field
@@ -28,9 +31,17 @@ class AnalyzeOptions : Record {
 }
 
 class IndoorPerceptionModule : Module() {
+  /** Decode / orchestration thread */
   private val executor = Executors.newSingleThreadExecutor()
+  /** Parallel YOLO + OCR workers (max 2) */
+  private val analyzePool = Executors.newFixedThreadPool(2)
   private var detector: Yolo26Detector? = null
   private var ocr: MlKitOcr? = null
+
+  companion object {
+    /** Reject oversized payloads before decode (~2× capture budget). */
+    private const val MAX_BASE64_CHARS = 400_000
+  }
 
   private fun getDetector(): Yolo26Detector {
     val existing = detector
@@ -57,6 +68,7 @@ class IndoorPerceptionModule : Module() {
       detector = null
       ocr = null
       executor.shutdownNow()
+      analyzePool.shutdownNow()
     }
 
     AsyncFunction("getStatus") {
@@ -87,6 +99,12 @@ class IndoorPerceptionModule : Module() {
       executor.execute {
         val totalStart = System.currentTimeMillis()
         try {
+          if (base64Image.length > MAX_BASE64_CHARS) {
+            throw IllegalArgumentException(
+              "Frame base64 too large (${base64Image.length} chars). Recapture at 640x480 q≤0.4."
+            )
+          }
+
           val opts = options ?: AnalyzeOptions()
           val bitmap = decodeBase64Bitmap(base64Image)
             ?: throw IllegalArgumentException("Could not decode base64 image")
@@ -95,73 +113,133 @@ class IndoorPerceptionModule : Module() {
           var ocrMs = 0L
           var yoloError: String? = null
           var ocrError: String? = null
-          val objects = mutableListOf<Map<String, Any?>>()
-          val texts = mutableListOf<Map<String, Any?>>()
+          var objects: List<Map<String, Any?>> = emptyList()
+          var texts: List<Map<String, Any?>> = emptyList()
           var modelLoaded = false
           var modelPath: String? = null
 
+          data class YoloResult(
+            val objects: List<Map<String, Any?>>,
+            val ms: Long,
+            val error: String?,
+            val loaded: Boolean,
+            val path: String?
+          )
+
+          data class OcrResult(
+            val texts: List<Map<String, Any?>>,
+            val ms: Long,
+            val error: String?
+          )
+
+          val runBoth = opts.runYolo && opts.runOcr
+          var yoloFuture: Future<YoloResult>? = null
+          var ocrFuture: Future<OcrResult>? = null
+
           if (opts.runYolo) {
-            val y0 = System.currentTimeMillis()
-            try {
-              val det = getDetector()
-              modelLoaded = det.ensureLoaded()
-              modelPath = det.modelPath
-              if (!modelLoaded) {
-                yoloError =
-                  "Model asset missing: ${Yolo26Detector.ASSET_NAME}. Run npm run download:yolo26"
-              } else {
-                val detections = det.detect(
-                  bitmap,
-                  confThreshold = opts.confThreshold.toFloat(),
-                  iouThreshold = opts.iouThreshold.toFloat(),
-                  maxDetections = opts.maxDetections
-                )
-                for (d in detections) {
-                  val label = d.navLabel ?: continue
-                  objects.add(
-                    mapOf(
-                      "label" to label,
-                      "confidence" to d.confidence.toDouble(),
-                      "box" to mapOf(
-                        "x" to d.x.toDouble(),
-                        "y" to d.y.toDouble(),
-                        "width" to d.width.toDouble(),
-                        "height" to d.height.toDouble()
-                      ),
-                      "cocoClassId" to d.classId,
-                      "cocoName" to d.cocoName
-                    )
+            val task = Callable {
+              val y0 = System.currentTimeMillis()
+              try {
+                val det = getDetector()
+                val loaded = det.ensureLoaded()
+                val path = det.modelPath
+                if (!loaded) {
+                  YoloResult(
+                    emptyList(),
+                    System.currentTimeMillis() - y0,
+                    "Model asset missing: ${Yolo26Detector.ASSET_NAME}. Run npm run download:yolo26",
+                    false,
+                    path
                   )
+                } else {
+                  val detections = det.detect(
+                    bitmap,
+                    confThreshold = opts.confThreshold.toFloat(),
+                    iouThreshold = opts.iouThreshold.toFloat(),
+                    maxDetections = opts.maxDetections
+                  )
+                  val mapped = mutableListOf<Map<String, Any?>>()
+                  for (d in detections) {
+                    val label = d.navLabel ?: continue
+                    mapped.add(
+                      mapOf(
+                        "label" to label,
+                        "confidence" to d.confidence.toDouble(),
+                        "box" to mapOf(
+                          "x" to d.x.toDouble(),
+                          "y" to d.y.toDouble(),
+                          "width" to d.width.toDouble(),
+                          "height" to d.height.toDouble()
+                        ),
+                        "cocoClassId" to d.classId,
+                        "cocoName" to d.cocoName
+                      )
+                    )
+                  }
+                  YoloResult(mapped, System.currentTimeMillis() - y0, null, true, path)
                 }
+              } catch (e: Exception) {
+                YoloResult(emptyList(), System.currentTimeMillis() - y0, e.message, false, null)
               }
-            } catch (e: Exception) {
-              yoloError = e.message
             }
-            yoloMs = System.currentTimeMillis() - y0
+            if (runBoth) {
+              yoloFuture = analyzePool.submit(task)
+            } else {
+              val r = task.call()
+              objects = r.objects
+              yoloMs = r.ms
+              yoloError = r.error
+              modelLoaded = r.loaded
+              modelPath = r.path
+            }
           }
 
           if (opts.runOcr) {
-            val o0 = System.currentTimeMillis()
-            try {
-              val lines = getOcr().recognize(bitmap)
-              for (line in lines) {
-                texts.add(
-                  mapOf(
-                    "text" to line.text,
-                    "confidence" to line.confidence.toDouble(),
-                    "box" to mapOf(
-                      "x" to line.x.toDouble(),
-                      "y" to line.y.toDouble(),
-                      "width" to line.width.toDouble(),
-                      "height" to line.height.toDouble()
+            val task = Callable {
+              val o0 = System.currentTimeMillis()
+              try {
+                val lines = getOcr().recognize(bitmap)
+                val mapped = mutableListOf<Map<String, Any?>>()
+                for (line in lines) {
+                  mapped.add(
+                    mapOf(
+                      "text" to line.text,
+                      "confidence" to line.confidence.toDouble(),
+                      "box" to mapOf(
+                        "x" to line.x.toDouble(),
+                        "y" to line.y.toDouble(),
+                        "width" to line.width.toDouble(),
+                        "height" to line.height.toDouble()
+                      )
                     )
                   )
-                )
+                }
+                OcrResult(mapped, System.currentTimeMillis() - o0, null)
+              } catch (e: Exception) {
+                OcrResult(emptyList(), System.currentTimeMillis() - o0, e.message)
               }
-            } catch (e: Exception) {
-              ocrError = e.message
             }
-            ocrMs = System.currentTimeMillis() - o0
+            if (runBoth) {
+              ocrFuture = analyzePool.submit(task)
+            } else {
+              val r = task.call()
+              texts = r.texts
+              ocrMs = r.ms
+              ocrError = r.error
+            }
+          }
+
+          if (runBoth) {
+            val yolo = yoloFuture!!.get(8, TimeUnit.SECONDS)
+            val ocrRes = ocrFuture!!.get(8, TimeUnit.SECONDS)
+            objects = yolo.objects
+            yoloMs = yolo.ms
+            yoloError = yolo.error
+            modelLoaded = yolo.loaded
+            modelPath = yolo.path
+            texts = ocrRes.texts
+            ocrMs = ocrRes.ms
+            ocrError = ocrRes.error
           }
 
           val totalMs = System.currentTimeMillis() - totalStart

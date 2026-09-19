@@ -4,8 +4,10 @@ import {
   MOCK_TIMEOUT_SAFE_FRAME,
   selectMockRawPayload,
 } from '../constants/mockPerception.js';
+import { NETWORK_TIMEOUT_FALLBACK_MS } from '../constants/cameraConfig.js';
 
 function readTimeoutMs() {
+  // Clamp abort slightly above PRD 3000ms fallback threshold (default 3500)
   return Number(process.env.GEMINI_TIMEOUT_MS) || 3500;
 }
 
@@ -26,8 +28,8 @@ export const GEMINI_MODEL = getGeminiModelCandidates()[0];
 
 const MAX_RETRIES = Number(process.env.GEMINI_MAX_RETRIES) || 3;
 const BASE_BACKOFF_MS = Number(process.env.GEMINI_BACKOFF_MS) || 800;
-/** Minimum gap between live Gemini calls (rate / demand protection). */
-const MIN_CALL_GAP_MS = Number(process.env.GEMINI_MIN_GAP_MS) || 4000;
+/** Gap between Gemini calls — keep below pipeline budget so it cannot dominate a frame. */
+const MIN_CALL_GAP_MS = Number(process.env.GEMINI_MIN_GAP_MS) || 1500;
 
 let lastGeminiCallAt = 0;
 
@@ -86,10 +88,8 @@ function isRetryableStatus(status) {
 export async function processFrameMock(options = {}) {
   const startTime = Date.now();
   const raw = selectMockRawPayload(options.scenario || 'hallway');
-  const cleanedJson = JSON.stringify(raw);
-  const parsed = JSON.parse(cleanedJson);
   const latencyMs = Date.now() - startTime;
-  return validateAndSanitizeFrame(parsed, latencyMs);
+  return validateAndSanitizeFrame(raw, latencyMs);
 }
 
 function extractJsonObject(rawText) {
@@ -110,11 +110,15 @@ function extractJsonObject(rawText) {
 }
 
 async function callGeminiOnce(base64Image, model, apiKey, signal) {
+  // Prefer header auth — never put the key in the URL (logs / proxies).
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       signal,
       body: JSON.stringify({
         contents: [
@@ -180,10 +184,22 @@ async function callGeminiOnce(base64Image, model, apiKey, signal) {
 }
 
 /**
- * Live Gemini Flash with:
- * - min call gap (slow down under demand)
- * - retries + exponential backoff on 429/503
- * - model fallbacks if one is overloaded/retired
+ * PRD Step 4 deterministic timeout frame (safe for TTS).
+ * @param {number} latencyMs
+ */
+export function buildScanTimeoutFrame(latencyMs) {
+  return validateAndSanitizeFrame(
+    {
+      ...MOCK_TIMEOUT_SAFE_FRAME,
+      hazardDescription: 'Scan timeout. Stop and hold position.',
+    },
+    latencyMs
+  );
+}
+
+/**
+ * Live Gemini Flash with retries / backoff / model fallbacks.
+ * If total network time exceeds NETWORK_TIMEOUT_FALLBACK_MS (3000), returns timeout frame.
  */
 export async function processFrameLive(base64Image) {
   const API_KEY = requireGeminiApiKey();
@@ -195,11 +211,18 @@ export async function processFrameLive(base64Image) {
   await respectMinCallGap();
   lastGeminiCallAt = Date.now();
 
-  // Walk model list; retryable failures advance to next model after backoff
   let modelIndex = 0;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // PRD: if already past 3000ms network budget, stop and return safe frame
+    if (Date.now() - startTime > NETWORK_TIMEOUT_FALLBACK_MS) {
+      return buildScanTimeoutFrame(Date.now() - startTime);
+    }
+
     const model = models[Math.min(modelIndex, models.length - 1)];
-    const remaining = timeoutMs - (Date.now() - startTime);
+    const remaining = Math.min(
+      timeoutMs - (Date.now() - startTime),
+      NETWORK_TIMEOUT_FALLBACK_MS - (Date.now() - startTime) + 50
+    );
     if (remaining < 400) break;
 
     const controller = new AbortController();
@@ -214,6 +237,11 @@ export async function processFrameLive(base64Image) {
       );
       clearTimeout(timeoutId);
       const latencyMs = Date.now() - startTime;
+
+      if (latencyMs > NETWORK_TIMEOUT_FALLBACK_MS) {
+        return buildScanTimeoutFrame(latencyMs);
+      }
+
       const frame = validateAndSanitizeFrame(parsed, latencyMs);
       return {
         ...frame,
@@ -239,7 +267,6 @@ export async function processFrameLive(base64Image) {
         break;
       }
 
-      // Prefer next model on 404/503; stay/backoff on parse errors
       if (err?.status === 404 || err?.status === 503) {
         modelIndex = Math.min(modelIndex + 1, models.length - 1);
       }
@@ -251,22 +278,26 @@ export async function processFrameLive(base64Image) {
 
   const latencyMs = Date.now() - startTime;
   const timedOut =
-    lastError?.name === 'AbortError' || latencyMs >= timeoutMs - 50;
+    lastError?.name === 'AbortError' ||
+    latencyMs > NETWORK_TIMEOUT_FALLBACK_MS ||
+    latencyMs >= timeoutMs - 50;
 
-  const fallback = timedOut
-    ? {
-        ...MOCK_TIMEOUT_SAFE_FRAME,
-        hazardDescription: 'Vision analysis timed out. Hold position.',
-      }
-    : {
-        objects: [],
-        text: [],
-        floorDetected: false,
-        immediateHazard: true,
-        hazardDescription: `Perception connection error: ${lastError?.message || 'unknown'}`,
-      };
+  if (timedOut) {
+    return buildScanTimeoutFrame(latencyMs);
+  }
 
-  return validateAndSanitizeFrame(fallback, latencyMs);
+  // Never put API keys, URLs, or raw error text into speakable hazard copy
+  return validateAndSanitizeFrame(
+    {
+      objects: [],
+      text: [],
+      floorDetected: false,
+      immediateHazard: true,
+      hazardDescription:
+        'Perception temporarily unavailable. Hold position.',
+    },
+    latencyMs
+  );
 }
 
 /**

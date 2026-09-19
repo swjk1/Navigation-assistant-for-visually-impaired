@@ -1,15 +1,15 @@
 {
   "name": "prd_alignment_checkpoint",
-  "throughStep": 2,
-  "timestamp": 1789837519969,
-  "timedAt": "2026-09-19T17:05:19.969Z",
-  "verdict": "ALIGNED_THROUGH_STEP_2_WITH_NOTES",
+  "throughStep": 5,
+  "timestamp": 1789839507998,
+  "timedAt": "2026-09-19T17:38:27.998Z",
+  "verdict": "ALIGNED_THROUGH_STEP_5_WITH_NOTES",
   "notes": [
     "PRD model name gemini-2.0-flash was retired by Google; code uses gemini-3.6-flash (same Flash-class role).",
     "Phone live capture latency for Step 1 still pending.",
     "Hybrid YOLO+ML Kit is an agreed extension; public contract remains PerceptionFrame.",
     "Step 3 complete with fixture JPEGs + mock scenarios; replace fixtures with venue photos when available.",
-    "Step 4 not started; Step 5 partially exported via src/index.js."
+    "Step 5 contract verified offline for Person 2/3; live phone YOLO wiring still optional."
   ],
   "checklist": [
     {
@@ -68,13 +68,17 @@
     {
       "id": "S4",
       "prd": "Step 4: latency profile 10 captures + timeout fallback snapshot",
-      "status": "not_started"
+      "status": "done"
     },
     {
       "id": "S5",
-      "prd": "Step 5: getLatestPerceptionFrame + mockPerception export",
-      "status": "done_partial",
-      "note": "getLatestPerceptionFrame + mocks exported; final Person 2 sign-off snapshot pending"
+      "prd": "Step 5: Export getLatestPerceptionFrame + mocks; Person 2 contract",
+      "status": "done",
+      "note": {
+        "status": "contract_verified",
+        "person2": "ready_for_integration",
+        "zeroSchemaErrors": true
+      }
     },
     {
       "id": "SECURITY",
@@ -91,7 +95,9 @@
     "snapshot_hybrid_yolo_ocr_vlm": true,
     "snapshot_step3_edge_cases": true,
     "snapshot_step3_schema": true,
-    "snapshot_step4_latency_profile": false,
-    "snapshot_step5_final_contract": false
+    "snapshot_step4_latency_profile": true,
+    "snapshot_security_audit": true,
+    "snapshot_teammate_handoff": true,
+    "snapshot_step5_final_contract": true
   }
 }

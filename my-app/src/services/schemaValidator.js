@@ -1,28 +1,12 @@
 /**
  * Strict PerceptionFrame sanitizer for Person 1 → Person 2/3 handoff.
- * Clamps coordinates, filters labels/clocks, and always returns a valid frame shape.
  */
 
-const ALLOWED_LABELS = [
-  'door',
-  'person',
-  'stairs',
-  'elevator',
-  'chair',
-  'trashcan',
-  'wall',
-  'sign',
-];
-
-const ALLOWED_CLOCK = [
-  "9 o'clock",
-  "10 o'clock",
-  "11 o'clock",
-  "12 o'clock",
-  "1 o'clock",
-  "2 o'clock",
-  "3 o'clock",
-];
+import {
+  ALLOWED_LABELS,
+  ALLOWED_CLOCK,
+  MAX_DISTANCE_METERS,
+} from '../constants/perceptionCatalog.js';
 
 function clamp01(value, fallback = 0) {
   const n = Number(value);
@@ -30,19 +14,23 @@ function clamp01(value, fallback = 0) {
   return Math.max(0, Math.min(1, n));
 }
 
+/**
+ * Clamp box to unit square and ensure x+width / y+height stay ≤ 1.
+ */
 function sanitizeBox(box = {}) {
-  return {
-    x: clamp01(box.x, 0),
-    y: clamp01(box.y, 0),
-    width: clamp01(box.width, 0),
-    height: clamp01(box.height, 0),
-  };
+  let x = clamp01(box.x, 0);
+  let y = clamp01(box.y, 0);
+  let width = clamp01(box.width, 0);
+  let height = clamp01(box.height, 0);
+  width = Math.min(width, 1 - x);
+  height = Math.min(height, 1 - y);
+  return { x, y, width, height };
 }
 
 /**
  * @param {object} rawPayload
  * @param {number} latencyMs
- * @returns {import('../types/perception').PerceptionFrame}
+ * @returns {object} PerceptionFrame
  */
 export function validateAndSanitizeFrame(rawPayload, latencyMs) {
   if (!rawPayload || typeof rawPayload !== 'object') {
@@ -60,6 +48,14 @@ export function validateAndSanitizeFrame(rawPayload, latencyMs) {
     for (const obj of rawPayload.objects) {
       if (!obj || !ALLOWED_LABELS.includes(obj.label)) continue;
 
+      const distance = Math.max(
+        0.5,
+        Math.min(
+          MAX_DISTANCE_METERS,
+          Number(obj.approxDistanceMeters) || 2.0
+        )
+      );
+
       validObjects.push({
         label: obj.label,
         confidence: clamp01(obj.confidence, 0.5),
@@ -67,10 +63,7 @@ export function validateAndSanitizeFrame(rawPayload, latencyMs) {
         clockPosition: ALLOWED_CLOCK.includes(obj.clockPosition)
           ? obj.clockPosition
           : "12 o'clock",
-        approxDistanceMeters: Math.max(
-          0.5,
-          Number(obj.approxDistanceMeters) || 2.0
-        ),
+        approxDistanceMeters: distance,
       });
     }
   }

@@ -2,6 +2,8 @@
  * Optional Step-1 harness screen.
  * Navigate to /perception-harness after starting Expo to verify capture budgets.
  * This is Person 1 tooling — not the production guidance UI (Person 3).
+ *
+ * Uses the public analyzeAndStore API so the harness matches teammate integration.
  */
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
@@ -20,7 +22,7 @@ import {
 } from '@/services/cameraService';
 import { hasValidGeminiApiKey } from '@/services/envCheck';
 import { getPerceptionMode } from '@/services/perceptionEngine';
-import { processHybridFrame } from '@/services/hybridPerception';
+import { analyzeAndStore } from '@/index.js';
 
 export default function PerceptionHarnessScreen() {
   const cameraRef = useRef(null);
@@ -42,25 +44,24 @@ export default function PerceptionHarnessScreen() {
         platform: Platform.OS,
       });
 
-      let hybrid = null;
+      let handoff = null;
       try {
-        hybrid = await processHybridFrame(result.base64, {
-          // Gemini only when ML Kit/YOLO unsure (reduces 503 demand)
+        handoff = await analyzeAndStore(result.base64, {
           allowLiveVlm: liveReady,
           vlmOnTop: false,
           useMockVlmOnGate: !liveReady,
         });
       } catch (hybridErr) {
-        hybrid = {
+        handoff = {
           error: hybridErr?.message || String(hybridErr),
-          note: 'Native YOLO/OCR needs Android dev build; Gemini needs a real key in .env',
+          note: 'Native YOLO/OCR needs Android dev build; Gemini needs GEMINI_API_KEY in .env',
         };
       }
 
       const record = {
         mode: liveReady ? 'live' : 'mock-fallback',
         hardware,
-        hybrid,
+        handoff,
       };
       setSnapshot(record);
       // eslint-disable-next-line no-console

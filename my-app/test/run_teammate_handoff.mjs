@@ -34,6 +34,9 @@ if (!stairs.speakableLines?.[0]?.toLowerCase().includes('stop') &&
     !stairs.frame.immediateHazard) {
   failures.push('stairs hazard handoff incomplete');
 }
+if ((hallway.speakableLines?.length || 0) > 5) {
+  failures.push('speakableLines must be capped at 5 for TTS');
+}
 
 const passed = failures.length === 0;
 const snapshot = {

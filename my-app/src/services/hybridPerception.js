@@ -1,29 +1,18 @@
 /**
  * Hybrid perception: YOLO26n + ML Kit OCR, Gemini only when needed.
  *
- * Authority:
- *  - Objects: YOLO first; Gemini adds nav-only labels YOLO misses
- *  - Text:   ML Kit OCR is primary; Gemini OCR only if ML Kit empty
- *  - Hazard:  Gemini when gated (plus OCR caution keywords)
- *
- * Gemini gate (default): ML Kit unsure, YOLO empty/error, caution OCR, or force.
- * Not every frame — reduces 503 demand pressure.
+ * Gate policy (sparse — empty YOLO/OCR alone does NOT force Gemini):
+ *  - real native errors (YOLO/OCR failure)
+ *  - OCR returned text but confidence is low
+ *  - caution keywords in OCR
+ *  - periodic everyNth / forceVlm / vlmOnTop
  */
 
-import { validateAndSanitizeFrame } from './schemaValidator.js';
+import { validateAndSanitizeFrame, ALLOWED_CLOCK } from './schemaValidator.js';
 import { processFrameLive, getPerceptionMode } from './perceptionEngine.js';
 import { selectMockRawPayload } from '../constants/mockPerception.js';
 import { hasValidGeminiApiKey } from './envCheck.js';
-
-const CLOCKS = [
-  "9 o'clock",
-  "10 o'clock",
-  "11 o'clock",
-  "12 o'clock",
-  "1 o'clock",
-  "2 o'clock",
-  "3 o'clock",
-];
+import { CAMERA_CAPTURE_CONFIG } from '../constants/cameraConfig.js';
 
 const VLM_FILL_LABELS = new Set([
   'door',
@@ -70,33 +59,35 @@ function hazardHintsFromOcr(textItems = []) {
 }
 
 /**
- * ML Kit is "unsure" when it found no text, OCR errored, or best confidence is low.
+ * ML Kit unsure = OCR errored, OR text present but low confidence.
+ * Empty OCR is normal in blank hallways — does not force Gemini.
  */
 export function isMlKitUnsure(native) {
   if (native?.ocrError) return true;
   const texts = native?.text || [];
-  if (!texts.length) return true;
+  if (!texts.length) return false;
   const best = Math.max(...texts.map((t) => Number(t.confidence) || 0));
   return best < MLKIT_CONF_UNSURE;
 }
 
+/**
+ * YOLO unsure = real failure, not merely empty COCO detections.
+ * Empty objects are expected when only doors/stairs are visible (not in COCO map).
+ */
 export function isYoloUnsure(native) {
   if (native?.yoloError) return true;
-  if (!native?.modelLoaded && native?.platform === 'unavailable') return true;
-  if (!native?.objects?.length) return true;
+  if (native?.platform === 'unavailable') return true;
+  if (native?.modelLoaded === false && native?.platform === 'android') {
+    return true;
+  }
   return false;
 }
 
 /**
- * Decide whether to call Gemini.
- * Default policy = sparse: only when on-device stack is unsure or hazard-like.
- *
- * @param {object} native
- * @param {{ forceVlm?: boolean, vlmOnTop?: boolean, everyNth?: number, frameIndex?: number }} [policy]
+ * Decide whether to call Gemini (sparse by default).
  */
 export function shouldInvokeVlm(native, policy = {}) {
   if (policy.forceVlm === true) return true;
-  // Explicit always-on (opt-in only)
   if (policy.vlmOnTop === true) return true;
 
   if (isMlKitUnsure(native)) return true;
@@ -114,10 +105,10 @@ export function explainVlmGate(native, policy = {}) {
   if (policy.forceVlm) return 'forced';
   if (policy.vlmOnTop) return 'vlm_on_top';
   if (native?.ocrError) return 'mlkit_error';
-  if (!(native?.text || []).length) return 'mlkit_empty';
   if (isMlKitUnsure(native)) return 'mlkit_low_confidence';
   if (native?.yoloError) return 'yolo_error';
-  if (!native?.objects?.length) return 'yolo_empty';
+  if (native?.platform === 'unavailable') return 'native_unavailable';
+  if (isYoloUnsure(native)) return 'yolo_model_missing';
   if (hazardHintsFromOcr(native?.text)) return 'ocr_caution_keywords';
   if (policy.everyNth > 0) return 'every_nth';
   return 'skipped';
@@ -143,10 +134,12 @@ export function mergeNativeToRaw(native, vlmPartial = null) {
     vlmPartial?.hazardDescription != null
       ? vlmPartial.hazardDescription
       : null;
+
+  // Do not assume floor is present when VLM was skipped
   let floorDetected =
     typeof vlmPartial?.floorDetected === 'boolean'
       ? vlmPartial.floorDetected
-      : true;
+      : Boolean(native?.floorDetected);
 
   if (!immediateHazard && hazardHintsFromOcr(text)) {
     immediateHazard = true;
@@ -185,12 +178,24 @@ export function mergeNativeToRaw(native, vlmPartial = null) {
   };
 }
 
+function assertPayloadSize(base64Image) {
+  if (!base64Image || typeof base64Image !== 'string') return;
+  // Rough decoded size from base64 length
+  const approxBytes = Math.floor((base64Image.length * 3) / 4);
+  if (approxBytes > CAMERA_CAPTURE_CONFIG.maxBase64Bytes * 2) {
+    throw new Error(
+      `Frame too large (~${approxBytes} bytes). Recapture at 640x480 q≤0.4.`
+    );
+  }
+}
+
 /**
  * Full hybrid pipeline.
- * Gemini runs only when gated (ML Kit unsure / YOLO gap / caution), unless vlmOnTop/force.
  */
 export async function processHybridFrame(base64Image, options = {}) {
   const start = Date.now();
+  assertPayloadSize(base64Image);
+
   let native = options.nativeResult || null;
 
   if (!native) {
@@ -222,7 +227,6 @@ export async function processHybridFrame(base64Image, options = {}) {
   const allowLiveVlm =
     options.allowLiveVlm ?? (liveMode && hasValidGeminiApiKey());
 
-  // Default: sparse gate (NOT every frame). Opt into always with vlmOnTop:true.
   const vlmOnTop = options.vlmOnTop === true;
   const gateReason = explainVlmGate(native, {
     forceVlm: options.forceVlm,
@@ -264,7 +268,7 @@ export async function processHybridFrame(base64Image, options = {}) {
       roles: {
         yolo: 'objects (COCO-mapped)',
         mlkit: 'OCR primary',
-        gemini: 'only when ML Kit/YOLO unsure or caution',
+        gemini: 'errors / low-conf OCR / caution / periodic only',
       },
       yoloMs: native?.yoloMs ?? null,
       ocrMs: native?.ocrMs ?? null,
@@ -290,7 +294,7 @@ export async function processHybridFrame(base64Image, options = {}) {
       ocrError: native?.ocrError ?? null,
       platform: native?.platform ?? 'unknown',
       clocksValid: frame.objects.every((o) =>
-        CLOCKS.includes(o.clockPosition)
+        ALLOWED_CLOCK.includes(o.clockPosition)
       ),
     },
   };

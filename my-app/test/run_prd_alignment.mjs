@@ -1,5 +1,5 @@
 /**
- * Consolidated PRD alignment checkpoint through Step 2 (+ hybrid extension).
+ * Consolidated PRD alignment checkpoint (Steps 1–5 + hybrid extension).
  * Usage: node test/run_prd_alignment.mjs
  */
 import fs from 'fs';
@@ -25,6 +25,10 @@ const step1t = loadJson('snapshot_step1_timing_profile.json');
 const step2 = loadJson('snapshot_step2_perception_frame.json');
 const step2live = loadJson('snapshot_step2_perception_frame_live.json');
 const hybrid = loadJson('snapshot_hybrid_yolo_ocr_vlm.json');
+const step3 = loadJson('snapshot_step3_edge_cases.json');
+const step4 = loadJson('snapshot_step4_latency_profile.json');
+const step5 = loadJson('snapshot_step5_final_contract.json');
+const security = loadJson('snapshot_security_audit.json');
 
 const checklist = [
   {
@@ -103,9 +107,8 @@ const checklist = [
   {
     id: 'S3',
     prd: 'Step 3: edge-case fixture suite + snapshot_step3_edge_cases.json',
-    status: loadJson('snapshot_step3_edge_cases.json')?.summary
-      ? loadJson('snapshot_step3_edge_cases.json').summary.passed ===
-        loadJson('snapshot_step3_edge_cases.json').summary.total
+    status: step3?.summary
+      ? step3.summary.passed === step3.summary.total
         ? 'done_mock_synthetic'
         : 'partial'
       : 'not_started',
@@ -113,39 +116,55 @@ const checklist = [
   {
     id: 'S4',
     prd: 'Step 4: latency profile 10 captures + timeout fallback snapshot',
-    status: 'not_started',
+    status: step4?.reviewAnswers?.timeoutFallbackWorks ? 'done' : 'not_started',
   },
   {
     id: 'S5',
-    prd: 'Step 5: getLatestPerceptionFrame + mockPerception export',
-    status: exists('src/index.js') ? 'done_partial' : 'not_started',
-    note: 'getLatestPerceptionFrame + mocks exported; final Person 2 sign-off snapshot pending',
+    prd: 'Step 5: Export getLatestPerceptionFrame + mocks; Person 2 contract',
+    status:
+      exists('src/index.js') &&
+      exists('src/constants/mockPerception.js') &&
+      exists('docs/person1/STEP_05_INTEGRATION.md') &&
+      step5?.status === 'contract_verified' &&
+      step5?.reviewAnswers?.canPerson2ConsumeWithZeroSchemaErrors
+        ? 'done'
+        : exists('src/index.js')
+          ? 'done_partial'
+          : 'not_started',
+    note: step5
+      ? {
+          status: step5.status,
+          person2: step5.signOff?.person2,
+          zeroSchemaErrors:
+            step5.reviewAnswers?.canPerson2ConsumeWithZeroSchemaErrors,
+        }
+      : 'snapshot_step5_final_contract.json missing — run npm run test:step5',
   },
   {
     id: 'SECURITY',
     prd: 'Zero committed API keys',
-    status: 'done',
+    status: security?.status === 'pass' ? 'done' : 'gap',
     note: '.env gitignored; snapshots must not contain keys',
   },
 ];
 
+const stepStatuses = checklist.map((c) => c.status);
+const allDone = stepStatuses.every((s) => String(s).startsWith('done'));
+
 const alignment = {
   name: 'prd_alignment_checkpoint',
-  throughStep: 2,
+  throughStep: 5,
   timestamp: Date.now(),
   timedAt: new Date().toISOString(),
-  verdict:
-    checklist.filter((c) => c.id.startsWith('S1') || c.id.startsWith('S2')).every(
-      (c) => String(c.status).startsWith('done')
-    )
-      ? 'ALIGNED_THROUGH_STEP_2_WITH_NOTES'
-      : 'GAPS_IN_STEP_1_OR_2',
+  verdict: allDone
+    ? 'ALIGNED_THROUGH_STEP_5_WITH_NOTES'
+    : 'GAPS_REMAINING',
   notes: [
     'PRD model name gemini-2.0-flash was retired by Google; code uses gemini-3.6-flash (same Flash-class role).',
     'Phone live capture latency for Step 1 still pending.',
     'Hybrid YOLO+ML Kit is an agreed extension; public contract remains PerceptionFrame.',
     'Step 3 complete with fixture JPEGs + mock scenarios; replace fixtures with venue photos when available.',
-    'Step 4 not started; Step 5 partially exported via src/index.js.',
+    'Step 5 contract verified offline for Person 2/3; live phone YOLO wiring still optional.',
   ],
   checklist,
   snapshotInventory: {
@@ -154,10 +173,14 @@ const alignment = {
     snapshot_step2_perception_frame: Boolean(step2),
     snapshot_step2_perception_frame_live: Boolean(step2live),
     snapshot_hybrid_yolo_ocr_vlm: Boolean(hybrid),
-    snapshot_step3_edge_cases: Boolean(loadJson('snapshot_step3_edge_cases.json')),
+    snapshot_step3_edge_cases: Boolean(step3),
     snapshot_step3_schema: Boolean(loadJson('snapshot_step3_schema.json')),
-    snapshot_step4_latency_profile: false,
-    snapshot_step5_final_contract: false,
+    snapshot_step4_latency_profile: Boolean(step4),
+    snapshot_security_audit: Boolean(security),
+    snapshot_teammate_handoff: Boolean(
+      loadJson('snapshot_teammate_handoff.json')
+    ),
+    snapshot_step5_final_contract: Boolean(step5),
   },
 };
 

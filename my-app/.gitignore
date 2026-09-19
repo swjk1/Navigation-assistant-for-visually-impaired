@@ -32,6 +32,8 @@ yarn-error.*
 
 # Environment & Secrets (CRITICAL)
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -39,6 +41,9 @@ yarn-error.*
 .env*.local
 *.pem
 *.key
+*.secret
+credentials*.json
+service-account*.json
 
 # typescript
 *.tsbuildinfo

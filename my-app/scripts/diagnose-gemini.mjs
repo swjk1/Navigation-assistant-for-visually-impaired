@@ -26,7 +26,7 @@ const models = [
 ];
 
 for (const model of models) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const body = {
     contents: [{ role: 'user', parts: [{ text: 'Say hi in one word.' }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 16 },
@@ -34,7 +34,10 @@ for (const model of models) {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': key,
+      },
       body: JSON.stringify(body),
     });
     const text = await res.text();

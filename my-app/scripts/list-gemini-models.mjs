@@ -13,9 +13,10 @@ for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split(/\r?\n
   if (!process.env[k]) process.env[k] = v;
 }
 
-const key = process.env.GEMINI_API_KEY;
+const key = process.env.GEMINI_API_KEY || process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const res = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`
+  'https://generativelanguage.googleapis.com/v1beta/models',
+  { headers: { 'x-goog-api-key': key } }
 );
 const data = await res.json();
 const names = (data.models || [])

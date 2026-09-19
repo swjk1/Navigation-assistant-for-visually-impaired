@@ -1,5 +1,5 @@
 /**
- * Offline hybrid pipeline snapshot — gated Gemini (not every frame).
+ * Offline hybrid pipeline snapshot — gated Gemini (sparse; empty ≠ unsure).
  */
 import fs from 'fs';
 import path from 'path';
@@ -15,6 +15,7 @@ const {
   clockFromBox,
   shouldInvokeVlm,
   isMlKitUnsure,
+  isYoloUnsure,
 } = await import('../src/services/hybridPerception.js');
 
 const confidentNative = {
@@ -51,12 +52,38 @@ const confidentNative = {
   platform: 'android-mock',
 };
 
-const unsureNative = {
+/** Empty detections are normal — must NOT force Gemini. */
+const emptyNative = {
   ...confidentNative,
   objects: [],
   text: [],
   modelLoaded: true,
   yoloError: null,
+  ocrError: null,
+};
+
+/** Real failure path — should invoke Gemini. */
+const errorNative = {
+  ...confidentNative,
+  objects: [],
+  text: [],
+  modelLoaded: false,
+  yoloError: 'Model asset missing',
+  ocrError: null,
+  platform: 'android',
+};
+
+/** Low-confidence OCR — should invoke Gemini. */
+const lowConfOcrNative = {
+  ...confidentNative,
+  objects: [],
+  text: [
+    {
+      text: '??',
+      confidence: 0.3,
+      box: { x: 0.4, y: 0.2, width: 0.2, height: 0.08 },
+    },
+  ],
 };
 
 console.log('====================================================');
@@ -87,33 +114,50 @@ if (frame.meta?.ocrSource !== 'mlkit') {
 if (shouldInvokeVlm(confidentNative, { vlmOnTop: false })) {
   failures.push('confident ML Kit+YOLO should NOT invoke Gemini');
 }
-if (!shouldInvokeVlm(unsureNative, { vlmOnTop: false })) {
-  failures.push('empty ML Kit+YOLO SHOULD invoke Gemini');
+if (shouldInvokeVlm(emptyNative, { vlmOnTop: false })) {
+  failures.push('empty YOLO/OCR must NOT invoke Gemini (sparse gate)');
 }
-if (!isMlKitUnsure(unsureNative)) {
-  failures.push('empty OCR should be mlkit unsure');
+if (isMlKitUnsure(emptyNative)) {
+  failures.push('empty OCR must not be treated as mlkit unsure');
+}
+if (isYoloUnsure(emptyNative)) {
+  failures.push('empty YOLO must not be treated as yolo unsure');
+}
+if (!shouldInvokeVlm(errorNative, { vlmOnTop: false })) {
+  failures.push('yoloError SHOULD invoke Gemini');
+}
+if (!shouldInvokeVlm(lowConfOcrNative, { vlmOnTop: false })) {
+  failures.push('low-confidence OCR SHOULD invoke Gemini');
 }
 if (frame.meta?.vlmInvoked) {
   failures.push('confident path should skip mock VLM gate');
 }
 
-// Unsure path should invoke mock VLM
-const unsureFrame = await processHybridFrame('ZmFrZQ==', {
-  nativeResult: unsureNative,
+const emptyFrame = await processHybridFrame('ZmFrZQ==', {
+  nativeResult: emptyNative,
+  allowLiveVlm: false,
+  useMockVlmOnGate: true,
+  vlmOnTop: false,
+});
+if (emptyFrame.meta?.vlmInvoked) {
+  failures.push('empty path should skip VLM');
+}
+if (emptyFrame.meta?.vlmGateReason !== 'skipped') {
+  failures.push(`empty gate reason expected skipped, got ${emptyFrame.meta?.vlmGateReason}`);
+}
+
+const errorFrame = await processHybridFrame('ZmFrZQ==', {
+  nativeResult: errorNative,
   allowLiveVlm: false,
   useMockVlmOnGate: true,
   vlmOnTop: false,
   mockVlmScenario: 'hallway',
 });
-if (!unsureFrame.meta?.vlmInvoked) {
-  failures.push('unsure path should invoke mock VLM');
+if (!errorFrame.meta?.vlmInvoked) {
+  failures.push('error path should invoke mock VLM');
 }
-if (unsureFrame.meta?.vlmGateReason !== 'mlkit_empty' &&
-    unsureFrame.meta?.vlmGateReason !== 'yolo_empty') {
-  // either reason is fine; prefer recording actual
-  if (!unsureFrame.meta?.vlmGateReason) {
-    failures.push('unsure path missing vlmGateReason');
-  }
+if (errorFrame.meta?.vlmGateReason !== 'yolo_error') {
+  failures.push(`error gate expected yolo_error, got ${errorFrame.meta?.vlmGateReason}`);
 }
 
 const passed = failures.length === 0;
@@ -129,16 +173,23 @@ const snapshot = {
     yoloObjectsMerged: frame.objects.length >= 2,
     mlkitOcrPrimary: frame.meta?.ocrSource === 'mlkit',
     skipGeminiWhenConfident: !shouldInvokeVlm(confidentNative),
-    callGeminiWhenUnsure: shouldInvokeVlm(unsureNative),
+    skipGeminiWhenEmpty: !shouldInvokeVlm(emptyNative),
+    callGeminiOnYoloError: shouldInvokeVlm(errorNative),
+    callGeminiOnLowConfOcr: shouldInvokeVlm(lowConfOcrNative),
     clockFromBoxWorks:
       clockFromBox({ x: 0.42, width: 0.2 }) === "12 o'clock",
   },
   failures,
   frameConfident: frame,
-  frameUnsure: {
-    vlmInvoked: unsureFrame.meta?.vlmInvoked,
-    vlmGateReason: unsureFrame.meta?.vlmGateReason,
-    objectCount: unsureFrame.objects.length,
+  frameEmpty: {
+    vlmInvoked: emptyFrame.meta?.vlmInvoked,
+    vlmGateReason: emptyFrame.meta?.vlmGateReason,
+    objectCount: emptyFrame.objects.length,
+  },
+  frameError: {
+    vlmInvoked: errorFrame.meta?.vlmInvoked,
+    vlmGateReason: errorFrame.meta?.vlmGateReason,
+    objectCount: errorFrame.objects.length,
   },
 };
 
@@ -150,7 +201,7 @@ failures.forEach((f) => console.log(`   • ${f}`));
 console.log(`⏱️  ${wallMs.toFixed(2)}ms`);
 console.log(`📁 ${outPath}`);
 console.log(
-  `Confident gate: skip | Unsure gate: ${unsureFrame.meta?.vlmGateReason}`
+  `Confident: skip | Empty: skip | Error: ${errorFrame.meta?.vlmGateReason}`
 );
 
 if (!passed) process.exitCode = 1;

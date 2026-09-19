@@ -2,20 +2,22 @@
   "step": "hybrid",
   "name": "yolo26_mlkit_gemini_gated",
   "status": "mock_verified",
-  "timestamp": 1789837226417,
-  "timedAt": "2026-09-19T17:00:26.417Z",
+  "timestamp": 1789839170834,
+  "timedAt": "2026-09-19T17:32:50.834Z",
   "geminiCalled": false,
-  "wallClockMs": 0.655,
+  "wallClockMs": 1.139,
   "reviewAnswers": {
     "yoloObjectsMerged": true,
     "mlkitOcrPrimary": true,
     "skipGeminiWhenConfident": true,
-    "callGeminiWhenUnsure": true,
+    "skipGeminiWhenEmpty": true,
+    "callGeminiOnYoloError": true,
+    "callGeminiOnLowConfOcr": true,
     "clockFromBoxWorks": true
   },
   "failures": [],
   "frameConfident": {
-    "timestamp": 1789837226417,
+    "timestamp": 1789839170833,
     "latencyMs": 1,
     "objects": [
       {
@@ -55,7 +57,7 @@
         }
       }
     ],
-    "floorDetected": true,
+    "floorDetected": false,
     "immediateHazard": false,
     "hazardDescription": null,
     "meta": {
@@ -63,7 +65,7 @@
       "roles": {
         "yolo": "objects (COCO-mapped)",
         "mlkit": "OCR primary",
-        "gemini": "only when ML Kit/YOLO unsure or caution"
+        "gemini": "errors / low-conf OCR / caution / periodic only"
       },
       "yoloMs": 42,
       "ocrMs": 55,
@@ -81,9 +83,14 @@
       "clocksValid": true
     }
   },
-  "frameUnsure": {
+  "frameEmpty": {
+    "vlmInvoked": false,
+    "vlmGateReason": "skipped",
+    "objectCount": 0
+  },
+  "frameError": {
     "vlmInvoked": true,
-    "vlmGateReason": "mlkit_empty",
+    "vlmGateReason": "yolo_error",
     "objectCount": 3
   }
 }

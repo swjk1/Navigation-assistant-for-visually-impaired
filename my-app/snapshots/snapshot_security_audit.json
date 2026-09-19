@@ -1,0 +1,49 @@
+{
+  "step": "security",
+  "name": "security_audit",
+  "timestamp": 1789839182421,
+  "timedAt": "2026-09-19T17:33:02.421Z",
+  "status": "pass",
+  "findings": [
+    {
+      "ok": true,
+      "id": "gitignore-env",
+      "detail": "my-app/.gitignore:34:.env\tmy-app/.env"
+    },
+    {
+      "ok": true,
+      "id": "env-not-tracked",
+      "detail": "not tracked"
+    },
+    {
+      "ok": true,
+      "id": "env-example-placeholder",
+      "detail": "placeholder only"
+    },
+    {
+      "ok": true,
+      "id": "env-example-prefers-private",
+      "detail": "GEMINI_API_KEY documented; EXPO_PUBLIC_ not required"
+    },
+    {
+      "ok": true,
+      "id": "secret-scan",
+      "detail": "scanned 60 files — no key patterns"
+    },
+    {
+      "ok": true,
+      "id": "header-api-key",
+      "detail": "Gemini calls use x-goog-api-key header (not query string)"
+    },
+    {
+      "ok": true,
+      "id": "safe-error-copy",
+      "detail": "connection errors use TTS-safe hazard copy (no raw API details)"
+    },
+    {
+      "ok": true,
+      "id": "prefer-private-key",
+      "detail": "envCheck prefers GEMINI_API_KEY over EXPO_PUBLIC_"
+    }
+  ]
+}

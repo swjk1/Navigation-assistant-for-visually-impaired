@@ -20,10 +20,10 @@ cp .env.example .env
 Open `.env` and add your valid Google Gemini API key:
 
 ```env
-EXPO_PUBLIC_GEMINI_API_KEY=AIzaSy...
-GEMINI_API_KEY=AIzaSy...
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
+Prefer `GEMINI_API_KEY` over `EXPO_PUBLIC_GEMINI_API_KEY` — the public Expo prefix embeds the key in the client bundle.
 ### 2. Verify Security Guardrails
 
 Check that `.env` is ignored by git before staging files:
@@ -48,13 +48,16 @@ npx expo install expo-camera
 Camera (640×480 JPEG @ 0.4)
         │ Base64
         ▼
-perceptionEngine.js  →  Gemini 2.0 Flash
+hybridPerception.js  →  YOLO26n + ML Kit OCR + gated Gemini Flash
         │ raw JSON
         ▼
 schemaValidator.js   →  verified PerceptionFrame
         │
         ▼
-Person 2 (Mapping) / Person 3 (Guidance)
+src/index.js (getLatestPerceptionFrame / mocks)
+        │
+        ▼
+Person 2 (Mapping) / Person 3 (Guidance / TTS)
 ```
 
 Latency budget (round-trip ≤ 1500 ms): capture ≤ 150 ms · inference+parse ≤ 1200 ms · schema ≤ 15 ms.
@@ -69,20 +72,21 @@ Latency budget (round-trip ≤ 1500 ms): capture ≤ 150 ms · inference+parse �
 | 2 Perception service | [docs/person1/STEP_02_PERCEPTION.md](docs/person1/STEP_02_PERCEPTION.md) | `snapshots/snapshot_step2_perception_frame.json` |
 | Hybrid YOLO+OCR+VLM | [docs/person1/HYBRID_YOLO_OCR_VLM.md](docs/person1/HYBRID_YOLO_OCR_VLM.md) | `snapshots/snapshot_hybrid_yolo_ocr_vlm.json` |
 | 3 Schema & edge cases | [docs/person1/STEP_03_EDGE_CASES.md](docs/person1/STEP_03_EDGE_CASES.md) | `snapshots/snapshot_step3_edge_cases.json` |
-| 4 Latency profile | *pending* | `snapshots/snapshot_step4_latency_profile.json` |
-| 5 Integration contract | *pending* | `snapshots/snapshot_step5_final_contract.json` |
+| 4 Latency profile | [docs/person1/STEP_04_LATENCY.md](docs/person1/STEP_04_LATENCY.md) | `snapshots/snapshot_step4_latency_profile.json` |
+| 5 Integration contract | [docs/person1/STEP_05_INTEGRATION.md](docs/person1/STEP_05_INTEGRATION.md) | `snapshots/snapshot_step5_final_contract.json` |
 
 ---
 
 ## Testing & Snapshots
 
-### Run Edge Case & Latency Regressions
+### Run regressions
 
 ```bash
-node test/run_edge_case_tests.js
+npm run test:step5
+npm run test:handoff
+npm run test:step3
+npm run test:step4
 ```
-
-*(Available after Step 3.)*
 
 ### Snapshot Structure
 

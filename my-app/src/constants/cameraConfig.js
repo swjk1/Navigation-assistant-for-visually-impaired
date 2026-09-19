@@ -1,16 +1,22 @@
 /**
  * Hardware capture targets for Person 1 latency budget.
- * Capture should stay ≤ 150 ms with Base64 payload ideally < 150 KB.
+ * Round-trip pipeline target ≤ 1500 ms (capture ≤ 150 ms).
  */
 export const CAMERA_CAPTURE_CONFIG = {
-  /** Rear / environment-facing camera */
   facing: 'back',
   width: 640,
   height: 480,
-  /** JPEG quality 0.4 — balance between size and OCR readability */
+  /** Default JPEG quality — Step 4 also profiles 0.3 and 0.5 */
   quality: 0.4,
-  /** Soft size budget for the encoded frame */
   maxBase64Bytes: 150 * 1024,
-  /** Soft latency budget for capture alone */
   maxCaptureLatencyMs: 150,
 };
+
+/** PRD Step 4 quality candidates for payload / latency tradeoff */
+export const JPEG_QUALITY_CANDIDATES = [0.3, 0.4, 0.5];
+
+/** End-to-end perception budget (ms) */
+export const PIPELINE_BUDGET_MS = 1500;
+
+/** If network work exceeds this, return deterministic timeout frame (PRD Step 4) */
+export const NETWORK_TIMEOUT_FALLBACK_MS = 3000;

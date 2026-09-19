@@ -3,7 +3,11 @@
  * No pathfinding. No TTS engines — only structured hints teammates can consume.
  */
 
-import { NAV_ANCHOR_LABELS, OBSTACLE_LABELS } from '../constants/navLabels.js';
+import {
+  NAV_ANCHOR_LABELS,
+  OBSTACLE_LABELS,
+  MAX_SPEAKABLE_LINES,
+} from '../constants/perceptionCatalog.js';
 
 /**
  * Strip debug `meta` so Person 2/3 only see the PRD contract fields.
@@ -63,6 +67,7 @@ export function listReadableSigns(frame) {
 
 /**
  * Short speakable lines for Person 3 TTS (ordered by priority).
+ * Capped at MAX_SPEAKABLE_LINES so TTS queues stay short.
  * Person 3 decides voice engine, rate, and when to interrupt.
  *
  * @param {object} frame
@@ -82,6 +87,7 @@ export function listSpeakableLines(frame) {
   }
 
   for (const anchor of listNavAnchors(publicFrame)) {
+    if (lines.length >= MAX_SPEAKABLE_LINES) break;
     const dist = Number(anchor.approxDistanceMeters).toFixed(1);
     if (anchor.label === 'door') {
       lines.push(`Door at ${anchor.clockPosition}, about ${dist} meters.`);
@@ -95,18 +101,20 @@ export function listSpeakableLines(frame) {
   }
 
   for (const sign of listReadableSigns(publicFrame)) {
+    if (lines.length >= MAX_SPEAKABLE_LINES) break;
     lines.push(`Sign reads ${sign}.`);
   }
 
   for (const obs of listObstacles(publicFrame)) {
+    if (lines.length >= MAX_SPEAKABLE_LINES) break;
     const dist = Number(obs.approxDistanceMeters).toFixed(1);
     lines.push(
       `${capitalize(obs.label)} at ${obs.clockPosition}, about ${dist} meters.`
     );
   }
 
-  // De-dupe while preserving order
-  return [...new Set(lines)];
+  // De-dupe while preserving order, then hard-cap for TTS
+  return [...new Set(lines)].slice(0, MAX_SPEAKABLE_LINES);
 }
 
 /**

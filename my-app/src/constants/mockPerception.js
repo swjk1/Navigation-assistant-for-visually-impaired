@@ -108,6 +108,7 @@ export const MOCK_TIMEOUT_SAFE_FRAME = {
   text: [],
   floorDetected: false,
   immediateHazard: true,
+  /** PRD Step 4 deterministic fallback copy (safe for Person 3 TTS) */
   hazardDescription: 'Scan timeout. Stop and hold position.',
 };
 

@@ -1,5 +1,8 @@
-/** Shared label groups for Person 2 / Person 3 consumers (JS-safe). */
-
-export const NAV_ANCHOR_LABELS = ['door', 'elevator', 'stairs', 'sign'];
-
-export const OBSTACLE_LABELS = ['person', 'chair', 'trashcan'];
+/**
+ * Re-export Person 2/3 label groups from the single catalog source.
+ * Prefer importing from perceptionCatalog.js in new code.
+ */
+export {
+  NAV_ANCHOR_LABELS,
+  OBSTACLE_LABELS,
+} from './perceptionCatalog.js';

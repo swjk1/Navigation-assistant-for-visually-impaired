@@ -1,0 +1,154 @@
+{
+  "step": 4,
+  "name": "latency_efficiency_profile",
+  "timestamp": 1789839184307,
+  "timedAt": "2026-09-19T17:33:04.307Z",
+  "mode": "mock_profile",
+  "reviewCheckpoint": "Is average round-trip latency under 1500ms? Does timeout gracefully fallback?",
+  "reviewAnswers": {
+    "avgUnder1500ms": true,
+    "p90Under1500ms": true,
+    "maxUnder1500ms": true,
+    "timeoutFallbackWorks": true,
+    "timeoutMessage": "Scan timeout. Stop and hold position.",
+    "networkFallbackThresholdMs": 3000
+  },
+  "budgets": {
+    "pipelineBudgetMs": 1500,
+    "captureBudgetMs": 150,
+    "maxBase64Bytes": 153600,
+    "networkTimeoutFallbackMs": 3000
+  },
+  "timing": {
+    "runs": 10,
+    "wallClock": {
+      "n": 10,
+      "avgMs": 0.188,
+      "p90Ms": 0.321,
+      "maxMs": 0.877,
+      "minMs": 0.04
+    },
+    "samples": [
+      {
+        "run": 1,
+        "wallClockMs": 0.877,
+        "frameLatencyMs": 1,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 2,
+        "wallClockMs": 0.321,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 3,
+        "wallClockMs": 0.085,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 4,
+        "wallClockMs": 0.178,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 5,
+        "wallClockMs": 0.078,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 6,
+        "wallClockMs": 0.086,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 7,
+        "wallClockMs": 0.04,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 8,
+        "wallClockMs": 0.062,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 9,
+        "wallClockMs": 0.054,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      },
+      {
+        "run": 10,
+        "wallClockMs": 0.096,
+        "frameLatencyMs": 0,
+        "objectCount": 1,
+        "textCount": 1,
+        "immediateHazard": false,
+        "withinPipelineBudget": true
+      }
+    ]
+  },
+  "jpegQualityComparison": [
+    {
+      "quality": 0.3,
+      "estimatedBytes": 1553,
+      "withinSizeBudget": true,
+      "note": "smaller payload / faster upload"
+    },
+    {
+      "quality": 0.4,
+      "estimatedBytes": 1983,
+      "withinSizeBudget": true,
+      "note": "default"
+    },
+    {
+      "quality": 0.5,
+      "estimatedBytes": 2397,
+      "withinSizeBudget": true,
+      "note": "larger payload / potentially better OCR"
+    }
+  ],
+  "recommendation": {
+    "defaultQuality": 0.4,
+    "suggestedQualityForTokenReduction": 0.3,
+    "note": "Prefer 0.3 when OCR still readable on-device; keep 0.4 default; avoid 0.5 unless OCR fails."
+  },
+  "timeoutFallbackDemo": {
+    "latencyMs": 3120,
+    "immediateHazard": true,
+    "hazardDescription": "Scan timeout. Stop and hold position."
+  }
+}

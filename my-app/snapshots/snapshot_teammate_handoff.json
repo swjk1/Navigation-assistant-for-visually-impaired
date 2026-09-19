@@ -2,8 +2,8 @@
   "step": "handoff",
   "name": "teammate_integration_contract",
   "status": "verified",
-  "timestamp": 1789837870287,
-  "timedAt": "2026-09-19T17:11:10.287Z",
+  "timestamp": 1789839507535,
+  "timedAt": "2026-09-19T17:38:27.535Z",
   "note": "Person 1 vision → Person 2 nav anchors + Person 3 speakable lines (no TTS engine here).",
   "reviewAnswers": {
     "doorReachableViaClockLanguage": true,
@@ -14,7 +14,7 @@
   "examples": {
     "hallway": {
       "frame": {
-        "timestamp": 1789837870286,
+        "timestamp": 1789839507533,
         "latencyMs": 0,
         "objects": [
           {
