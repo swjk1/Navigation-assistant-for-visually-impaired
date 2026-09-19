@@ -42,9 +42,12 @@ class NavigationController(private val config: NavigationConfig) {
     private var smoothedErrorRadians: Float? = null
     private var emittedCommand: NavigationCommand = NavigationCommand.STOP
     private var candidateCommand: NavigationCommand = NavigationCommand.STOP
-    private var candidateFrames: Int = 0
-    private var arrivalFrames: Int = 0
+    private var candidateSinceMillis: Long = 0
+    private var emittedAtMillis: Long = 0
+    /** Null, not 0: a timestamp of 0 is a legitimate value and must not read as 'unset'. */
+    private var arrivalSinceMillis: Long? = null
     private var turning: Boolean = false
+    private var nowMillis: Long = 0
 
     val currentCommand: NavigationCommand get() = emittedCommand
 
@@ -52,8 +55,9 @@ class NavigationController(private val config: NavigationConfig) {
         smoothedErrorRadians = null
         emittedCommand = NavigationCommand.STOP
         candidateCommand = NavigationCommand.STOP
-        candidateFrames = 0
-        arrivalFrames = 0
+        candidateSinceMillis = 0
+        emittedAtMillis = 0
+        arrivalSinceMillis = null
         turning = false
     }
 
@@ -64,7 +68,8 @@ class NavigationController(private val config: NavigationConfig) {
     ): ControllerOutput {
         emittedCommand = command
         candidateCommand = command
-        candidateFrames = config.commandStabilityFrames
+        candidateSinceMillis = nowMillis
+        emittedAtMillis = nowMillis
         if (command != NavigationCommand.TURN_LEFT && command != NavigationCommand.TURN_RIGHT) {
             turning = false
         }
@@ -74,7 +79,13 @@ class NavigationController(private val config: NavigationConfig) {
     /**
      * @param path smoothed path in WORLD coordinates, starting at (or very near) the user.
      */
-    fun update(pose: Pose3D, path: List<Vec2>, inflated: InflatedGrid): ControllerOutput {
+    fun update(
+        pose: Pose3D,
+        path: List<Vec2>,
+        inflated: InflatedGrid,
+        nowMillis: Long,
+    ): ControllerOutput {
+        this.nowMillis = nowMillis
         if (path.size < 2) return forceCommand(NavigationCommand.STOP, StopReason.NO_ROUTE)
 
         val waypoint = selectLookahead(pose.position2D, path, inflated)
@@ -128,16 +139,32 @@ class NavigationController(private val config: NavigationConfig) {
         return if (errorDegrees > 0f) NavigationCommand.TURN_RIGHT else NavigationCommand.TURN_LEFT
     }
 
+    /**
+     * Two gates before a new instruction reaches the user.
+     *
+     * STABILITY - the new command must be what we have wanted to say for a continuous
+     * `commandStabilityMillis`. Kills single-frame jitter.
+     *
+     * DWELL - once a turn is announced, it stands for `commandMinDwellMillis` regardless. A person
+     * needs a beat to hear "left" and begin turning; re-deciding before they have moved means we
+     * are reacting to a world they have not acted on yet, and engine and user oscillate against
+     * each other. Safety stops bypass both gates (see the caller).
+     */
     private fun stabilize(desired: NavigationCommand): NavigationCommand {
-        if (desired == candidateCommand) {
-            candidateFrames++
-        } else {
+        if (desired != candidateCommand) {
             candidateCommand = desired
-            candidateFrames = 1
+            candidateSinceMillis = nowMillis
         }
         if (desired == emittedCommand) return emittedCommand
-        if (candidateFrames >= config.commandStabilityFrames) {
+
+        val emittedIsTurn = emittedCommand == NavigationCommand.TURN_LEFT ||
+            emittedCommand == NavigationCommand.TURN_RIGHT
+        if (emittedIsTurn && nowMillis - emittedAtMillis < config.commandMinDwellMillis) {
+            return emittedCommand
+        }
+        if (nowMillis - candidateSinceMillis >= config.commandStabilityMillis) {
             emittedCommand = desired
+            emittedAtMillis = nowMillis
         }
         return emittedCommand
     }
@@ -203,12 +230,12 @@ class NavigationController(private val config: NavigationConfig) {
      * Arrival must be stable over several frames: a single noisy pose that happens to land inside
      * the arrival radius should not end the guidance session.
      */
-    fun updateArrival(distanceToTargetMeters: Float?): Boolean {
+    fun updateArrival(distanceToTargetMeters: Float?, nowMillis: Long): Boolean {
         if (distanceToTargetMeters == null || distanceToTargetMeters > config.arrivalRadiusMeters) {
-            arrivalFrames = 0
+            arrivalSinceMillis = null
             return false
         }
-        arrivalFrames++
-        return arrivalFrames >= config.arrivalStableFrames
+        val since = arrivalSinceMillis ?: nowMillis.also { arrivalSinceMillis = it }
+        return nowMillis - since >= config.arrivalStableMillis
     }
 }

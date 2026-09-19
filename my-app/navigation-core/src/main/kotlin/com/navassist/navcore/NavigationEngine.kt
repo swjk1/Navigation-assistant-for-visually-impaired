@@ -342,7 +342,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
         // ---------------------------------------------------------- 7. arrival
         val distanceToTarget = finalDestination()?.distanceTo(frame.pose.position2D)
-        if (controller.updateArrival(distanceToTarget)) {
+        if (controller.updateArrival(distanceToTarget, nowMillis)) {
             stateMachine.on(NavigationEvent.Arrived)
             return finish(nowMillis, frame, NavigationCommand.ARRIVED, null, distanceToTarget, mapConfidence)
         }
@@ -368,7 +368,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         }
 
         // ---------------------------------------------------------- 9. command
-        val output = controller.update(frame.pose, path, inflatedGrid)
+        val output = controller.update(frame.pose, path, inflatedGrid, nowMillis)
         return finish(
             nowMillis = nowMillis,
             frame = frame,

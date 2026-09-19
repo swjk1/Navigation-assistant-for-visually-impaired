@@ -97,7 +97,16 @@ data class NavigationConfig(
      * Once a frontier is selected we stick with it until it is reached or invalidated, unless a
      * competitor beats it by this margin. Prevents the guidance flip-flopping mid-corridor.
      */
-    val frontierSwitchHysteresis: Float = 0.8f,
+    val frontierSwitchHysteresis: Float = 1.2f,
+    /**
+     * Minimum time to stay committed to a chosen frontier, regardless of score.
+     *
+     * Score hysteresis alone is not enough: frontier ids are regenerated every detection pass and
+     * centroids shift as the map fills, so the previous choice is regularly not recognised at all
+     * and a fresh winner is picked - possibly on the other side. Committing for a few seconds
+     * gives the user time to actually walk somewhere.
+     */
+    val frontierCommitMillis: Long = 5000,
     /** A frontier counts as reached within this distance. */
     val frontierReachedMeters: Float = 0.9f,
     /** Frontiers we failed to route to are blacklisted within this radius. */
@@ -135,12 +144,27 @@ data class NavigationConfig(
     val sharpTurnDegrees: Float = 65f,
     /** Exponential smoothing on the heading error: single-frame estimates are noisy. */
     val headingSmoothingAlpha: Float = 0.35f,
-    /** A command must survive this many consecutive decisions before it is emitted. */
-    val commandStabilityFrames: Int = 3,
+    /**
+     * A command must hold for this long before it is emitted.
+     *
+     * Time, not frames. The engine is driven by the AR render loop, so a frame count means
+     * whatever the device's frame rate happens to be - three frames is 300 ms at 10 fps but
+     * 100 ms at 30 fps, and at 100 ms the guidance can legally change ten times a second, which
+     * is exactly what "left, no right, no left" sounds like.
+     */
+    val commandStabilityMillis: Long = 350,
+    /**
+     * Once a turn is announced, hold it for at least this long.
+     *
+     * A person needs a beat to hear an instruction and start turning. Re-deciding before they
+     * have moved means the engine is reacting to a world the user has not acted on yet, and the
+     * two of you oscillate. Safety stops ignore this and interrupt immediately.
+     */
+    val commandMinDwellMillis: Long = 1400,
     /** Distance at which the final target counts as reached. */
     val arrivalRadiusMeters: Float = 1.0f,
-    /** Consecutive frames within [arrivalRadiusMeters] before ARRIVED is declared. */
-    val arrivalStableFrames: Int = 5,
+    /** Time spent continuously within [arrivalRadiusMeters] before ARRIVED is declared. */
+    val arrivalStableMillis: Long = 600,
     /**
      * Immediate-path safety check: if any inflated-blocked or unknown cell lies within this
      * distance straight ahead, STRAIGHT is suppressed in favour of STOP.

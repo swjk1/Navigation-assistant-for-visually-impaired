@@ -38,6 +38,9 @@ class StopReasonTest {
     private fun pose(x: Float, z: Float, yawDegrees: Float = 0f) =
         Pose3D(x, deviceHeight, z, GeometryUtils.degreesToRadians(yawDegrees))
 
+    private var ctrlClock = 0L
+    private fun nextClock(): Long { ctrlClock += 400; return ctrlClock }
+
     private fun openGrid(): OccupancyGrid {
         val grid = OccupancyGrid(config, originX = -6f, originZ = -6f)
         for (gz in 0 until grid.cells) for (gx in 0 until grid.cells) {
@@ -65,8 +68,8 @@ class StopReasonTest {
 
         val controller = NavigationController(config)
         val path = listOf(Vec2(0f, 0f), Vec2(0f, 1f), Vec2(0f, 2f))
-        var output = controller.update(pose(0f, 0f), path, inflated)
-        repeat(4) { output = controller.update(pose(0f, 0f), path, inflated) }
+        var output = controller.update(pose(0f, 0f), path, inflated, nextClock())
+        repeat(4) { output = controller.update(pose(0f, 0f), path, inflated, nextClock()) }
 
         assertEquals(NavigationCommand.STOP, output.command)
         assertEquals(
@@ -86,8 +89,8 @@ class StopReasonTest {
 
         val controller = NavigationController(config)
         val path = listOf(Vec2(0f, 0f), Vec2(0f, 1f), Vec2(0f, 2f))
-        var output = controller.update(pose(0f, 0f), path, inflated)
-        repeat(4) { output = controller.update(pose(0f, 0f), path, inflated) }
+        var output = controller.update(pose(0f, 0f), path, inflated, nextClock())
+        repeat(4) { output = controller.update(pose(0f, 0f), path, inflated, nextClock()) }
 
         assertEquals(NavigationCommand.STOP, output.command)
         assertEquals(StopReason.OBSTACLE_AHEAD, output.stopReason)
@@ -96,7 +99,7 @@ class StopReasonTest {
     @Test
     fun `an empty path is a routing failure, not a hazard`() {
         val inflated = TestSupport.inflate(openGrid(), config)
-        val output = NavigationController(config).update(pose(0f, 0f), emptyList(), inflated)
+        val output = NavigationController(config).update(pose(0f, 0f), emptyList(), inflated, nextClock())
         assertEquals(NavigationCommand.STOP, output.command)
         assertEquals(
             StopReason.NO_ROUTE,
@@ -110,8 +113,8 @@ class StopReasonTest {
         val inflated = TestSupport.inflate(openGrid(), config)
         val controller = NavigationController(config)
         val path = listOf(Vec2(0f, 0f), Vec2(0f, 1f), Vec2(0f, 2f), Vec2(0f, 3f))
-        var output = controller.update(pose(0f, 0f), path, inflated)
-        repeat(5) { output = controller.update(pose(0f, 0f), path, inflated) }
+        var output = controller.update(pose(0f, 0f), path, inflated, nextClock())
+        repeat(5) { output = controller.update(pose(0f, 0f), path, inflated, nextClock()) }
         assertEquals(NavigationCommand.STRAIGHT, output.command)
         assertNull(output.stopReason)
     }

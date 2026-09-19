@@ -43,6 +43,7 @@ class ExplorationManager(
 
     private var selectedId: String? = null
     private var selectedCentroid: Vec2? = null
+    private var selectedAtMillis: Long = 0
 
     var frontiers: List<Frontier> = emptyList()
         private set
@@ -63,6 +64,7 @@ class ExplorationManager(
     fun clearSelection() {
         selectedId = null
         selectedCentroid = null
+        selectedAtMillis = 0
         selected = null
     }
 
@@ -88,15 +90,22 @@ class ExplorationManager(
 
         val best = scored.first()
         val incumbent = matchIncumbent(scored)
+        val committed = incumbent != null &&
+            nowMillis - selectedAtMillis < config.frontierCommitMillis
 
         val choice = when {
             incumbent == null -> best
-            // Reached the current frontier: it is no longer a frontier worth holding on to.
+            // Reached the current frontier: it is no longer worth holding on to.
             incumbent.distanceMeters <= config.frontierReachedMeters -> best
+            // Inside the commitment window the current choice stands, whatever the scores say.
+            // Without this the user is sent left, then right, then left as the frontier set
+            // churns underneath them, and never covers any ground.
+            committed -> incumbent
             best.score > incumbent.score + config.frontierSwitchHysteresis -> best
             else -> incumbent
         }
 
+        if (choice.id != selectedId) selectedAtMillis = nowMillis
         selectedId = choice.id
         selectedCentroid = choice.centroid
         selected = choice
@@ -110,7 +119,9 @@ class ExplorationManager(
     private fun matchIncumbent(scored: List<Frontier>): Frontier? {
         val previousCentroid = selectedCentroid ?: return null
         val previousId = selectedId ?: return null
-        val tolerance = config.frontierReachedMeters * 2f
+        // Generous on purpose: centroids shift as the map fills in, and losing track of the
+        // incumbent means a fresh winner is picked - which is the churn this is here to prevent.
+        val tolerance = config.frontierReachedMeters * 4f
         var best: Frontier? = null
         var bestDistance = tolerance * tolerance
         for (frontier in scored) {
