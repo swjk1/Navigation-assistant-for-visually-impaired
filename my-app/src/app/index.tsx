@@ -1,98 +1,212 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import * as Speech from 'expo-speech';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  hapticArrived,
+  hapticHazard,
+  hapticLeft,
+  hapticRight,
+  hapticStop,
+  hapticStraight,
+  stopHaptics,
+} from '@/guidance/HapticService';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+type UiState = 'IDLE' | 'LISTENING' | 'PROCESSING' | 'GUIDING' | 'ERROR';
+type SimpleCommand = 'RIGHT' | 'LEFT' | 'STRAIGHT' | 'STOP' | 'ARRIVED' | 'HAZARD';
+
+const LISTEN_MS = 3500;
 
 export default function HomeScreen() {
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [uiState, setUiState] = useState<UiState>('IDLE');
+  const [statusText, setStatusText] = useState('Ready');
+  const [lastTranscriptHint, setLastTranscriptHint] = useState<string | null>(null);
+  const [commandIndex, setCommandIndex] = useState(0);
+
+  const commandFlow: SimpleCommand[] = ['RIGHT', 'LEFT', 'STRAIGHT', 'STOP', 'ARRIVED', 'HAZARD'];
+
+  useEffect(() => {
+    void (async () => {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+      });
+    })();
+
+    return () => {
+      Speech.stop();
+      stopHaptics();
+    };
+  }, []);
+
+  const requestMicPermission = useCallback(async () => {
+    const permission = await AudioModule.requestRecordingPermissionsAsync();
+    return permission.granted;
+  }, []);
+
+  const runSimpleGuidance = useCallback(async (command: SimpleCommand) => {
+    const sentence = command.toLowerCase();
+    setLastTranscriptHint(`Demo command: ${command}`);
+    Speech.speak(sentence, { rate: 1.0 });
+
+    switch (command) {
+      case 'RIGHT':
+        await hapticRight();
+        break;
+      case 'LEFT':
+        await hapticLeft();
+        break;
+      case 'STRAIGHT':
+        await hapticStraight();
+        break;
+      case 'STOP':
+        await hapticStop();
+        break;
+      case 'ARRIVED':
+        await hapticArrived();
+        break;
+      case 'HAZARD':
+        await hapticHazard();
+        break;
+    }
+  }, []);
+
+  const handleTap = useCallback(async () => {
+    if (uiState === 'LISTENING' || uiState === 'PROCESSING' || uiState === 'GUIDING') return;
+
+    setUiState('LISTENING');
+    setStatusText('Listening');
+    setLastTranscriptHint(null);
+    Speech.stop();
+    stopHaptics();
+
+    const allowed = await requestMicPermission();
+    if (!allowed) {
+      setUiState('ERROR');
+      setStatusText('Microphone permission denied');
+      Speech.speak('Microphone permission is required.');
+      return;
+    }
+
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      Speech.speak('Listening');
+
+      await new Promise<void>((resolve) => setTimeout(resolve, LISTEN_MS));
+
+      await recorder.stop();
+      setUiState('PROCESSING');
+      setStatusText('Processing request');
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 800));
+
+      setUiState('GUIDING');
+      setStatusText('Giving guidance');
+      const command = commandFlow[commandIndex];
+      await runSimpleGuidance(command);
+      setCommandIndex((prev) => (prev + 1) % commandFlow.length);
+
+      setUiState('IDLE');
+      setStatusText('Ready');
+    } catch {
+      setUiState('ERROR');
+      setStatusText('Could not capture audio');
+      Speech.speak('Something went wrong. Please tap again.');
+    }
+  }, [commandFlow, commandIndex, recorder, requestMicPermission, runSimpleGuidance, uiState]);
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <Pressable
+        onPress={() => void handleTap()}
+        accessibilityRole="button"
+        accessibilityLabel="Tap anywhere to speak"
+        style={({ pressed }) => [styles.touchArea, pressed && styles.touchAreaPressed]}>
+        <View style={styles.centerContent}>
+          <Text style={styles.title}>HAPTICNAV</Text>
+          <Text style={styles.subtitle}>TAP ANYWHERE TO{'\n'}SPEAK</Text>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.dot,
+                uiState === 'ERROR' ? styles.dotError : uiState === 'IDLE' ? styles.dotIdle : styles.dotActive,
+              ]}
+            />
+            <Text style={styles.statusText}>{statusText}</Text>
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+          {lastTranscriptHint ? <Text style={styles.helperText}>{lastTranscriptHint}</Text> : null}
+        </View>
+      </Pressable>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    backgroundColor: '#0B0B0F',
   },
-  heroSection: {
+  touchArea: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    paddingHorizontal: 24,
+  },
+  touchAreaPressed: {
+    opacity: 0.92,
+  },
+  centerContent: {
+    alignItems: 'center',
+    gap: 26,
   },
   title: {
+    color: '#FFFFFF',
+    fontSize: 40,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  subtitle: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  dotIdle: {
+    backgroundColor: '#8C8C9F',
+  },
+  dotActive: {
+    backgroundColor: '#16A34A',
+  },
+  dotError: {
+    backgroundColor: '#DC2626',
+  },
+  statusText: {
+    color: '#E6E6F0',
+    fontSize: 20,
+    fontWeight: '500',
+  },
+  helperText: {
+    color: '#A9A9BC',
+    fontSize: 15,
+    textAlign: 'center',
+    maxWidth: 320,
   },
 });
