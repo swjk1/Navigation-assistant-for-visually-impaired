@@ -91,6 +91,21 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     private var backtrackTargetNodeId: String? = null
 
+    /**
+     * Two separate failure clocks for a located target, both 0 when healthy.
+     *
+     * They must not be one field. Falling back to the graph is a response to the DIRECT route
+     * failing; abandoning the sighting is a response to EVERY route failing. Collapsing them
+     * makes a successful graph hop reset the direct-route clock, which sends the next frame
+     * straight back to the route that just failed - the engine then oscillates between
+     * NAVIGATING and NO_ROUTE once per frame.
+     */
+    private var targetDirectFailingSinceMillis: Long = 0
+    private var targetStuckSinceMillis: Long = 0
+
+    /** True when the current goal came from the graph rather than the destination itself. */
+    private var targetGoalViaGraph: Boolean = false
+
     val snapshot: NavigationSnapshot get() = lastSnapshot
 
     val status: NavigationStatus get() = stateMachine.status
@@ -112,6 +127,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         currentPath = emptyList()
         currentGoal = null
         backtrackTargetNodeId = null
+        clearTargetRouteFailures()
         stateMachine.onTargetChanged()
     }
 
@@ -145,6 +161,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastNodeId = null
         lastNodePosition = null
         backtrackTargetNodeId = null
+        clearTargetRouteFailures()
         originInitialized = false
         lastDepthTimestampNanos = 0
         lastTrackingGoodMillis = 0
@@ -164,6 +181,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         currentGoal = null
         lastNodeId = null
         lastNodePosition = null
+        backtrackTargetNodeId = null
+        clearTargetRouteFailures()
         originInitialized = false
     }
 
@@ -195,7 +214,13 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 floorId = semantics.currentFloorId,
                 semanticLabels = setOf(label),
             )
-            lastNodeId?.let { topology.connect(it, node.id, node.position.distanceTo(lastPose.position2D)) }
+            // Deliberately NOT connected to the node we are standing on.
+            //
+            // Seeing a door plate says where it is, not that there is a walkable corridor from
+            // here to there - it may be across a lobby, behind glass, or on the far side of a
+            // stairwell. Adding that edge would let global routing "walk" a straight line the
+            // user cannot actually take, which is exactly the failure the graph exists to avoid.
+            // Graph edges mean "I have travelled this"; landmark nodes are position memory only.
         }
     }
 
@@ -287,8 +312,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             return finish(nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence)
         }
 
-        // ---------------------------------------------------------- 4. topological memory
+        // ---------------------------------------------------------- 4. memory upkeep
         updateTopology(frame.pose, nowMillis)
+        // Ageing semantic evidence must not depend on new observations arriving: the moment the
+        // engine is stuck facing a wall, perception has nothing to report, so a submit-time-only
+        // prune would pin a stale sighting forever.
+        semantics.prune(nowMillis)
 
         // ---------------------------------------------------------- 5. planning view of the map
         val inflatedGrid = refreshInflation(nowMillis)
@@ -314,10 +343,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val path = refreshPath(frame.pose, inflatedGrid, goal, nowMillis)
         if (path.size < 2) {
             exploration.reportPlanningFailure()
+            recordTargetRouteOutcome(succeeded = false, nowMillis = nowMillis)
             stateMachine.on(NavigationEvent.RouteUnavailable)
             return finish(nowMillis, frame, NavigationCommand.SCAN, null, distanceToTarget, mapConfidence)
         }
         exploration.reportPlanningSuccess()
+        recordTargetRouteOutcome(succeeded = true, nowMillis = nowMillis)
         if (stateMachine.status == NavigationStatus.NO_ROUTE) {
             stateMachine.on(NavigationEvent.RouteFound)
         }
@@ -437,12 +468,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     ): Vec2? {
         val sighting = semantics.targetSighting
         if (sighting != null) {
-            if (stateMachine.status != NavigationStatus.NAVIGATING) {
-                stateMachine.on(NavigationEvent.TargetLocated)
+            val goal = goalForLocatedTarget(pose, sighting.worldPosition.toVec2(), nowMillis)
+            if (goal != null) {
+                if (stateMachine.status != NavigationStatus.NAVIGATING) {
+                    stateMachine.on(NavigationEvent.TargetLocated)
+                }
+                exploration.clearSelection()
+                currentGoal = goal
+                return currentGoal
             }
-            exploration.clearSelection()
-            currentGoal = clampToGrid(pose.position2D, sighting.worldPosition.toVec2())
-            return currentGoal
+            // The sighting was just abandoned; fall through and explore instead of standing still.
         }
 
         if (stateMachine.status == NavigationStatus.NAVIGATING) {
@@ -467,6 +502,107 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
         // Nothing unexplored nearby: this branch is finished.
         return backtrackGoal(pose)
+    }
+
+    /**
+     * Where to head when the destination's position IS known.
+     *
+     * Three tiers, in order:
+     *
+     *  1. Straight at it. While the local planner can find a way, nothing else is needed - and
+     *     this is the common case, because a sighting is resolved from depth and therefore starts
+     *     within a few metres of the user.
+     *
+     *  2. Through the remembered graph. Once the direct route starts failing, the destination is
+     *     behind something the 12 m window cannot see around: a wall, a corner, a closed branch.
+     *     The straight-line bearing is then actively misleading - it points INTO the obstacle - so
+     *     we route over the breadcrumbs the engine has been dropping all along and aim at the next
+     *     hop instead. This is the hierarchical planning path from the architecture: topological
+     *     A* picks the waypoint, local A* walks to it.
+     *
+     *  3. Give up on the sighting. If even the graph cannot produce a route for
+     *     [NavigationConfig.targetRouteAbandonMillis], the sighting is stale or unreachable.
+     *     Returning null abandons it so exploration can resume. Without this the engine latches:
+     *     a pinned sighting suppresses frontier selection, and nothing else would ever clear it.
+     *
+     * @return the goal to plan towards, or null when the sighting has just been abandoned.
+     */
+    private fun goalForLocatedTarget(pose: Pose3D, destination: Vec2, nowMillis: Long): Vec2? {
+        // Back inside the local window: the direct approach is worth another try. Without this
+        // the engine would keep routing over the graph all the way to the door.
+        if (grid.contains(destination)) targetDirectFailingSinceMillis = 0
+
+        val stuckSince = targetStuckSinceMillis
+        if (stuckSince != 0L && nowMillis - stuckSince >= config.targetRouteAbandonMillis) {
+            semantics.clearTargetSighting()
+            targetStuckSinceMillis = 0
+            targetDirectFailingSinceMillis = 0
+            targetGoalViaGraph = false
+            if (stateMachine.status == NavigationStatus.NAVIGATING) {
+                stateMachine.on(NavigationEvent.TargetLost)
+            }
+            return null
+        }
+
+        if (targetDirectFailingSinceMillis == 0L) {
+            targetGoalViaGraph = false
+            return clampToGrid(pose.position2D, destination)
+        }
+
+        val hop = nextHopTowards(pose, destination)
+        targetGoalViaGraph = hop != null
+        return clampToGrid(pose.position2D, hop ?: destination)
+    }
+
+    /**
+     * Topological A* from where we are to the place nearest the destination, returning the first
+     * hop that is far enough away to be worth steering at.
+     *
+     * This is the "go back the way you came" behaviour: the hop is somewhere the user has already
+     * walked, so it is both inside the local window and known to be traversable, which is exactly
+     * what the local planner needs to make progress.
+     */
+    private fun nextHopTowards(pose: Pose3D, destination: Vec2): Vec2? {
+        val floorId = semantics.currentFloorId
+        val from = lastNodeId?.let { topology.node(it) }
+            ?: topology.findNearest(pose.position2D, config.topoNodeSpacingMeters * 2f, floorId)
+            ?: return null
+        // The destination itself may only exist as an edgeless landmark node, so aim at the
+        // nearest place we have actually walked instead.
+        val to = topology.findNearestConnected(destination, config.topoNodeSpacingMeters * 2f, floorId)
+            ?: return null
+        if (from.id == to.id) return null
+
+        val route = topology.planRoute(from.id, to.id) ?: return null
+        // Skip hops we are effectively standing on, or we would steer at our own feet.
+        return route.drop(1).firstOrNull {
+            it.position.distanceTo(pose.position2D) > config.topoNodeSpacingMeters * 0.5f
+        }?.position
+    }
+
+    /** Bookkeeping for tier 2/3 above. Called once per frame from [updateFrame]. */
+    private fun recordTargetRouteOutcome(succeeded: Boolean, nowMillis: Long) {
+        if (semantics.targetSighting == null) {
+            clearTargetRouteFailures()
+            return
+        }
+        if (succeeded) {
+            // Any success means we are moving again, so the abandon clock stops. The direct-route
+            // clock only stops if it was the direct route that worked.
+            targetStuckSinceMillis = 0
+            if (!targetGoalViaGraph) targetDirectFailingSinceMillis = 0
+            return
+        }
+        if (targetStuckSinceMillis == 0L) targetStuckSinceMillis = nowMillis
+        if (!targetGoalViaGraph && targetDirectFailingSinceMillis == 0L) {
+            targetDirectFailingSinceMillis = nowMillis
+        }
+    }
+
+    private fun clearTargetRouteFailures() {
+        targetDirectFailingSinceMillis = 0
+        targetStuckSinceMillis = 0
+        targetGoalViaGraph = false
     }
 
     /**

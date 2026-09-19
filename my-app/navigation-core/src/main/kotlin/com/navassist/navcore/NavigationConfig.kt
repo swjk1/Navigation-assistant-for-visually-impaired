@@ -112,6 +112,16 @@ data class NavigationConfig(
     val topoMergeRadiusMeters: Float = 1.6f,
     /** Heading change (radians) that justifies dropping a node even before the spacing is met. */
     val topoTurnThresholdRadians: Float = 0.9f,
+    /**
+     * How long the route to a located target may keep failing before the sighting is abandoned
+     * and exploration resumes.
+     *
+     * Time-based rather than a frame count on purpose: a failed plan clears the current path, so
+     * the engine replans on EVERY subsequent frame. A "give up after N failures" rule would
+     * therefore fire in a few hundred milliseconds at 30 fps - long before a user has finished
+     * turning around.
+     */
+    val targetRouteAbandonMillis: Long = 4000,
 
     // ---------------------------------------------------------------- navigation control
     /** Waypoint lookahead distance: we steer towards a point this far along the path. */

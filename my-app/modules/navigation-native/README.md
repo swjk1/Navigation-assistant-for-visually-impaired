@@ -47,7 +47,8 @@ ARCore Frame
   → obstacle classification     (0.10 m .. 2.10 m above the floor)
   → occupancy grid              (log-odds ray integration + temporal decay)
   → obstacle inflation          (body radius + clearance field)
-  → goal selection              target known ? route to it : best-scoring frontier
+  → goal selection              target known ? straight at it, else next graph hop
+                                target unknown → best-scoring frontier
                                 nothing left → backtrack through the topological graph
   → local A*                    → line-of-sight smoothing
   → lookahead waypoint          → smoothed heading error → hysteresis
@@ -319,6 +320,27 @@ Two rules dominate the table:
 Other states: `BACKTRACKING` (local branch exhausted, routing back through the graph), `PAUSED`,
 `ERROR`.
 
+### Routing to a located destination
+
+Once the destination's position is known, the goal is chosen in three tiers:
+
+1. **Straight at it.** The common case — a sighting is resolved from depth, so it starts within a
+   few metres.
+2. **Next hop on the walked graph.** As soon as the direct route starts failing, the destination
+   is behind something the 12 m window cannot see around, and the straight-line bearing points
+   *into* the obstacle. Topological A* picks a remembered place to head for; local A* walks there.
+3. **Abandon the sighting** after `targetRouteAbandonMillis` (4 s) of every route failing, so
+   exploration resumes instead of the engine standing still.
+
+Two invariants make tier 3 necessary rather than optional. A pinned sighting suppresses frontier
+selection, and semantic evidence is aged out **every frame** rather than only when new
+observations arrive — otherwise a user stuck facing a wall generates no observations, so the bad
+sighting would never expire and the engine would sit in `NO_ROUTE`/`SCAN` indefinitely.
+
+Graph edges mean "I have walked this". A landmark seen across a lobby becomes a node but gets **no
+edge** to where you were standing: visibility is not walkability, and inventing that edge would
+let global routing plan straight through a wall.
+
 ### Fail-safe behaviour
 
 `STRAIGHT` is never emitted when:
@@ -451,8 +473,12 @@ phone, and `frontierCount` becoming non-zero once there is open space ahead.
   applied yet.
 - **No visual loop closure.** Revisit detection is position-proximity plus floor compatibility.
   Over a long walk, ARCore drift will eventually create duplicate graph nodes.
-- **Local grid only, 12 m.** Goals beyond the window are clamped onto its edge along the line to
-  the goal. Routing across a whole building relies on the topological graph being dense enough.
+- **Local grid only, 12 m.** A destination inside the window is approached directly; once that
+  route starts failing the engine routes over the topological graph and steers at the next
+  remembered place instead. Routing across a whole building therefore relies on the graph being
+  dense enough — if the user teleports (lift, tracking reset) with no breadcrumbs in between,
+  there is nothing to route over and the sighting is abandoned after
+  `targetRouteAbandonMillis`.
 - **Multi-floor is structural only.** Nodes carry `floorId`, vertical edges exist and route
   correctly, but nothing automates using a lift or stairs.
 - **Moving obstacles** are handled only by evidence decay — there is no object tracking or

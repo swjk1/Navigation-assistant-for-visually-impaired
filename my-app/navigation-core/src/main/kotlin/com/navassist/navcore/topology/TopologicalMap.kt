@@ -157,6 +157,33 @@ class TopologicalMap {
     }
 
     /**
+     * Nearest node that is actually part of the walked graph, i.e. has at least one edge.
+     *
+     * Global routing must start and end on connected nodes. Landmark nodes created from semantic
+     * observations are position memory with no edges - routing "to" one would either fail or, if
+     * it were wired up with a synthetic edge, invent a corridor that does not exist. This finds
+     * the nearest place we have actually stood instead.
+     */
+    fun findNearestConnected(
+        position: Vec2,
+        radiusMeters: Float,
+        floorId: String? = null,
+    ): TopologicalNode? {
+        var best: TopologicalNode? = null
+        var bestDistance = radiusMeters * radiusMeters
+        for (node in nodesById.values) {
+            if (floorId != null && node.floorId != null && node.floorId != floorId) continue
+            if (edgesByNode[node.id].isNullOrEmpty()) continue
+            val d = node.position.distanceSquaredTo(position)
+            if (d <= bestDistance) {
+                bestDistance = d
+                best = node
+            }
+        }
+        return best
+    }
+
+    /**
      * How thoroughly the area around [position] has already been walked, 0..1.
      * Used as the frontier revisit penalty: heading back into well-trodden space is rarely the
      * best way to find something new.
