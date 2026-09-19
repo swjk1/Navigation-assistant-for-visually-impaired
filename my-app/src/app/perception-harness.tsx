@@ -5,8 +5,8 @@
  *
  * Uses the public analyzeAndStore API so the harness matches teammate integration.
  */
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRef, useState } from 'react';
+import { useCameraPermissions } from 'expo-camera';
+import { useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -16,19 +16,18 @@ import {
   View,
 } from 'react-native';
 
-import {
-  buildHardwareSnapshot,
-  captureFrame,
-} from '@/services/cameraService';
+import { buildHardwareSnapshot } from '@/services/cameraService';
+import IndoorPerception, { PerceptionArView } from '../../modules/indoor-perception';
 import { hasValidGeminiApiKey } from '@/services/envCheck';
 import { getPerceptionMode } from '@/services/perceptionEngine';
 import { analyzeAndStore } from '@/index.js';
 
 export default function PerceptionHarnessScreen() {
-  const cameraRef = useRef(null);
+  // Camera permission is still requested through expo-camera, but the camera itself is opened
+  // by ARCore inside <PerceptionArView />. Only one session may hold the device.
   const [permission, requestPermission] = useCameraPermissions();
-  const [snapshot, setSnapshot] = useState(null);
-  const [error, setError] = useState(null);
+  const [snapshot, setSnapshot] = useState<unknown>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const liveReady =
@@ -38,7 +37,14 @@ export default function PerceptionHarnessScreen() {
     setBusy(true);
     setError(null);
     try {
-      const result = await captureFrame(cameraRef.current);
+      // One frame off the live ARCore session, which navigation is reading pose and depth from.
+      const started = Date.now();
+      const captured = await IndoorPerception.captureFrame();
+      const result = {
+        ...captured,
+        captureLatencyMs: Date.now() - started,
+        estimatedBytes: Math.floor((captured.base64.length * 3) / 4),
+      };
       const hardware = buildHardwareSnapshot(result, {
         permissionGranted: true,
         platform: Platform.OS,
@@ -53,7 +59,7 @@ export default function PerceptionHarnessScreen() {
         });
       } catch (hybridErr) {
         handoff = {
-          error: hybridErr?.message || String(hybridErr),
+          error: hybridErr instanceof Error ? hybridErr.message : String(hybridErr),
           note: 'Native YOLO/OCR needs Android dev build; Gemini needs GEMINI_API_KEY in .env',
         };
       }
@@ -67,7 +73,7 @@ export default function PerceptionHarnessScreen() {
       // eslint-disable-next-line no-console
       console.log('[Hybrid Perception Snapshot]', JSON.stringify(record, null, 2));
     } catch (err) {
-      setError(err?.message || String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -97,12 +103,8 @@ export default function PerceptionHarnessScreen() {
 
   return (
     <View style={styles.root}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing="back"
-        mode="picture"
-      />
+      {/* Owns the ARCore session: RGB for perception here, pose + depth for navigation. */}
+      <PerceptionArView style={styles.camera} />
       <View style={styles.panel}>
         <Pressable
           style={[styles.button, busy && styles.buttonDisabled]}

@@ -20,6 +20,11 @@ android {
 }
 
 dependencies {
+  // This module owns the app's single ARCore session and feeds the navigation engine from it.
+  // ARCore requires exclusive camera access, so there can only be one owner.
+  implementation project(':navigation-native')
+  implementation 'com.google.ar:core:1.56.0'
+
   implementation 'org.tensorflow:tensorflow-lite:2.16.1'
   implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
   implementation 'com.google.mlkit:text-recognition:16.0.1'

@@ -63,12 +63,61 @@ class IndoorPerceptionModule : Module() {
     Name("IndoorPerception")
 
     OnDestroy {
+      ArFrameSource.destroy()
       detector?.close()
       ocr?.close()
       detector = null
       ocr = null
       executor.shutdownNow()
       analyzePool.shutdownNow()
+    }
+
+
+    // ---------------------------------------------------------------- camera ownership
+    //
+    // This module owns the app's single ARCore session (see ArFrameSource). Navigation is fed
+    // from the same frames via NavigationSensorBridge, because ARCore needs exclusive access to
+    // the camera and cannot share it with a second CameraView or Camera2 session.
+
+    View(PerceptionArView::class) {
+      // Mounting the view starts the session; nothing else to configure.
+    }
+
+    Function("getCameraStatus") {
+      mapOf(
+        "sessionActive" to (ArFrameSource.session != null),
+        "depthSupported" to ArFrameSource.depthSupported,
+        "lastError" to ArFrameSource.lastError,
+      )
+    }
+
+    /**
+     * Captures one RGB frame from the live ARCore session, replacing CameraView's
+     * takePictureAsync. Feed the result straight into analyzeFrame().
+     *
+     * `timestampNs` is ARCore's frame timestamp (nanoseconds since boot) - the value
+     * SemanticObservation.timestampNs expects, so observations derived from this image line up
+     * with the depth data navigation is using.
+     */
+    AsyncFunction("captureFrame") { promise: Promise ->
+      ArFrameSource.requestCapture { result ->
+        result.fold(
+          onSuccess = { captured ->
+            promise.resolve(
+              mapOf(
+                "base64" to captured.base64,
+                "width" to captured.width,
+                "height" to captured.height,
+                "timestampNs" to captured.timestampNanos.toDouble(),
+                "mimeType" to "image/jpeg",
+              ),
+            )
+          },
+          onFailure = { error ->
+            promise.reject("ERR_CAPTURE", error.message ?: "Capture failed", error as? Exception)
+          },
+        )
+      }
     }
 
     AsyncFunction("getStatus") {
