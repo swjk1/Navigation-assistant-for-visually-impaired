@@ -7,6 +7,7 @@ export type HapticPatternName =
   | 'RIGHT'
   | 'LEFT'
   | 'STOP'
+  | 'SCAN'
   | 'ARRIVED'
   | 'HAZARD';
 
@@ -21,6 +22,9 @@ const RHYTHM: Record<HapticPatternName, string> = {
   RIGHT: '._ ._ ._ ._',
   STRAIGHT: '._ ._ ._',
   STOP: '__ __',
+  // Deliberately unlike STOP's two long pulses: a rising short-long-short asks the user to DO
+  // something (sweep the phone) rather than simply to wait.
+  SCAN: '._ __ ._',
   ARRIVED: '._ ._ ._ ._ ._',
   HAZARD: '__ ._ __ ._',
 };
@@ -175,6 +179,10 @@ export function hapticLeft(): Promise<void> {
 
 export function hapticStop(): Promise<void> {
   return playPattern('STOP');
+}
+
+export function hapticScan(): Promise<void> {
+  return playPattern('SCAN');
 }
 
 export function hapticArrived(): Promise<void> {

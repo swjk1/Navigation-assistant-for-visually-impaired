@@ -86,11 +86,10 @@ function fromObject(object: DetectedObject): SemanticObservation | null {
     case 'elevator':
       return { type: 'ELEVATOR', ...base };
     case 'door':
-      // The engine has no DOOR type. A door with no readable plate is not a destination, but it
-      // IS worth steering towards when the user asked for an exit, so it is reported as an exit
-      // candidate at reduced confidence rather than being dropped entirely.
-      // If a DOOR type is added to the engine, this is the line to change.
-      return { type: 'EXIT', direction, ...base, confidence: object.confidence * 0.5 };
+      // Reported as a door, not an exit. The engine scores it as partial evidence for an exit or
+      // a room without ever treating it as a match for either - a door may lead outside, into a
+      // room, or into a cupboard.
+      return { type: 'DOOR', direction, ...base };
     // person / chair / trashcan / wall are obstacles, not landmarks. The engine already sees
     // them geometrically through depth, so re-reporting them here would add nothing.
     default:

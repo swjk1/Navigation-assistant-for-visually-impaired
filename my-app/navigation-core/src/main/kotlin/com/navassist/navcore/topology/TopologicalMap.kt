@@ -90,8 +90,9 @@ class TopologicalMap {
                 NodeType.DEAD_END -> 2
                 NodeType.JUNCTION -> 3
                 NodeType.SEMANTIC_LANDMARK -> 4
-                NodeType.STAIRS, NodeType.ELEVATOR -> 5
-                NodeType.ROOM, NodeType.EXIT -> 6
+                NodeType.DOOR -> 5
+                NodeType.STAIRS, NodeType.ELEVATOR -> 6
+                NodeType.ROOM, NodeType.EXIT -> 7
             }
         }
         return if (rank(incoming) > rank(existing)) incoming else existing

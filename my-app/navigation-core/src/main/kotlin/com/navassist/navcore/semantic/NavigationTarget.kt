@@ -22,6 +22,11 @@ sealed interface NavigationTarget {
         override val description: String get() = "Exit"
     }
 
+    /** "Take me to a door." The nearest door, whatever is behind it. */
+    data object Door : NavigationTarget {
+        override val description: String get() = "Door"
+    }
+
     data object Stairs : NavigationTarget {
         override val description: String get() = "Stairs"
     }

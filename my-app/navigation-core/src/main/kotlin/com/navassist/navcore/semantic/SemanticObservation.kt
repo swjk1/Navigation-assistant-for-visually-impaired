@@ -64,6 +64,24 @@ sealed interface SemanticObservation {
         override val worldPosition: Vec3? = null,
     ) : SemanticObservation
 
+    /**
+     * A door, with no claim about what is behind it.
+     *
+     * Kept separate from [Exit] and [Room] because it is genuinely less specific than either: a
+     * door may lead outside, into a room, or into a cupboard. It is still worth reporting - "walk
+     * to a door" is a real request, a door is a reasonable exit candidate, and a room plate is
+     * usually mounted beside one - so the engine treats it as partial evidence for those targets
+     * rather than a match for them.
+     */
+    data class Door(
+        val direction: SemanticDirection? = null,
+        override val confidence: Float,
+        val normalizedX: Float? = null,
+        val normalizedY: Float? = null,
+        override val timestampNanos: Long? = null,
+        override val worldPosition: Vec3? = null,
+    ) : SemanticObservation
+
     data class Stairs(
         override val confidence: Float,
         val normalizedX: Float? = null,

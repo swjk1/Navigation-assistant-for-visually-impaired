@@ -11,6 +11,8 @@ enum class NodeType {
     DEAD_END,
     SEMANTIC_LANDMARK,
     ROOM,
+    /** A door. Less specific than ROOM or EXIT; may lead anywhere. */
+    DOOR,
     EXIT,
     /** Vertical transition. Carries an edge to a node on another floorId. */
     STAIRS,

@@ -163,6 +163,15 @@ class SemanticHintStore(private val config: NavigationConfig) {
             is SemanticObservation.Stairs ->
                 if (target == NavigationTarget.Stairs || target == NavigationTarget.Exit) 0.5f else 0f
             is SemanticObservation.Elevator -> if (target == NavigationTarget.Elevator) 1f else 0f
+            // A door is weak evidence for anything except a door: it may lead outside, into a
+            // room, or into a cupboard. Rooms sit behind doors, so it is worth a small nudge
+            // when hunting a room number, but never enough to override a read plate.
+            is SemanticObservation.Door -> when {
+                target == NavigationTarget.Door -> 1f
+                target == NavigationTarget.Exit -> 0.5f
+                target is NavigationTarget.Room -> 0.3f
+                else -> 0f
+            }
             is SemanticObservation.Room ->
                 // A near-miss room number is mild evidence that the right corridor is this way.
                 nearMissRelevance(observation, target)
@@ -193,6 +202,7 @@ class SemanticHintStore(private val config: NavigationConfig) {
         val direction = when (val o = hint.observation) {
             is SemanticObservation.RoomRange -> o.direction
             is SemanticObservation.Exit -> o.direction
+            is SemanticObservation.Door -> o.direction
             else -> null
         } ?: return null
         val offset = when (direction) {

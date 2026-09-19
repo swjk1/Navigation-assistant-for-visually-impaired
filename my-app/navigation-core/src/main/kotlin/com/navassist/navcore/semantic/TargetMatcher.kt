@@ -52,6 +52,7 @@ object TargetMatcher {
             }
 
             NavigationTarget.Exit -> observation is SemanticObservation.Exit
+            NavigationTarget.Door -> observation is SemanticObservation.Door
             NavigationTarget.Stairs -> observation is SemanticObservation.Stairs
             NavigationTarget.Elevator -> observation is SemanticObservation.Elevator
             NavigationTarget.Explore -> false

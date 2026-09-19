@@ -229,11 +229,18 @@ const sub = subscribeNavigationCommands((command, snapshot) => {
 | `target` | `snapshot.target` |
 | `confidence` | 1 for a halt; otherwise `trackingConfidence × (mapConfidence / 0.5)`, clamped |
 
-**`SCAN` has no action in the frozen contract and is delivered as `STOP`.** That is a real loss:
-`SCAN` means "stand still *and sweep the phone*", and it is how the engine recovers from lost
-tracking, missing depth or an incomplete map. A user told only "stop" will wait forever for an
-instruction that cannot arrive until they move the phone. Callers that can speak should check
-`isScanRequest(snapshot)` until the three owners agree to add a `SCAN` action.
+`SCAN` is a first-class action in the contract (added by agreement — it was previously delivered
+as `STOP`, which left the user standing still waiting for an instruction that could not arrive
+until they moved the phone). It has its own haptic rhythm (`._ __ ._`, deliberately unlike
+`STOP`'s two long pulses) and is spoken as "Stop. Look around slowly."
+
+| Contract action | Engine command |
+|---|---|
+| `STRAIGHT` | `STRAIGHT` |
+| `LEFT` / `RIGHT` | `TURN_LEFT` / `TURN_RIGHT` |
+| `STOP` | `STOP` |
+| `SCAN` | `SCAN` |
+| `ARRIVED` | `ARRIVED` |
 
 `hazard.detected` is driven by the engine's own reason code rather than guessed downstream,
 because a `STOP` for an obstacle and a `STOP` for dead tracking are indistinguishable from
@@ -452,18 +459,15 @@ yet, so no adapter is committed here; this is the mapping it will need.
 | `text[].text` = "ROOM 204" | `{ type: 'ROOM', label: '204' }` — `TargetMatcher` already matches on the numeric part, so "ROOM 204" resolves against a `Room("204")` target |
 | `text[].box` | `normalizedX/Y` = box centre |
 | `objects[].label` = `'elevator'` / `'stairs'` | `ELEVATOR` / `STAIRS` |
+| `objects[].label` = `'door'` | `DOOR` — partial evidence for an EXIT or ROOM target, never a match for either |
 | `objects[].label` = `'sign'` + text containing a range | `{ type: 'ROOM_RANGE', min, max, direction }` |
 | `objects[].clockPosition` | `direction`: 9–10 o'clock → `LEFT`, 11–1 → `FORWARD`, 2–3 → `RIGHT` |
 | `objects[].approxDistanceMeters` | not used — the engine resolves depth itself, which is more accurate than a monocular estimate |
 | `floorDetected` | not used — the engine estimates the floor plane itself |
 
-Three things to settle before wiring it up:
+Two things to settle before wiring it up:
 
-1. **`door` has no equivalent here.** Person 1 emits `door` as a nav anchor and "walk toward a
-   door" is their stated goal, but this API only accepts ROOM / EXIT / STAIRS / ELEVATOR. Either
-   a door with a readable plate becomes a `ROOM`, or this module gains a `DOOR` type.
-
-2. **`timestampNs` must be ARCore's frame timestamp**, from `Frame.getTimestamp()` — nanoseconds
+1. **`timestampNs` must be ARCore's frame timestamp**, from `Frame.getTimestamp()` — nanoseconds
    since boot, *not* `Date.now()`. `PerceptionFrame.timestamp` is a wall clock in milliseconds.
    Passing it would put every observation billions of nanoseconds out of range. **If you do not
    have the ARCore value, omit the field**; the most recent depth frame is then used, which is
@@ -471,7 +475,7 @@ Three things to settle before wiring it up:
    rather than silently dropping every observation — but the log is the only signal, so get it
    right at the source.
 
-3. **`immediateHazard` has no input here and reaches the guidance layer separately.** Person 3's
+2. **`immediateHazard` has no input here and reaches the guidance layer separately.** Person 3's
    `hazard.detected` will therefore have two independent producers: geometric blockage from this
    engine (`stopReason === 'OBSTACLE_AHEAD'`) and perceptual hazards from Person 1 (descending
    stairs, a person ahead). Someone has to own merging them, or one will mask the other.

@@ -194,4 +194,63 @@ class SemanticHintStoreTest {
         store.clearTargetSighting()
         assertNull(store.targetSighting)
     }
+
+    // ---------------------------------------------------------------- doors
+
+    @Test
+    fun `a door matches a door request but not an exit request`() {
+        val door = SemanticObservation.Door(confidence = 0.9f)
+        assertTrue(TargetMatcher.matches(door, NavigationTarget.Door))
+        assertTrue(
+            !TargetMatcher.matches(door, NavigationTarget.Exit),
+            "a door may lead into a cupboard; it is not the exit",
+        )
+        assertTrue(!TargetMatcher.matches(door, NavigationTarget.Room("314")))
+    }
+
+    @Test
+    fun `a door biases an exit search without deciding it`() {
+        val store = SemanticHintStore(config)
+        store.submit(
+            listOf(SemanticObservation.Door(direction = SemanticDirection.RIGHT, confidence = 0.9f)),
+            nowMillis = 0,
+            observerPose = origin,
+            target = NavigationTarget.Exit,
+        )
+        val towardsDoor = store.semanticScoreFor(Vec2(3f, 1f), origin, NavigationTarget.Exit, 0)
+        val awayFromDoor = store.semanticScoreFor(Vec2(-3f, 1f), origin, NavigationTarget.Exit, 0)
+        assertTrue(towardsDoor > awayFromDoor, "towards=$towardsDoor away=$awayFromDoor")
+        assertTrue(towardsDoor < 1f, "a door is partial evidence only ($towardsDoor)")
+    }
+
+    @Test
+    fun `a door counts for more when a door is what was asked for`() {
+        fun scoreFor(target: NavigationTarget): Float {
+            val store = SemanticHintStore(config)
+            store.submit(
+                listOf(SemanticObservation.Door(direction = SemanticDirection.RIGHT, confidence = 0.9f)),
+                nowMillis = 0,
+                observerPose = origin,
+                target = target,
+            )
+            return store.semanticScoreFor(Vec2(3f, 1f), origin, target, 0)
+        }
+        val asDoor = scoreFor(NavigationTarget.Door)
+        val asExit = scoreFor(NavigationTarget.Exit)
+        val asRoom = scoreFor(NavigationTarget.Room("314"))
+        assertTrue(asDoor > asExit && asExit > asRoom, "door=$asDoor exit=$asExit room=$asRoom")
+        assertTrue(asRoom > 0f, "rooms sit behind doors, so it is still a nudge")
+    }
+
+    @Test
+    fun `a located door becomes a destination when a door was requested`() {
+        val store = SemanticHintStore(config)
+        store.submit(
+            listOf(SemanticObservation.Door(confidence = 0.9f, worldPosition = Vec3(1f, 1.2f, 3f))),
+            nowMillis = 0,
+            observerPose = origin,
+            target = NavigationTarget.Door,
+        )
+        assertNotNull(store.targetSighting)
+    }
 }

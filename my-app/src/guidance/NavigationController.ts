@@ -6,6 +6,7 @@ import {
   hapticHazard,
   hapticLeft,
   hapticRight,
+  hapticScan,
   hapticStop,
   hapticStraight,
   stopHaptics,
@@ -19,6 +20,7 @@ const ACTION_LABEL: Record<NavigationAction, string> = {
   RIGHT: 'Right',
   STRAIGHT: 'Straight',
   STOP: 'Stop',
+  SCAN: 'Look around slowly',
   ARRIVED: 'Arrived',
 };
 
@@ -61,6 +63,11 @@ export function toSpeechText(command: NavigationCommand): string {
     return hazardType ? `Stop. ${hazardType} ahead.` : 'Stop. Hazard ahead.';
   }
 
+  // SCAN needs more than its label: it is a request for the user to help the engine see.
+  if (command.action === 'SCAN') {
+    return 'Stop. Look around slowly.';
+  }
+
   if (command.action === 'ARRIVED') {
     return command.target ? `${command.target}. Arrived.` : 'Arrived.';
   }
@@ -90,6 +97,9 @@ async function runHaptic(command: NavigationCommand): Promise<void> {
       break;
     case 'STOP':
       await hapticStop();
+      break;
+    case 'SCAN':
+      await hapticScan();
       break;
     case 'ARRIVED':
       await hapticArrived();

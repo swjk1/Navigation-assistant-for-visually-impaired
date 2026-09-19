@@ -64,11 +64,7 @@ export default function NavigateScreen() {
         setSpoken(command.hazard?.detected ? 'Hazard' : command.action);
       }
 
-      // SCAN has no action in the frozen contract and arrives as STOP, so the reason it is
-      // asking the user to stand still would otherwise be lost. Speak it separately.
-      if (isScanRequest(next)) {
-        setSpoken('SCAN (delivered as STOP)');
-      }
+      if (isScanRequest(next)) setSpoken('SCAN');
     });
 
     return () => {
@@ -152,6 +148,7 @@ export default function NavigateScreen() {
           )}
           <Button label="Find 314" onPress={() => void start({ type: 'ROOM', value: '314' })} />
           <Button label="Find exit" onPress={() => void start({ type: 'EXIT' })} />
+          <Button label="Find door" onPress={() => void start({ type: 'DOOR' })} />
           <Button label="Reset map" onPress={() => void NavigationNative.resetMap()} />
         </View>
 

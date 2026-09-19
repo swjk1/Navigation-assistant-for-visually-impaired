@@ -106,6 +106,7 @@ export type NavigationSnapshot = {
 export type NavigationTarget =
   | { type: 'ROOM'; value: string }
   | { type: 'EXIT' }
+  | { type: 'DOOR' }
   | { type: 'STAIRS' }
   | { type: 'ELEVATOR' }
   | { type: 'EXPLORE' };
@@ -144,6 +145,12 @@ export type SemanticObservation =
       direction: SemanticDirection;
     })
   | (SemanticBase & { type: 'EXIT'; direction?: SemanticDirection })
+  /**
+   * A door, with no claim about what is behind it. Deliberately distinct from EXIT and ROOM:
+   * a door may lead outside, into a room, or into a cupboard. The engine treats it as partial
+   * evidence for those targets rather than a match for them.
+   */
+  | (SemanticBase & { type: 'DOOR'; direction?: SemanticDirection })
   | (SemanticBase & { type: 'STAIRS' })
   | (SemanticBase & { type: 'ELEVATOR' })
   | (SemanticBase & { type: 'FLOOR'; floor: string });

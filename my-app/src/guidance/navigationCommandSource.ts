@@ -19,18 +19,11 @@ import type { NavigationAction, NavigationCommand } from '@/types/NavigationComm
  */
 
 /**
- * `SCAN` has no representation in the frozen contract, so it is delivered as `STOP`.
- *
- * This is a real loss of meaning, not a tidy equivalence. `SCAN` means "stand still AND sweep the
- * phone so I can see more" - it is the engine asking the user for help, and it is how the engine
- * recovers from lost tracking, missing depth, or an incomplete map. A user who is told only
- * "stop" will stand still indefinitely waiting for an instruction that cannot arrive until they
- * move the phone.
- *
- * Until the three owners agree to add a `SCAN` action, callers that can speak should check
- * {@link isScanRequest} and say so. `stopReason` on the snapshot carries the detail.
+ * `SCAN` used to be delivered as `STOP` because the contract had no action for it. It now has
+ * one, so the instruction survives intact. {@link isScanRequest} is kept for callers that want
+ * to react to it without inspecting the action.
  */
-export const SCAN_IS_DELIVERED_AS_STOP = true;
+export const SCAN_IS_DELIVERED_AS_STOP = false;
 
 /** Map confidence at which the engine's instructions are treated as fully trustworthy. */
 const MAP_CONFIDENCE_FULL = 0.5;
@@ -47,8 +40,7 @@ const ACTION_BY_COMMAND: Record<NavigationSnapshot['command'], NavigationAction>
   TURN_LEFT: 'LEFT',
   TURN_RIGHT: 'RIGHT',
   STOP: 'STOP',
-  // See SCAN_IS_DELIVERED_AS_STOP.
-  SCAN: 'STOP',
+  SCAN: 'SCAN',
   ARRIVED: 'ARRIVED',
 };
 

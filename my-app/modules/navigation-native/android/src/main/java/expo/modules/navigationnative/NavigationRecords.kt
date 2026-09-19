@@ -17,7 +17,7 @@ import com.navassist.navcore.state.NavigationSnapshot
  */
 
 class TargetRecord : Record {
-    /** "ROOM" | "EXIT" | "STAIRS" | "ELEVATOR" | "EXPLORE" */
+    /** "ROOM" | "EXIT" | "DOOR" | "STAIRS" | "ELEVATOR" | "EXPLORE" */
     @Field var type: String = "EXPLORE"
 
     /** Room label, e.g. "314". Only meaningful for type = "ROOM". */
@@ -28,6 +28,7 @@ class TargetRecord : Record {
             ?.let { NavigationTarget.Room(it) }
             ?: NavigationTarget.Explore
         "EXIT" -> NavigationTarget.Exit
+        "DOOR" -> NavigationTarget.Door
         "STAIRS" -> NavigationTarget.Stairs
         "ELEVATOR" -> NavigationTarget.Elevator
         else -> NavigationTarget.Explore
@@ -35,7 +36,7 @@ class TargetRecord : Record {
 }
 
 class SemanticObservationRecord : Record {
-    /** "ROOM" | "ROOM_RANGE" | "EXIT" | "STAIRS" | "ELEVATOR" | "FLOOR" */
+    /** "ROOM" | "ROOM_RANGE" | "EXIT" | "DOOR" | "STAIRS" | "ELEVATOR" | "FLOOR" */
     @Field var type: String = ""
 
     @Field var confidence: Float = 0f
@@ -95,6 +96,15 @@ class SemanticObservationRecord : Record {
             )
 
             "EXIT" -> SemanticObservation.Exit(
+                direction = parseDirection(direction),
+                confidence = confidence,
+                normalizedX = normalizedX,
+                normalizedY = normalizedY,
+                timestampNanos = timestamp,
+                worldPosition = world,
+            )
+
+            "DOOR" -> SemanticObservation.Door(
                 direction = parseDirection(direction),
                 confidence = confidence,
                 normalizedX = normalizedX,

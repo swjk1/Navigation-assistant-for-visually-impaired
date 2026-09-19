@@ -199,6 +199,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             val type = when (observation) {
                 is SemanticObservation.Room -> NodeType.ROOM
                 is SemanticObservation.Exit -> NodeType.EXIT
+                is SemanticObservation.Door -> NodeType.DOOR
                 is SemanticObservation.Stairs -> NodeType.STAIRS
                 is SemanticObservation.Elevator -> NodeType.ELEVATOR
                 else -> continue
