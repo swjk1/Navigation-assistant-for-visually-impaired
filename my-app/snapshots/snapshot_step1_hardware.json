@@ -1,0 +1,171 @@
+{
+  "step": 1,
+  "name": "hardware_camera_verification",
+  "status": "offline_timed_run_phone_pending",
+  "timestamp": 1789839185244,
+  "timedAt": "2026-09-19T17:33:05.244Z",
+  "note": "Timed offline utility path only. Live CameraView captureLatencyMs still requires phone (/perception-harness).",
+  "permissionGranted": false,
+  "platform": "offline-node",
+  "geminiKeyConfigured": false,
+  "config": {
+    "facing": "back",
+    "width": 640,
+    "height": 480,
+    "quality": 0.4,
+    "maxBase64Bytes": 153600,
+    "maxCaptureLatencyMs": 150
+  },
+  "capture": {
+    "width": 640,
+    "height": 480,
+    "captureLatencyMs": null,
+    "estimatedBytes": 54000,
+    "mimeType": "image/jpeg",
+    "base64Length": 72000,
+    "base64Prefix": "/9haWlpaWlpaWlpaWlpaWlpaWlpaWlpa",
+    "looksLikeBase64": true,
+    "synthetic": true
+  },
+  "budgets": {
+    "maxCaptureLatencyMs": 150,
+    "maxBase64Bytes": 153600,
+    "withinLatencyBudget": null,
+    "withinSizeBudget": true
+  },
+  "timing": {
+    "runs": 10,
+    "samples": [
+      {
+        "run": 1,
+        "stripPrefixMs": 0.064,
+        "estimateBytesMs": 0.069,
+        "buildSnapshotMs": 0.197,
+        "utilityPipelineMs": 0.355,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 2,
+        "stripPrefixMs": 0.693,
+        "estimateBytesMs": 0.034,
+        "buildSnapshotMs": 0.053,
+        "utilityPipelineMs": 0.797,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 3,
+        "stripPrefixMs": 0.037,
+        "estimateBytesMs": 0.059,
+        "buildSnapshotMs": 0.014,
+        "utilityPipelineMs": 0.135,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 4,
+        "stripPrefixMs": 0.064,
+        "estimateBytesMs": 0.031,
+        "buildSnapshotMs": 0.011,
+        "utilityPipelineMs": 0.116,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 5,
+        "stripPrefixMs": 0.046,
+        "estimateBytesMs": 0.03,
+        "buildSnapshotMs": 0.01,
+        "utilityPipelineMs": 0.098,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 6,
+        "stripPrefixMs": 0.038,
+        "estimateBytesMs": 0.029,
+        "buildSnapshotMs": 0.009,
+        "utilityPipelineMs": 0.082,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 7,
+        "stripPrefixMs": 0.659,
+        "estimateBytesMs": 0.043,
+        "buildSnapshotMs": 0.021,
+        "utilityPipelineMs": 0.741,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 8,
+        "stripPrefixMs": 0.008,
+        "estimateBytesMs": 0.101,
+        "buildSnapshotMs": 0.014,
+        "utilityPipelineMs": 0.13,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 9,
+        "stripPrefixMs": 0.007,
+        "estimateBytesMs": 0.061,
+        "buildSnapshotMs": 0.013,
+        "utilityPipelineMs": 0.086,
+        "estimatedBytes": 54000
+      },
+      {
+        "run": 10,
+        "stripPrefixMs": 0.006,
+        "estimateBytesMs": 0.032,
+        "buildSnapshotMs": 0.024,
+        "utilityPipelineMs": 0.068,
+        "estimatedBytes": 54000
+      }
+    ],
+    "summary": {
+      "envSoftCheck": {
+        "n": 1,
+        "avgMs": 0.098,
+        "p90Ms": 0.098,
+        "maxMs": 0.098,
+        "minMs": 0.098
+      },
+      "stripPrefix": {
+        "n": 10,
+        "avgMs": 0.162,
+        "p90Ms": 0.659,
+        "maxMs": 0.693,
+        "minMs": 0.006
+      },
+      "estimateBytes": {
+        "n": 10,
+        "avgMs": 0.049,
+        "p90Ms": 0.069,
+        "maxMs": 0.101,
+        "minMs": 0.029
+      },
+      "buildSnapshot": {
+        "n": 10,
+        "avgMs": 0.036,
+        "p90Ms": 0.053,
+        "maxMs": 0.197,
+        "minMs": 0.009
+      },
+      "fullUtilityPipeline": {
+        "n": 10,
+        "avgMs": 0.261,
+        "p90Ms": 0.741,
+        "maxMs": 0.797,
+        "minMs": 0.068
+      }
+    }
+  },
+  "reviewCheckpoint": "Did camera capture a sample image with Base64 size < 150KB and latency < 150ms?",
+  "reviewAnswers": {
+    "sizeBudgetMetOffline": true,
+    "liveCaptureLatencyMet": null,
+    "phoneRunCompleted": false
+  },
+  "artifactsReady": {
+    "gitignore": true,
+    "envExample": true,
+    "envCheck": true,
+    "cameraService": true,
+    "perceptionTypes": true
+  }
+}

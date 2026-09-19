@@ -1,4 +1,5 @@
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { Link } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -130,11 +131,49 @@ export default function HomeScreen() {
           {lastTranscriptHint ? <Text style={styles.helperText}>{lastTranscriptHint}</Text> : null}
         </View>
       </Pressable>
+
+      {/* Developer entry points. Not part of the eyes-free flow. */}
+      <View style={styles.devLinks}>
+        <Link href="/navigate" asChild>
+          <Pressable accessibilityRole="button" style={styles.devLink}>
+            <Text style={styles.devLinkText}>Live navigation</Text>
+          </Pressable>
+        </Link>
+        <Link href="/navigation-debug" asChild>
+          <Pressable accessibilityRole="button" style={styles.devLink}>
+            <Text style={styles.devLinkText}>Engine debug</Text>
+          </Pressable>
+        </Link>
+        <Link href="/perception-harness" asChild>
+          <Pressable accessibilityRole="button" style={styles.devLink}>
+            <Text style={styles.devLinkText}>Perception</Text>
+          </Pressable>
+        </Link>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  devLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 12,
+  },
+  devLink: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2A2A33',
+  },
+  devLinkText: {
+    color: '#8A8A99',
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#0B0B0F',

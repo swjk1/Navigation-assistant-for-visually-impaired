@@ -1,0 +1,227 @@
+{
+  "step": 3,
+  "name": "edge_case_efficiency_suite",
+  "timestamp": 1789839183812,
+  "timedAt": "2026-09-19T17:33:03.812Z",
+  "mode": "mock",
+  "reviewCheckpoint": "Did hazard alerts fire on stairs and trash cans? Did OCR pick up room numbers?",
+  "reviewAnswers": {
+    "stairsHazard": true,
+    "trashcanHazard": true,
+    "roomOcr": true,
+    "clearHallway": true,
+    "blurrySafe": true
+  },
+  "performance": {
+    "n": 5,
+    "avgMs": 0.452,
+    "p90Ms": 1.466,
+    "maxMs": 1.466,
+    "minMs": 0.145
+  },
+  "summary": {
+    "passed": 5,
+    "total": 5
+  },
+  "results": [
+    {
+      "testId": "EC-01",
+      "name": "Descending Stairs (Drop Hazard)",
+      "passed": true,
+      "latencyMs": 1,
+      "wallClockMs": 1.466,
+      "fixturePresent": true,
+      "failures": [],
+      "warnings": [],
+      "source": "fixture+mock:edge_stairs_down.jpg",
+      "frame": {
+        "timestamp": 1789839183810,
+        "latencyMs": 1,
+        "objects": [
+          {
+            "label": "stairs",
+            "confidence": 0.94,
+            "box": {
+              "x": 0.35,
+              "y": 0.4,
+              "width": 0.3,
+              "height": 0.45
+            },
+            "clockPosition": "12 o'clock",
+            "approxDistanceMeters": 2
+          }
+        ],
+        "text": [],
+        "floorDetected": true,
+        "immediateHazard": true,
+        "hazardDescription": "Descending stairs ahead within 3 meters. Stop."
+      }
+    },
+    {
+      "testId": "EC-02",
+      "name": "Obstacle in Path (Trashcan / Cart)",
+      "passed": true,
+      "latencyMs": 0,
+      "wallClockMs": 0.237,
+      "fixturePresent": true,
+      "failures": [],
+      "warnings": [],
+      "source": "fixture+mock:edge_trashcan.jpg",
+      "frame": {
+        "timestamp": 1789839183811,
+        "latencyMs": 0,
+        "objects": [
+          {
+            "label": "trashcan",
+            "confidence": 0.9,
+            "box": {
+              "x": 0.4,
+              "y": 0.5,
+              "width": 0.22,
+              "height": 0.35
+            },
+            "clockPosition": "12 o'clock",
+            "approxDistanceMeters": 1.5
+          }
+        ],
+        "text": [],
+        "floorDetected": true,
+        "immediateHazard": true,
+        "hazardDescription": "Obstacle in path within 3 meters."
+      }
+    },
+    {
+      "testId": "EC-03",
+      "name": "Room Sign OCR Detection",
+      "passed": true,
+      "latencyMs": 0,
+      "wallClockMs": 0.235,
+      "fixturePresent": true,
+      "failures": [],
+      "warnings": [],
+      "source": "fixture+mock:edge_room_204.jpg",
+      "frame": {
+        "timestamp": 1789839183811,
+        "latencyMs": 0,
+        "objects": [
+          {
+            "label": "door",
+            "confidence": 0.92,
+            "box": {
+              "x": 0.18,
+              "y": 0.22,
+              "width": 0.28,
+              "height": 0.55
+            },
+            "clockPosition": "11 o'clock",
+            "approxDistanceMeters": 3.5
+          },
+          {
+            "label": "wall",
+            "confidence": 0.88,
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0.15,
+              "height": 1
+            },
+            "clockPosition": "9 o'clock",
+            "approxDistanceMeters": 1.2
+          },
+          {
+            "label": "sign",
+            "confidence": 0.85,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            },
+            "clockPosition": "1 o'clock",
+            "approxDistanceMeters": 4
+          }
+        ],
+        "text": [
+          {
+            "text": "ROOM 204",
+            "confidence": 0.91,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            }
+          }
+        ],
+        "floorDetected": true,
+        "immediateHazard": false,
+        "hazardDescription": null
+      }
+    },
+    {
+      "testId": "EC-04",
+      "name": "Clear Hallway (No Hazards)",
+      "passed": true,
+      "latencyMs": 0,
+      "wallClockMs": 0.178,
+      "fixturePresent": true,
+      "failures": [],
+      "warnings": [],
+      "source": "fixture+mock:edge_clear_hallway.jpg",
+      "frame": {
+        "timestamp": 1789839183812,
+        "latencyMs": 0,
+        "objects": [
+          {
+            "label": "wall",
+            "confidence": 0.8,
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0.12,
+              "height": 1
+            },
+            "clockPosition": "9 o'clock",
+            "approxDistanceMeters": 1
+          },
+          {
+            "label": "wall",
+            "confidence": 0.8,
+            "box": {
+              "x": 0.88,
+              "y": 0,
+              "width": 0.12,
+              "height": 1
+            },
+            "clockPosition": "3 o'clock",
+            "approxDistanceMeters": 1
+          }
+        ],
+        "text": [],
+        "floorDetected": true,
+        "immediateHazard": false,
+        "hazardDescription": null
+      }
+    },
+    {
+      "testId": "EC-05",
+      "name": "High Motion Blur / Low Contrast",
+      "passed": true,
+      "latencyMs": 0,
+      "wallClockMs": 0.145,
+      "fixturePresent": true,
+      "failures": [],
+      "warnings": [],
+      "source": "fixture+mock:edge_blurry_motion.jpg",
+      "frame": {
+        "timestamp": 1789839183812,
+        "latencyMs": 0,
+        "objects": [],
+        "text": [],
+        "floorDetected": false,
+        "immediateHazard": false,
+        "hazardDescription": null
+      }
+    }
+  ]
+}

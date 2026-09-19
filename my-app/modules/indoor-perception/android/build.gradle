@@ -1,0 +1,26 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.indoorperception'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.indoorperception"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  sourceSets {
+    main {
+      assets.srcDirs += ['src/main/assets']
+    }
+  }
+}
+
+dependencies {
+  implementation 'org.tensorflow:tensorflow-lite:2.16.1'
+  implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+  implementation 'com.google.mlkit:text-recognition:16.0.1'
+}

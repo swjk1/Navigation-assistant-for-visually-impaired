@@ -1,0 +1,96 @@
+{
+  "step": "hybrid",
+  "name": "yolo26_mlkit_gemini_gated",
+  "status": "mock_verified",
+  "timestamp": 1789839170834,
+  "timedAt": "2026-09-19T17:32:50.834Z",
+  "geminiCalled": false,
+  "wallClockMs": 1.139,
+  "reviewAnswers": {
+    "yoloObjectsMerged": true,
+    "mlkitOcrPrimary": true,
+    "skipGeminiWhenConfident": true,
+    "skipGeminiWhenEmpty": true,
+    "callGeminiOnYoloError": true,
+    "callGeminiOnLowConfOcr": true,
+    "clockFromBoxWorks": true
+  },
+  "failures": [],
+  "frameConfident": {
+    "timestamp": 1789839170833,
+    "latencyMs": 1,
+    "objects": [
+      {
+        "label": "person",
+        "confidence": 0.91,
+        "box": {
+          "x": 0.42,
+          "y": 0.3,
+          "width": 0.2,
+          "height": 0.5
+        },
+        "clockPosition": "12 o'clock",
+        "approxDistanceMeters": 0.8
+      },
+      {
+        "label": "chair",
+        "confidence": 0.77,
+        "box": {
+          "x": 0.05,
+          "y": 0.55,
+          "width": 0.18,
+          "height": 0.3
+        },
+        "clockPosition": "10 o'clock",
+        "approxDistanceMeters": 1.3
+      }
+    ],
+    "text": [
+      {
+        "text": "ROOM 204",
+        "confidence": 0.88,
+        "box": {
+          "x": 0.6,
+          "y": 0.15,
+          "width": 0.25,
+          "height": 0.1
+        }
+      }
+    ],
+    "floorDetected": false,
+    "immediateHazard": false,
+    "hazardDescription": null,
+    "meta": {
+      "pipeline": "yolo26n+mlkit+gemini-gated",
+      "roles": {
+        "yolo": "objects (COCO-mapped)",
+        "mlkit": "OCR primary",
+        "gemini": "errors / low-conf OCR / caution / periodic only"
+      },
+      "yoloMs": 42,
+      "ocrMs": 55,
+      "vlmMs": null,
+      "nativeTotalMs": 110,
+      "modelLoaded": true,
+      "vlmInvoked": false,
+      "vlmGateReason": "skipped",
+      "vlmOnTop": false,
+      "vlmMode": "mock",
+      "ocrSource": "mlkit",
+      "yoloError": null,
+      "ocrError": null,
+      "platform": "android-mock",
+      "clocksValid": true
+    }
+  },
+  "frameEmpty": {
+    "vlmInvoked": false,
+    "vlmGateReason": "skipped",
+    "objectCount": 0
+  },
+  "frameError": {
+    "vlmInvoked": true,
+    "vlmGateReason": "yolo_error",
+    "objectCount": 3
+  }
+}
