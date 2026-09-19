@@ -1,2 +1,3 @@
-# Place yolo26n_int8.tflite here (gitignored if large).
-# Download: npm run download:yolo26
+# indoor_yolo26.onnx lives here: YOLO26n fine-tuned on an indoor-navigation dataset.
+# 17 classes (door, exit sign, stair sign, elevator, arrows, washrooms, ...), 640x640 input,
+# end-to-end export, so the model does its own NMS and emits [1, N, 6] xyxy+score+class.

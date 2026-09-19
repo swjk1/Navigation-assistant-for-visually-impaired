@@ -35,3 +35,7 @@ fixtures/live_captures/
 .DS_Store
 .idea/
 .vscode/
+
+# Source copy of the fine-tuned model. The packaged one lives in
+# my-app/modules/indoor-perception/android/src/main/assets/indoor_yolo26.onnx
+/best.onnx

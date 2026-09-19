@@ -25,7 +25,7 @@ dependencies {
   implementation project(':navigation-native')
   implementation 'com.google.ar:core:1.56.0'
 
-  implementation 'org.tensorflow:tensorflow-lite:2.16.1'
-  implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+  // The fine-tuned indoor model is an end-to-end ONNX export, so ONNX Runtime replaces TFLite.
+  implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
   implementation 'com.google.mlkit:text-recognition:16.0.1'
 }

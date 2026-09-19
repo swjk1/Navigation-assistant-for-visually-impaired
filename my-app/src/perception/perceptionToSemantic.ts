@@ -85,6 +85,20 @@ function fromObject(object: DetectedObject): SemanticObservation | null {
       return { type: 'STAIRS', ...base };
     case 'elevator':
       return { type: 'ELEVATOR', ...base };
+    case 'exit sign':
+      // A sign pointing the way out, not the way out itself - so it is directional evidence.
+      // Its own position is still useful, since walking towards it is the right move.
+      return { type: 'EXIT', direction, ...base };
+    case 'left arrow':
+      // A wayfinding arrow says "that way" about whatever is written beside it. Without OCR to
+      // pair it with, treat it as a weak directional exit hint rather than dropping it.
+      return { type: 'EXIT', direction: 'LEFT', confidence: object.confidence * 0.4 };
+    case 'right arrow':
+      return { type: 'EXIT', direction: 'RIGHT', confidence: object.confidence * 0.4 };
+    case 'washroom':
+      // A washroom door is a room the user may be looking for, and always sits on a wall the
+      // corridor runs along - useful as a landmark even when the plate is unreadable.
+      return { type: 'ROOM', label: 'washroom', ...base };
     case 'door':
       // Reported as a door, not an exit. The engine scores it as partial evidence for an exit or
       // a room without ever treating it as a match for either - a door may lead outside, into a

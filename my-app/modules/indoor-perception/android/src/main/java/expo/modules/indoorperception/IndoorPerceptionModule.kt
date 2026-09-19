@@ -13,6 +13,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
+/** A frame should arrive within a couple of render frames; 3 s is generous. */
+private const val CAPTURE_TIMEOUT_MS = 3000L
+
 class AnalyzeOptions : Record {
   @Field
   var confThreshold: Double = 0.35
@@ -35,7 +38,12 @@ class IndoorPerceptionModule : Module() {
   private val executor = Executors.newSingleThreadExecutor()
   /** Parallel YOLO + OCR workers (max 2) */
   private val analyzePool = Executors.newFixedThreadPool(2)
-  private var detector: Yolo26Detector? = null
+  /** Single-threaded timer that rejects capture promises the render loop never served. */
+  private val captureWatchdog = Executors.newSingleThreadScheduledExecutor { runnable ->
+    Thread(runnable, "perception-capture-watchdog").apply { isDaemon = true }
+  }
+
+  private var detector: YoloOnnxDetector? = null
   private var ocr: MlKitOcr? = null
 
   companion object {
@@ -43,10 +51,10 @@ class IndoorPerceptionModule : Module() {
     private const val MAX_BASE64_CHARS = 400_000
   }
 
-  private fun getDetector(): Yolo26Detector {
+  private fun getDetector(): YoloOnnxDetector {
     val existing = detector
     if (existing != null) return existing
-    val created = Yolo26Detector(appContext.reactContext ?: throw IllegalStateException("No React context"))
+    val created = YoloOnnxDetector(appContext.reactContext ?: throw IllegalStateException("No React context"))
     detector = created
     return created
   }
@@ -70,6 +78,7 @@ class IndoorPerceptionModule : Module() {
       ocr = null
       executor.shutdownNow()
       analyzePool.shutdownNow()
+      captureWatchdog.shutdownNow()
     }
 
 
@@ -100,7 +109,23 @@ class IndoorPerceptionModule : Module() {
      * with the depth data navigation is using.
      */
     AsyncFunction("captureFrame") { promise: Promise ->
+      // The capture is served by the GL thread. If the AR view is not mounted, the session died,
+      // or the device never delivers a CPU image, that thread simply never runs our callback and
+      // the promise would hang forever - taking the caller's perception loop down with it.
+      // A watchdog turns that into an ordinary rejection the UI can show.
+      val settled = java.util.concurrent.atomic.AtomicBoolean(false)
+      captureWatchdog.schedule({
+        if (settled.compareAndSet(false, true)) {
+          promise.reject(
+            "ERR_CAPTURE_TIMEOUT",
+            "No camera frame within ${CAPTURE_TIMEOUT_MS} ms. Is <PerceptionArView /> mounted?",
+            null,
+          )
+        }
+      }, CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
       ArFrameSource.requestCapture { result ->
+        if (!settled.compareAndSet(false, true)) return@requestCapture
         result.fold(
           onSuccess = { captured ->
             promise.resolve(
@@ -129,7 +154,7 @@ class IndoorPerceptionModule : Module() {
       mapOf(
         "platform" to "android",
         "modelLoaded" to (det?.isLoaded == true),
-        "modelAssetName" to Yolo26Detector.ASSET_NAME
+        "modelAssetName" to YoloOnnxDetector.ASSET_NAME
       )
     }
 
@@ -196,7 +221,7 @@ class IndoorPerceptionModule : Module() {
                   YoloResult(
                     emptyList(),
                     System.currentTimeMillis() - y0,
-                    "Model asset missing: ${Yolo26Detector.ASSET_NAME}. Run npm run download:yolo26",
+                    "Model asset missing: ${YoloOnnxDetector.ASSET_NAME}. Rebuild the app so the asset is packaged",
                     false,
                     path
                   )

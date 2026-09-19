@@ -30,7 +30,14 @@ export type ObjectLabel =
   | 'chair'
   | 'trashcan'
   | 'wall'
-  | 'sign';
+  | 'sign'
+  // Emitted by the fine-tuned indoor YOLO26 model. Signs are reported as their SUBJECT rather
+  // than flattened to 'sign': an "exit sign" is how a user finds an exit, and the navigation
+  // engine can act on that, whereas a generic 'sign' tells it nothing.
+  | 'exit sign'
+  | 'left arrow'
+  | 'right arrow'
+  | 'washroom';
 
 /**
  * Clock facing relative to the user walking forward.
@@ -89,7 +96,13 @@ export interface CameraCaptureResult {
 }
 
 /** Labels Person 2 typically treats as navigation anchors / destinations. */
-export type NavAnchorLabel = 'door' | 'elevator' | 'stairs' | 'sign';
+export type NavAnchorLabel =
+  | 'door'
+  | 'elevator'
+  | 'stairs'
+  | 'sign'
+  | 'exit sign'
+  | 'washroom';
 
 /** Labels Person 2/3 typically treat as path obstacles. */
 export type ObstacleLabel = 'person' | 'chair' | 'trashcan';
@@ -99,6 +112,8 @@ export const NAV_ANCHOR_LABELS: NavAnchorLabel[] = [
   'elevator',
   'stairs',
   'sign',
+  'exit sign',
+  'washroom',
 ];
 
 export const OBSTACLE_LABELS: ObstacleLabel[] = [
