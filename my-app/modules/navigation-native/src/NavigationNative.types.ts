@@ -46,6 +46,22 @@ export type NavigationCommand =
   | 'SCAN'
   | 'ARRIVED';
 
+/**
+ * Why the engine is holding the user still. Present only alongside `STOP` and `SCAN`.
+ *
+ * The guidance layer needs this to tell a hazard from a fault: `OBSTACLE_AHEAD` means something is
+ * in the user's way and deserves a hazard alert, while `TRACKING_LOST` is the system failing and
+ * deserves a different message entirely.
+ */
+export type StopReason =
+  | 'OBSTACLE_AHEAD'
+  | 'NO_ROUTE'
+  | 'TRACKING_LOST'
+  | 'NO_DEPTH'
+  | 'MAP_INCOMPLETE'
+  | 'NOT_STARTED'
+  | 'PAUSED';
+
 export type NavigationDebugInfo = {
   freeCells: number;
   occupiedCells: number;
@@ -72,6 +88,8 @@ export type NavigationSnapshot = {
   timestamp: number;
   status: NavigationStatus;
   command: NavigationCommand;
+  /** Why the user is being held still. Set only alongside `STOP` and `SCAN`. */
+  stopReason?: StopReason | null;
   /** Negative = next waypoint is to the LEFT, positive = to the RIGHT. */
   headingErrorDegrees?: number | null;
   distanceToWaypointMeters?: number | null;

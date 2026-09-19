@@ -22,6 +22,7 @@ import com.navassist.navcore.state.NavigationEvent
 import com.navassist.navcore.state.NavigationSnapshot
 import com.navassist.navcore.state.NavigationStateMachine
 import com.navassist.navcore.state.NavigationStatus
+import com.navassist.navcore.state.StopReason
 import com.navassist.navcore.topology.NodeType
 import com.navassist.navcore.topology.TopologicalMap
 import kotlin.math.abs
@@ -233,10 +234,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastPose = frame.pose
 
         if (!started || stateMachine.status == NavigationStatus.IDLE) {
-            return finish(nowMillis, frame, NavigationCommand.STOP, null, null)
+            return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.NOT_STARTED)
         }
         if (stateMachine.status == NavigationStatus.PAUSED) {
-            return finish(nowMillis, frame, NavigationCommand.STOP, null, null)
+            return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.PAUSED)
         }
 
         // ---------------------------------------------------------- 1. tracking gate (Rule 4)
@@ -246,7 +247,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             stateMachine.on(NavigationEvent.TrackingLost)
             currentPath = emptyList()
             controller.reset()
-            return finish(nowMillis, frame, NavigationCommand.STOP, null, null)
+            return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.TRACKING_LOST)
         }
         if (lastTrackingGoodMillis == 0L) lastTrackingGoodMillis = nowMillis
         val trackingStable = nowMillis - lastTrackingGoodMillis >= config.trackingRecoveryMillis
@@ -256,7 +257,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             stateMachine.on(NavigationEvent.TrackingAcquired)
         }
         if (stateMachine.status == NavigationStatus.LOST_TRACKING) {
-            return finish(nowMillis, frame, NavigationCommand.STOP, null, null)
+            return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.TRACKING_LOST)
         }
 
         // ---------------------------------------------------------- 2. mapping
@@ -303,13 +304,19 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             stateMachine.on(NavigationEvent.MapReady)
         }
         if (stateMachine.status == NavigationStatus.LOCALIZING) {
-            return finish(nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence)
+            return finish(
+                nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence,
+                stopReason = StopReason.MAP_INCOMPLETE,
+            )
         }
 
         // ---------------------------------------------------------- 3. depth starvation (Rule 4)
         if (depthStale) {
             currentPath = emptyList()
-            return finish(nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence)
+            return finish(
+                nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence,
+                stopReason = StopReason.NO_DEPTH,
+            )
         }
 
         // ---------------------------------------------------------- 4. memory upkeep
@@ -326,7 +333,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val goal = resolveGoal(frame.pose, inflatedGrid, nowMillis, mapConfidence)
         if (goal == null) {
             currentPath = emptyList()
-            return finish(nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence)
+            return finish(
+                nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence,
+                stopReason = StopReason.NO_ROUTE,
+            )
         }
 
         // ---------------------------------------------------------- 7. arrival
@@ -345,7 +355,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             exploration.reportPlanningFailure()
             recordTargetRouteOutcome(succeeded = false, nowMillis = nowMillis)
             stateMachine.on(NavigationEvent.RouteUnavailable)
-            return finish(nowMillis, frame, NavigationCommand.SCAN, null, distanceToTarget, mapConfidence)
+            return finish(
+                nowMillis, frame, NavigationCommand.SCAN, null, distanceToTarget, mapConfidence,
+                stopReason = StopReason.NO_ROUTE,
+            )
         }
         exploration.reportPlanningSuccess()
         recordTargetRouteOutcome(succeeded = true, nowMillis = nowMillis)
@@ -363,6 +376,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             distanceToTargetMeters = distanceToTarget,
             mapConfidence = mapConfidence,
             distanceToWaypointMeters = output.distanceToWaypointMeters,
+            stopReason = output.stopReason,
         )
     }
 
@@ -723,14 +737,17 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         distanceToTargetMeters: Float?,
         mapConfidence: Float = lastSnapshot.mapConfidence,
         distanceToWaypointMeters: Float? = null,
+        stopReason: StopReason? = null,
     ): NavigationSnapshot {
         if (command != controller.currentCommand) controller.forceCommand(command)
         val stats = grid.stats()
         val floor = floorEstimator.estimate
+        val halting = command == NavigationCommand.STOP || command == NavigationCommand.SCAN
         lastSnapshot = NavigationSnapshot(
             timestampMillis = nowMillis,
             status = stateMachine.status,
             command = command,
+            stopReason = if (halting) stopReason else null,
             headingErrorDegrees = headingErrorDegrees,
             distanceToWaypointMeters = distanceToWaypointMeters,
             distanceToTargetMeters = distanceToTargetMeters,

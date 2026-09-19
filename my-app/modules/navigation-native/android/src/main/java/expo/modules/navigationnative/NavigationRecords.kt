@@ -142,6 +142,7 @@ fun NavigationSnapshot.toEventMap(): Map<String, Any?> = buildMap {
     put("timestamp", timestampMillis.toDouble())
     put("status", status.name)
     put("command", command.name)
+    put("stopReason", stopReason?.name)
     put("headingErrorDegrees", headingErrorDegrees)
     put("distanceToWaypointMeters", distanceToWaypointMeters)
     put("distanceMeters", distanceToTargetMeters ?: distanceToWaypointMeters)

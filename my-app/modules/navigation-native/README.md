@@ -189,6 +189,40 @@ The snapshot:
 
 Depth maps, camera frames, point clouds, grids and coordinate lists **never** cross the bridge.
 
+### Connecting to the guidance layer
+
+`src/types/NavigationCommand.ts` is the frozen Person 2 → Person 3 contract. The engine does not
+emit it directly — `src/guidance/navigationCommandSource.ts` adapts one to the other, so the
+contract stays frozen and the engine stays free to grow:
+
+```ts
+import { subscribeNavigationCommands } from '@/guidance/navigationCommandSource';
+import { playForCommand } from '@/guidance/HapticService';
+
+const sub = subscribeNavigationCommands((command, snapshot) => {
+  playForCommand(command);             // frozen contract
+  if (snapshot.stopReason === 'NO_DEPTH') speak('Look around slowly');  // engine detail
+});
+```
+
+| Contract field | Source |
+|---|---|
+| `action` | `STRAIGHT`, `TURN_LEFT`→`LEFT`, `TURN_RIGHT`→`RIGHT`, `STOP`, `ARRIVED` |
+| `hazard.detected` | `stopReason === 'OBSTACLE_AHEAD'` — never inferred from the command |
+| `hazard.type` | the raw `stopReason` |
+| `target` | `snapshot.target` |
+| `confidence` | 1 for a halt; otherwise `trackingConfidence × (mapConfidence / 0.5)`, clamped |
+
+**`SCAN` has no action in the frozen contract and is delivered as `STOP`.** That is a real loss:
+`SCAN` means "stand still *and sweep the phone*", and it is how the engine recovers from lost
+tracking, missing depth or an incomplete map. A user told only "stop" will wait forever for an
+instruction that cannot arrive until they move the phone. Callers that can speak should check
+`isScanRequest(snapshot)` until the three owners agree to add a `SCAN` action.
+
+`hazard.detected` is driven by the engine's own reason code rather than guessed downstream,
+because a `STOP` for an obstacle and a `STOP` for dead tracking are indistinguishable from
+outside — and the haptic vocabulary gives HAZARD priority over direction.
+
 The app is responsible for the runtime `CAMERA` permission (e.g. `expo-camera`'s
 `useCameraPermissions()` or `PermissionsAndroid`). The module declares the permission but does not
 request it.

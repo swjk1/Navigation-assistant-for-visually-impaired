@@ -7,6 +7,7 @@ import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.mapping.InflatedGrid
 import com.navassist.navcore.state.NavigationCommand
+import com.navassist.navcore.state.StopReason
 import kotlin.math.abs
 
 data class ControllerOutput(
@@ -14,6 +15,8 @@ data class ControllerOutput(
     val headingErrorDegrees: Float?,
     val distanceToWaypointMeters: Float?,
     val waypoint: Vec2?,
+    /** Set only when [command] is STOP, so the guidance layer can distinguish hazard from fault. */
+    val stopReason: StopReason? = null,
 )
 
 /**
@@ -55,28 +58,31 @@ class NavigationController(private val config: NavigationConfig) {
     }
 
     /** Immediately forces a command, bypassing smoothing. Used for safety stops. */
-    fun forceCommand(command: NavigationCommand): ControllerOutput {
+    fun forceCommand(
+        command: NavigationCommand,
+        stopReason: StopReason? = null,
+    ): ControllerOutput {
         emittedCommand = command
         candidateCommand = command
         candidateFrames = config.commandStabilityFrames
         if (command != NavigationCommand.TURN_LEFT && command != NavigationCommand.TURN_RIGHT) {
             turning = false
         }
-        return ControllerOutput(command, null, null, null)
+        return ControllerOutput(command, null, null, null, stopReason)
     }
 
     /**
      * @param path smoothed path in WORLD coordinates, starting at (or very near) the user.
      */
     fun update(pose: Pose3D, path: List<Vec2>, inflated: InflatedGrid): ControllerOutput {
-        if (path.size < 2) return forceCommand(NavigationCommand.STOP)
+        if (path.size < 2) return forceCommand(NavigationCommand.STOP, StopReason.NO_ROUTE)
 
         val waypoint = selectLookahead(pose.position2D, path, inflated)
-            ?: return forceCommand(NavigationCommand.STOP)
+            ?: return forceCommand(NavigationCommand.STOP, StopReason.NO_ROUTE)
 
         val toWaypoint = waypoint - pose.position2D
         val distance = toWaypoint.length()
-        if (distance < 1e-3f) return forceCommand(NavigationCommand.STOP)
+        if (distance < 1e-3f) return forceCommand(NavigationCommand.STOP, StopReason.NO_ROUTE)
 
         val rawError = GeometryUtils.angleDifference(pose.yawRadians, toWaypoint.yawRadians())
         val smoothed = smoothedErrorRadians
@@ -94,6 +100,10 @@ class NavigationController(private val config: NavigationConfig) {
             desired
         }
 
+        // A STOP produced by the gate means something is in the way - a genuine hazard, unlike a
+        // STOP caused by lost tracking. The guidance layer plays a different pattern for each.
+        val blocked = gated == NavigationCommand.STOP && desired == NavigationCommand.STRAIGHT
+
         val emitted = if (gated == NavigationCommand.STOP) {
             // Fail-safe: emit immediately, do not wait for the stability counter.
             forceCommand(NavigationCommand.STOP).command
@@ -102,7 +112,12 @@ class NavigationController(private val config: NavigationConfig) {
         }
 
         turning = emitted == NavigationCommand.TURN_LEFT || emitted == NavigationCommand.TURN_RIGHT
-        return ControllerOutput(emitted, errorDegrees, distance, waypoint)
+        val stopReason = when {
+            emitted != NavigationCommand.STOP -> null
+            blocked -> StopReason.OBSTACLE_AHEAD
+            else -> StopReason.NO_ROUTE
+        }
+        return ControllerOutput(emitted, errorDegrees, distance, waypoint, stopReason)
     }
 
     private fun decideCommand(errorDegrees: Float): NavigationCommand {

@@ -12,6 +12,8 @@ data class NavigationSnapshot(
     val timestampMillis: Long,
     val status: NavigationStatus,
     val command: NavigationCommand,
+    /** Why the user is being held still. Set only alongside STOP and SCAN. */
+    val stopReason: StopReason? = null,
     /**
      * Signed angle between the user's heading and the next waypoint, in degrees.
      * Negative = waypoint is to the LEFT, positive = to the RIGHT (canonical yaw convention).
