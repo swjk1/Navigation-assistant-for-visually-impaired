@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- ARCore owns the camera session for this module. Nothing else may open a second one. -->
+  <uses-permission android:name="android.permission.CAMERA" />
+
+  <!-- The engine is useless without a depth-capable ARCore device, but the app as a whole can
+       still run (and report isSupported() = false), so this is not marked required. -->
+  <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+
+  <application>
+    <!-- "optional" keeps the app installable on non-ARCore devices; the module reports its own
+         support state to JS instead of the install failing. -->
+    <meta-data android:name="com.google.ar.core" android:value="optional" />
+    <!-- com.google.ar.core.min_apk_version is declared by the ARCore AAR itself; redeclaring it
+         here only creates a manifest-merger conflict when the library version changes. -->
+  </application>
+
+</manifest>

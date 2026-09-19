@@ -1,0 +1,35 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.navigationnative'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.navigationnative"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+
+  sourceSets {
+    main {
+      // The PLATFORM-INDEPENDENT navigation core is compiled from source here rather than being
+      // duplicated inside the module. It has its own Gradle project (my-app/navigation-core) that
+      // builds and tests it WITHOUT the Android/ARCore classpath, which is what keeps the boundary
+      // honest: an accidental `import com.google.ar.core.*` in the core fails that build.
+      //
+      // When this moves to Kotlin Multiplatform, this srcDir is replaced by a project dependency
+      // on navigation-core's commonMain, and no algorithm changes.
+      java.srcDirs += ['../../../navigation-core/src/main/kotlin']
+    }
+  }
+}
+
+dependencies {
+  // ARCore. Only the classes under expo.modules.navigationnative(.platform) may touch these;
+  // the shared navigation core never does.
+  implementation "com.google.ar:core:1.56.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+}
