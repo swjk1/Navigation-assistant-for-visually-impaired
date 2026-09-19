@@ -114,6 +114,19 @@ class NavigationNativeModule : Module() {
             NavigationRuntime.debugEnabled = enabled
         }
 
+        /**
+         * Hands ARCore session ownership to another native module (see NavigationSensorBridge).
+         * Call before start(). While external, this module creates no session and
+         * <NavigationArView /> is unnecessary.
+         */
+        Function("setExternalFrameSource") { external: Boolean ->
+            NavigationRuntime.useExternalFrameSource(external)
+        }
+
+        Function("isExternalFrameSource") {
+            NavigationRuntime.externalFrameSource
+        }
+
         // ---------------------------------------------------------------- the AR view
 
         View(NavigationArView::class) {

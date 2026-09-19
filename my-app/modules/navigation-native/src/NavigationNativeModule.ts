@@ -31,6 +31,18 @@ declare class NavigationNativeModuleType extends NativeModule<NavigationNativeMo
   getSnapshot(): NavigationSnapshot;
 
   setDebugEnabled(enabled: boolean): void;
+
+  /**
+   * Hands ARCore session ownership to another native module.
+   *
+   * ARCore needs exclusive access to the camera and this engine cannot run without ARCore, so
+   * only one module may open it. Set this true when the perception module owns the session and
+   * feeds frames through `NavigationSensorBridge`. Call before `start()`; while external, no
+   * session is created here and `<NavigationArView />` is not needed.
+   */
+  setExternalFrameSource(external: boolean): void;
+
+  isExternalFrameSource(): boolean;
 }
 
 export default requireNativeModule<NavigationNativeModuleType>('NavigationNative');

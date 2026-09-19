@@ -3,6 +3,7 @@ package expo.modules.navigationnative
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.navassist.navcore.NavigationConfig
@@ -118,10 +119,16 @@ object NavigationRuntime {
         )
     }
 
-    fun initializeSession(context: Context, activity: Activity?): String? =
-        attach(context).initialize(activity)
+    fun initializeSession(context: Context, activity: Activity?): String? {
+        // In external mode another module owns the camera; claiming it here would evict them.
+        if (externalFrameSource) return null
+        return attach(context).initialize(activity)
+    }
 
-    fun resumeSession(): String? = sessionManager?.resume() ?: "No ARCore session"
+    fun resumeSession(): String? {
+        if (externalFrameSource) return null
+        return sessionManager?.resume() ?: "No ARCore session"
+    }
 
     fun pauseSession() {
         sessionManager?.pause()
@@ -139,26 +146,81 @@ object NavigationRuntime {
     fun setDisplayGeometry(rotation: Int, width: Int, height: Int) =
         sessionManager?.setDisplayGeometry(rotation, width, height)
 
-    // ================================================================= GL thread entry point
+    // ================================================================= frame sources
 
     /**
-     * Called once per rendered frame on the GL thread. Keeps only the cheap, bounded work here:
-     * one `Session.update()`, one pose conversion and one depth unprojection pass.
+     * True when another module owns the ARCore session and feeds us frames.
+     *
+     * ARCore requires EXCLUSIVE access to the camera, and this engine cannot work without ARCore
+     * (depth and 6DoF pose are its only inputs). So the module that opens the camera must also be
+     * the module that runs the session - they cannot be two different modules. External mode is
+     * how that ownership moves elsewhere without this engine changing.
+     */
+    @Volatile
+    var externalFrameSource: Boolean = false
+        private set
+
+    /**
+     * Hands session ownership to another module. Call BEFORE `start()`. In this mode
+     * [NavigationArView] is not needed and no session is created here; the owner is expected to
+     * call [onExternalArFrame] once per ARCore frame.
+     */
+    fun useExternalFrameSource(external: Boolean) {
+        if (externalFrameSource == external) return
+        externalFrameSource = external
+        if (external) {
+            // Release our own camera claim so the new owner can take it.
+            sessionManager?.pause()
+        }
+        frameProcessor.reset()
+    }
+
+    /**
+     * Called once per rendered frame on the GL thread when THIS module owns the session.
+     * Keeps only cheap, bounded work here: one `Session.update()`, one pose conversion and one
+     * depth unprojection pass.
      */
     fun onGlFrame() {
+        if (externalFrameSource) return
         val session = sessionManager?.session ?: return
         if (!running) return
         try {
-            val arFrame = session.update()
-            val navigationFrame = frameProcessor.process(session, arFrame)
-            // Copy the reusable depth buffer into a hand-off slot before publishing.
-            val handOff = navigationFrame.copy(points = cloudPool.copyOf(navigationFrame.points))
-            frames.trySend(handOff)
+            ingest(session, session.update())
         } catch (e: CameraNotAvailableException) {
             Log.w(TAG, "camera not available during update", e)
         } catch (e: Throwable) {
             Log.w(TAG, "frame update failed", e)
         }
+    }
+
+    /**
+     * Entry point for a module that owns the ARCore session itself.
+     *
+     * Call once per frame, on whichever thread already called `Session.update()`, passing the
+     * frame it returned. The RGB image is none of our business - read it from the same frame with
+     * `acquireCameraImage()` for perception work.
+     *
+     * Only the pose and the depth image are consumed, and the depth image is acquired, copied and
+     * closed inside this call, so the caller may continue using the frame afterwards.
+     */
+    fun onExternalArFrame(session: Session, frame: Frame) {
+        if (!externalFrameSource) {
+            Log.w(TAG, "onExternalArFrame ignored: call useExternalFrameSource(true) first")
+            return
+        }
+        if (!running) return
+        try {
+            ingest(session, frame)
+        } catch (e: Throwable) {
+            Log.w(TAG, "external frame update failed", e)
+        }
+    }
+
+    private fun ingest(session: Session, arFrame: Frame) {
+        val navigationFrame = frameProcessor.process(session, arFrame)
+        // Copy the reusable depth buffer into a hand-off slot before publishing.
+        val handOff = navigationFrame.copy(points = cloudPool.copyOf(navigationFrame.points))
+        frames.trySend(handOff)
     }
 
     // ================================================================= engine API (from JS)

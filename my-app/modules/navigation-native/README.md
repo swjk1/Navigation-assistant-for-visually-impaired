@@ -117,10 +117,26 @@ release build) is required — see §11.
 | `lightEstimationMode` | `DISABLED` | Unused; saves work. |
 | `focusMode` | `AUTO` | Better depth on close surfaces. |
 
-**ARCore owns the camera.** Do not open CameraX or Camera2 anywhere in the app while navigation
-is running — the second consumer will either fail or evict ARCore. If another feature needs RGB
-frames, expose them from the ARCore frame inside `ArCoreFrameProcessor` rather than starting a
-competing capture session.
+**ARCore owns the camera.** Do not open CameraX, Camera2 or `expo-camera`'s `CameraView` anywhere
+in the app while navigation is running — the second consumer will either fail or silently evict
+ARCore, with no crash and no error.
+
+That does not mean *this* module has to be the owner. `NavigationSensorBridge` lets another native
+module (e.g. perception) own the session and pass frames through, reading the RGB image from the
+same frame for its own work:
+
+```kotlin
+NavigationSensorBridge.takeOverFrameSource()        // once, before start()
+
+val frame = session.update()
+NavigationSensorBridge.submitFrame(session, frame)  // pose + depth -> navigation
+frame.acquireCameraImage().use { image -> ... }     // RGB -> perception
+```
+
+From JS, `NavigationNative.setExternalFrameSource(true)`. In that mode no session is created here
+and `<NavigationArView />` is unnecessary; everything else behaves identically.
+
+See [CAMERA_OWNERSHIP.md](./CAMERA_OWNERSHIP.md) for the full hand-over.
 
 `NavigationArView` hosts a `GLSurfaceView` that creates one external OES texture, hands it to the
 session, and calls `Session.update()` once per frame. It renders **nothing** — ARCore simply
