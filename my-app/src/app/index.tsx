@@ -1,5 +1,6 @@
 import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { Link } from 'expo-router';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedIcon } from '@/components/animated-icon';
@@ -42,6 +43,17 @@ export default function HomeScreen() {
         <ThemedText type="code" style={styles.code}>
           get started
         </ThemedText>
+
+        <Link href="/perception-harness" asChild>
+          <Pressable style={styles.harnessButton}>
+            <ThemedText type="smallBold" style={styles.harnessButtonText}>
+              Open perception harness
+            </ThemedText>
+            <ThemedText type="small" style={styles.harnessHint}>
+              /perception-harness — camera + capture test
+            </ThemedText>
+          </Pressable>
+        </Link>
 
         <ThemedView type="backgroundElement" style={styles.stepContainer}>
           <HintRow
@@ -94,5 +106,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.four,
     borderRadius: Spacing.four,
+  },
+  harnessButton: {
+    alignSelf: 'stretch',
+    backgroundColor: '#208AEF',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  harnessButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+  },
+  harnessHint: {
+    color: '#dbeafe',
+    textAlign: 'center',
   },
 });
