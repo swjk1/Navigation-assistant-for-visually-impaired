@@ -107,6 +107,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     /** True when the current goal came from the graph rather than the destination itself. */
     private var targetGoalViaGraph: Boolean = false
 
+    /** Milliseconds of useful scanning (tracking + depth) accumulated while LOCALIZING. */
+    private var scanElapsedMillis: Long = 0
+
     val snapshot: NavigationSnapshot get() = lastSnapshot
 
     val status: NavigationStatus get() = stateMachine.status
@@ -167,6 +170,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastDepthTimestampNanos = 0
         lastTrackingGoodMillis = 0
         lastDepthPointCount = 0
+        scanElapsedMillis = 0
         started = false
         target = NavigationTarget.Explore
     }
@@ -184,6 +188,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastNodePosition = null
         backtrackTargetNodeId = null
         clearTargetRouteFailures()
+        // Clearing the map means the engine knows nothing again, so it must re-earn the right to
+        // give instructions rather than coasting on the previous scan.
+        scanElapsedMillis = 0
         originInitialized = false
     }
 
@@ -299,10 +306,17 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             grid.knownFractionWithin(frame.pose.position2D, config.mapConfidenceRadiusMeters)
         val floorReady = floorEstimator.estimate.confidence >= config.floorMinConfidence
 
-        if (stateMachine.status == NavigationStatus.LOCALIZING &&
-            floorReady && mapConfidence >= config.minMapConfidenceToNavigate
-        ) {
-            stateMachine.on(NavigationEvent.MapReady)
+        if (stateMachine.status == NavigationStatus.LOCALIZING) {
+            // Only frames that actually contributed to the map count towards the scan budget.
+            if (frame.depthAvailable) {
+                scanElapsedMillis += (deltaSeconds * 1000f).toLong()
+            }
+            if (floorReady &&
+                mapConfidence >= config.minMapConfidenceToNavigate &&
+                scanElapsedMillis >= config.minScanMillis
+            ) {
+                stateMachine.on(NavigationEvent.MapReady)
+            }
         }
         if (stateMachine.status == NavigationStatus.LOCALIZING) {
             return finish(
@@ -769,6 +783,11 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 floorY = floor.floorY,
                 floorConfidence = floor.confidence,
                 depthPointsLastFrame = lastDepthPointCount,
+                scanProgress = if (config.minScanMillis <= 0) {
+                    1f
+                } else {
+                    min(1f, scanElapsedMillis.toFloat() / config.minScanMillis)
+                },
                 depthAvailable = frame.depthAvailable,
                 poseX = frame.pose.x,
                 poseY = frame.pose.y,

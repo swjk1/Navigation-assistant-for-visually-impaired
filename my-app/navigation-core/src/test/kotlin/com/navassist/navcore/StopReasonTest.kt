@@ -124,7 +124,7 @@ class StopReasonTest {
     @Test
     fun `an unstarted engine says so`() {
         val world = SyntheticWorld.corridor()
-        val snapshot = NavigationEngine().updateFrame(world.frame(nextTimestamp(), pose(0f, 0f)))
+        val snapshot = NavigationEngine(TestSupport.fastScanConfig).updateFrame(world.frame(nextTimestamp(), pose(0f, 0f)))
         assertEquals(NavigationCommand.STOP, snapshot.command)
         assertEquals(StopReason.NOT_STARTED, snapshot.stopReason)
     }
@@ -132,7 +132,7 @@ class StopReasonTest {
     @Test
     fun `pausing reports PAUSED rather than a hazard`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
         engine.pause()
@@ -144,7 +144,7 @@ class StopReasonTest {
     @Test
     fun `losing tracking reports a fault, never a hazard`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -169,7 +169,7 @@ class StopReasonTest {
     @Test
     fun `depth starvation asks for a scan and says why`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -193,7 +193,7 @@ class StopReasonTest {
     @Test
     fun `the first frames report an incomplete map`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         val snapshot = engine.updateFrame(world.frame(nextTimestamp(), pose(0f, 0f)))
         assertEquals(NavigationCommand.SCAN, snapshot.command)

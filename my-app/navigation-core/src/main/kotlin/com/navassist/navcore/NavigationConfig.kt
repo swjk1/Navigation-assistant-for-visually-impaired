@@ -176,6 +176,18 @@ data class NavigationConfig(
     val mapConfidenceRadiusMeters: Float = 3.0f,
     /** Fraction of the cells within that radius that must be known before we start moving. */
     val minMapConfidenceToNavigate: Float = 0.18f,
+    /**
+     * Minimum time spent actively scanning before the first movement instruction.
+     *
+     * Map confidence alone clears its threshold within a second of pointing down a corridor, and
+     * a map that thin produces a confident-sounding "left" based on almost nothing. The user has
+     * no way to know the difference between a considered instruction and a guess, so the engine
+     * owes them a deliberate look around first.
+     *
+     * This counts time with tracking AND depth actually available, not wall-clock since start, so
+     * a slow ARCore warm-up or a few seconds of lost tracking does not eat the budget.
+     */
+    val minScanMillis: Long = 10_000,
     /** No depth for longer than this and the engine stops and asks the user to SCAN. */
     val depthStarvationMillis: Long = 1500,
     /** Tracking must be good for this long before leaving LOST_TRACKING. */

@@ -173,6 +173,7 @@ fun NavigationSnapshot.toEventMap(): Map<String, Any?> = buildMap {
                 "floorY" to d.floorY,
                 "floorConfidence" to d.floorConfidence,
                 "depthPointsLastFrame" to d.depthPointsLastFrame,
+                "scanProgress" to d.scanProgress,
                 "depthAvailable" to d.depthAvailable,
                 "poseX" to d.poseX,
                 "poseY" to d.poseY,

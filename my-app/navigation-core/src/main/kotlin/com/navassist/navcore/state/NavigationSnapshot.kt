@@ -40,6 +40,8 @@ data class NavigationDebugInfo(
     val floorY: Float,
     val floorConfidence: Float,
     val depthPointsLastFrame: Int,
+    /** Progress through the initial scan, 0..1. Reaches 1 before any movement is instructed. */
+    val scanProgress: Float,
     val depthAvailable: Boolean,
     val poseX: Float,
     val poseY: Float,

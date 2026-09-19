@@ -19,6 +19,15 @@ import kotlin.math.max
  */
 object TestSupport {
 
+    /**
+     * Default config except the initial scan window is short.
+     *
+     * The real engine insists on ~10 s of scanning before it will steer anyone, which is right
+     * for a person and tedious for a test: simulating it would add hundreds of frames to every
+     * scenario. Tests that are ABOUT the scan gate use NavigationConfig() directly.
+     */
+    val fastScanConfig = NavigationConfig(minScanMillis = 500)
+
     /** Planning config with inflation disabled, for tests about graph topology rather than safety. */
     fun bareConfig(gridSizeMeters: Float = 2.0f) = NavigationConfig(
         gridResolutionMeters = 0.1f,

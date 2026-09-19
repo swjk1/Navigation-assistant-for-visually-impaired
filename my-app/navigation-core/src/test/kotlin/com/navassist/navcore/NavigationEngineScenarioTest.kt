@@ -81,7 +81,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `straight corridor - the engine maps, finds the frontier ahead and says STRAIGHT`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
 
         // The very first frame cannot possibly know anything: it must not say "walk".
@@ -124,7 +124,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `losing tracking stops immediately`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
         walk(engine, world, pose(0f, 0f), pose(0f, 0.5f), steps = 10)
@@ -146,7 +146,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `depth starvation stops the user and asks for a scan`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -177,7 +177,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `a localized room sighting switches from exploring to navigating`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
         walk(engine, world, pose(0f, 0f), pose(0f, 0.5f), steps = 10)
@@ -208,7 +208,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `arriving at the destination reports ARRIVED`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -246,7 +246,7 @@ class NavigationEngineScenarioTest {
         // Returns (best score among left-hand frontiers, best score among right-hand ones).
         fun explore(withSign: Boolean): Pair<Float, Float> {
             clock = 0
-            val engine = NavigationEngine()
+            val engine = NavigationEngine(TestSupport.fastScanConfig)
             val target = NavigationTarget.Room("314")
             engine.start(target)
             scanInPlace(engine, world, pose(0f, 4f))
@@ -300,7 +300,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `a dead end is recognised and the engine turns back`() {
         val world = SyntheticWorld.deadEndCorridor(halfWidth = 1.0f, endZ = 3.5f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
 
         // Walk the full length of the cul-de-sac, sweeping as we go.
@@ -327,7 +327,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `an unstarted engine never issues a movement command`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         val snapshot = engine.updateFrame(world.frame(nextTimestamp(), pose(0f, 0f)))
         assertEquals(NavigationStatus.IDLE, snapshot.status)
         assertEquals(NavigationCommand.STOP, snapshot.command)
@@ -336,7 +336,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `pausing stops the user and resuming re-localizes`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -353,7 +353,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `changing the destination restarts the search`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
         engine.submitSemanticObservations(
@@ -377,7 +377,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `exploring reports no destination for the guidance layer to announce`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         val exploring = scanInPlace(engine, world, pose(0f, 0f))
         assertEquals(null, exploring.targetDescription)
@@ -390,7 +390,7 @@ class NavigationEngineScenarioTest {
     @Test
     fun `the snapshot carries debug counters for the UI`() {
         val world = SyntheticWorld.corridor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Explore)
         val snapshot = scanInPlace(engine, world, pose(0f, 0f))
         val debug = snapshot.debug
@@ -400,5 +400,72 @@ class NavigationEngineScenarioTest {
         assertTrue(debug.unknownCells > 0)
         assertTrue(debug.depthPointsLastFrame > 0)
         assertTrue(debug.floorConfidence > 0f)
+    }
+
+    /**
+     * A thin map clears the confidence threshold within about a second, which used to be enough
+     * to start issuing turns. An instruction built on that little evidence is indistinguishable
+     * to the user from a considered one.
+     */
+    @Test
+    fun `no movement is instructed until the scan window has elapsed`() {
+        val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
+        val engine = NavigationEngine(NavigationConfig())
+        engine.start(NavigationTarget.Explore)
+
+        // Sweep the way a user would. Two seconds of it: plenty of map, nowhere near the budget.
+        var sweep = 0.0
+        fun sweepFrame(): NavigationSnapshot {
+            sweep += 0.06
+            val yaw = (kotlin.math.sin(sweep) * 70.0).toFloat()
+            return engine.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, yaw)))
+        }
+
+        val early = ArrayList<NavigationSnapshot>()
+        repeat(60) { early.add(sweepFrame()) }
+
+        assertTrue(
+            early.all { it.command == NavigationCommand.SCAN || it.command == NavigationCommand.STOP },
+            "must not steer this early: ${early.map { it.command }.toSet()}",
+        )
+        assertEquals(NavigationStatus.LOCALIZING, early.last().status)
+        val progress = early.last().debug?.scanProgress ?: 0f
+        assertTrue(progress > 0f && progress < 1f, "scan should be part-way, was $progress")
+
+        // Carry on past the configured budget.
+        var snapshot: NavigationSnapshot? = null
+        repeat(400) { snapshot = sweepFrame() }
+
+        assertEquals(1f, snapshot!!.debug?.scanProgress)
+        assertEquals(
+            NavigationStatus.EXPLORING,
+            snapshot!!.status,
+            "after a full scan it should be ready to move",
+        )
+    }
+
+    @Test
+    fun `time without depth does not count towards the scan budget`() {
+        val world = SyntheticWorld.corridor()
+        val engine = NavigationEngine(NavigationConfig())
+        engine.start(NavigationTarget.Explore)
+        scanInPlace(engine, world, pose(0f, 0f), steps = 8)
+        val before = engine.snapshot.debug?.scanProgress ?: 0f
+
+        // Tracking fine, depth dead, for well over the scan window.
+        repeat(400) {
+            engine.updateFrame(
+                NavigationFrame(
+                    timestampNanos = nextTimestamp(33),
+                    pose = pose(0f, 0f),
+                    points = DepthPointCloud.EMPTY,
+                    trackingConfidence = 1f,
+                    tracking = true,
+                    depthAvailable = false,
+                ),
+            )
+        }
+        val after = engine.snapshot.debug?.scanProgress ?: 0f
+        assertEquals(before, after, "a dead depth sensor must not be mistaken for scanning")
     }
 }

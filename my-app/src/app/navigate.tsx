@@ -195,6 +195,11 @@ export default function NavigateScreen() {
           {snapshot?.stopReason ? ` · ${snapshot.stopReason}` : ''}
         </Text>
         <Text style={styles.muted}>spoken: {spoken}</Text>
+        {snapshot?.debug && snapshot.debug.scanProgress < 1 ? (
+          <Text style={styles.muted}>
+            scanning {Math.round(snapshot.debug.scanProgress * 100)}% — sweep the phone slowly
+          </Text>
+        ) : null}
         <Text style={styles.mutedSmall}>perception: {perceptionNote}</Text>
 
         {permission?.granted ? null : (

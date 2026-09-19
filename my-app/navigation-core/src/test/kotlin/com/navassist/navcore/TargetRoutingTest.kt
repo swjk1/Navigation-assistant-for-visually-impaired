@@ -90,7 +90,7 @@ class TargetRoutingTest {
     @Test
     fun `a reachable sighting is approached directly`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
 
@@ -119,7 +119,7 @@ class TargetRoutingTest {
     @Test
     fun `an unreachable sighting is abandoned so exploration can resume`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
         walk(engine, world, pose(0f, 0f), pose(0f, 1f), steps = 12)
@@ -157,7 +157,7 @@ class TargetRoutingTest {
     @Test
     fun `a stale sighting ages out without any new observations arriving`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
         engine.submitSemanticObservations(
@@ -204,7 +204,7 @@ class TargetRoutingTest {
     @Test
     fun `a destination around a corner and out of range is routed over the walked graph`() {
         val world = lShapedFloor()
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
 
         // Walk the whole leg, then well along the cross corridor, dropping breadcrumbs.
@@ -259,7 +259,7 @@ class TargetRoutingTest {
     @Test
     fun `a landmark seen from afar does not invent a corridor to itself`() {
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
-        val engine = NavigationEngine()
+        val engine = NavigationEngine(TestSupport.fastScanConfig)
         engine.start(NavigationTarget.Room("314"))
         scanInPlace(engine, world, pose(0f, 0f))
         walk(engine, world, pose(0f, 0f), pose(0f, 1f), steps = 10)

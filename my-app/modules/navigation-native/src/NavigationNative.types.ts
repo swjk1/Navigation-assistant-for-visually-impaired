@@ -72,6 +72,8 @@ export type NavigationDebugInfo = {
   floorY: number;
   floorConfidence: number;
   depthPointsLastFrame: number;
+  /** Progress through the initial scan, 0..1. Movement is never instructed before this is 1. */
+  scanProgress: number;
   depthAvailable: boolean;
   poseX: number;
   poseY: number;
