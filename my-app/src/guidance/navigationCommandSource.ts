@@ -35,6 +35,13 @@ export const SCAN_IS_DELIVERED_AS_STOP = true;
 /** Map confidence at which the engine's instructions are treated as fully trustworthy. */
 const MAP_CONFIDENCE_FULL = 0.5;
 
+/**
+ * Spoken as "Stop. <this> ahead." The engine only knows that the cells in front are blocked or
+ * unknown, not what is standing there - so the word has to stay generic until object detection
+ * feeds in through the semantic interface.
+ */
+const HAZARD_SPOKEN_NOUN = 'Obstacle';
+
 const ACTION_BY_COMMAND: Record<NavigationSnapshot['command'], NavigationAction> = {
   STRAIGHT: 'STRAIGHT',
   TURN_LEFT: 'LEFT',
@@ -77,10 +84,14 @@ export function isScanRequest(snapshot: NavigationSnapshot): boolean {
  * mean either a hazard alert for a software fault or, worse, silence for a real obstacle.
  */
 export function toNavigationCommand(snapshot: NavigationSnapshot): NavigationCommand {
+  const detected = snapshot.stopReason === 'OBSTACLE_AHEAD';
   return {
     action: ACTION_BY_COMMAND[snapshot.command] ?? 'STOP',
     target: snapshot.target ?? undefined,
-    hazard: { detected: snapshot.stopReason === 'OBSTACLE_AHEAD', type: snapshot.stopReason ?? undefined },
+    // `hazard.type` is read aloud by NavigationController.toSpeechText as
+    // "Stop. <type> ahead." - so it must be a spoken noun, not a reason code.
+    // The machine-readable reason stays on the snapshot.
+    hazard: detected ? { detected: true, type: HAZARD_SPOKEN_NOUN } : { detected: false },
     confidence: confidenceOf(snapshot),
   };
 }

@@ -426,6 +426,40 @@ contributes at most 0.5 and shrinks as the numeric gap grows.
 
 Semantics only ever bias frontier choice. The planner decides movement.
 
+### Mapping Person 1's `PerceptionFrame` onto this API
+
+Person 1 (`dj-branch`) produces a `PerceptionFrame` per camera frame. It is not merged to `main`
+yet, so no adapter is committed here; this is the mapping it will need.
+
+| `PerceptionFrame` | `SemanticObservation` |
+|---|---|
+| `text[].text` = "ROOM 204" | `{ type: 'ROOM', label: '204' }` — `TargetMatcher` already matches on the numeric part, so "ROOM 204" resolves against a `Room("204")` target |
+| `text[].box` | `normalizedX/Y` = box centre |
+| `objects[].label` = `'elevator'` / `'stairs'` | `ELEVATOR` / `STAIRS` |
+| `objects[].label` = `'sign'` + text containing a range | `{ type: 'ROOM_RANGE', min, max, direction }` |
+| `objects[].clockPosition` | `direction`: 9–10 o'clock → `LEFT`, 11–1 → `FORWARD`, 2–3 → `RIGHT` |
+| `objects[].approxDistanceMeters` | not used — the engine resolves depth itself, which is more accurate than a monocular estimate |
+| `floorDetected` | not used — the engine estimates the floor plane itself |
+
+Three things to settle before wiring it up:
+
+1. **`door` has no equivalent here.** Person 1 emits `door` as a nav anchor and "walk toward a
+   door" is their stated goal, but this API only accepts ROOM / EXIT / STAIRS / ELEVATOR. Either
+   a door with a readable plate becomes a `ROOM`, or this module gains a `DOOR` type.
+
+2. **`timestampNs` must be ARCore's frame timestamp**, from `Frame.getTimestamp()` — nanoseconds
+   since boot, *not* `Date.now()`. `PerceptionFrame.timestamp` is a wall clock in milliseconds.
+   Passing it would put every observation billions of nanoseconds out of range. **If you do not
+   have the ARCore value, omit the field**; the most recent depth frame is then used, which is
+   the right default. The adapter now detects an out-of-domain timestamp, logs it, and falls back
+   rather than silently dropping every observation — but the log is the only signal, so get it
+   right at the source.
+
+3. **`immediateHazard` has no input here and reaches the guidance layer separately.** Person 3's
+   `hazard.detected` will therefore have two independent producers: geometric blockage from this
+   engine (`stopReason === 'OBSTACLE_AHEAD'`) and perceptual hazards from Person 1 (descending
+   stairs, a person ahead). Someone has to own merging them, or one will mask the other.
+
 ---
 
 ## 10. Running the tests

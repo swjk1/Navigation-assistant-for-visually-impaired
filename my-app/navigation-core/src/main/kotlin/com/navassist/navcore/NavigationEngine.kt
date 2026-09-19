@@ -754,7 +754,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             trackingConfidence = frame.trackingConfidence,
             mapConfidence = mapConfidence,
             selectedFrontierId = exploration.selected?.id,
-            targetDescription = target.description,
+            // Null while merely exploring. The guidance layer prefixes this to every spoken
+            // instruction, so advertising a placeholder destination would have it announce
+            // "Explore. Straight." on every single command.
+            targetDescription = target.takeIf { it != NavigationTarget.Explore }?.description,
             debug = NavigationDebugInfo(
                 freeCells = stats.free,
                 occupiedCells = stats.occupied,

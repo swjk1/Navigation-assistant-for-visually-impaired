@@ -370,6 +370,23 @@ class NavigationEngineScenarioTest {
         assertEquals("Exit", after.targetDescription)
     }
 
+    /**
+     * The guidance layer prefixes `target` to every spoken instruction ("Room 314. Straight."),
+     * so a placeholder destination would have it announce "Explore. Straight." forever.
+     */
+    @Test
+    fun `exploring reports no destination for the guidance layer to announce`() {
+        val world = SyntheticWorld.corridor()
+        val engine = NavigationEngine()
+        engine.start(NavigationTarget.Explore)
+        val exploring = scanInPlace(engine, world, pose(0f, 0f))
+        assertEquals(null, exploring.targetDescription)
+
+        engine.setTarget(NavigationTarget.Room("314"))
+        val searching = engine.updateFrame(world.frame(nextTimestamp(), pose(0f, 0f)))
+        assertEquals("Room 314", searching.targetDescription)
+    }
+
     @Test
     fun `the snapshot carries debug counters for the UI`() {
         val world = SyntheticWorld.corridor()

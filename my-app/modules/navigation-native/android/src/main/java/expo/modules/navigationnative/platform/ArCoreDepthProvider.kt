@@ -1,6 +1,7 @@
 package expo.modules.navigationnative.platform
 
 import android.media.Image
+import android.util.Log
 import com.google.ar.core.Camera
 import com.google.ar.core.Frame
 import com.google.ar.core.exceptions.NotYetAvailableException
@@ -9,6 +10,7 @@ import com.navassist.navcore.geometry.DepthPointCloud
 import com.navassist.navcore.geometry.Vec3
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
 
 /**
  * ARCore depth image -> canonical [DepthPointCloud].
@@ -186,8 +188,25 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
     ): Vec3? = synchronized(snapshotLock) {
         if (snapshotWidth == 0 || snapshotHeight == 0) return null
         if (observationTimestampNanos != null) {
-            val age = snapshotTimestampNanos - observationTimestampNanos
-            if (age > maxAgeNanos || age < -maxAgeNanos) return null
+            val age = abs(snapshotTimestampNanos - observationTimestampNanos)
+            if (age > CLOCK_DOMAIN_MISMATCH_NANOS) {
+                // The timestamp is not in ARCore's clock domain at all - almost always a wall
+                // clock value (Date.now(), milliseconds since epoch) where the ARCore frame
+                // timestamp (nanoseconds since boot) was expected.
+                //
+                // Rejecting it would silently drop EVERY observation the perception layer ever
+                // sends, and the engine would simply never find its destination with no error
+                // anywhere. Falling back to the latest depth frame - exactly what omitting the
+                // timestamp does - is both safer and easier to notice in the log.
+                Log.w(
+                    TAG,
+                    "Semantic observation timestamp is not an ARCore frame timestamp " +
+                        "(off by ${age / 1_000_000} ms); using the most recent depth frame instead. " +
+                        "Pass the value from ARCore Frame.getTimestamp(), or omit it.",
+                )
+            } else if (age > maxAgeNanos) {
+                return null
+            }
         }
         val u = (normalizedX * snapshotWidth).toInt().coerceIn(0, snapshotWidth - 1)
         val v = (normalizedY * snapshotHeight).toInt().coerceIn(0, snapshotHeight - 1)
@@ -216,5 +235,15 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
         val out = FloatArray(3)
         ArCorePoseProvider.transform(snapshotTransform, camX, camY, camZ, out)
         return Vec3(out[0], out[1], out[2])
+    }
+
+    private companion object {
+        const val TAG = "ArCoreDepthProvider"
+
+        /**
+         * Beyond this the supplied timestamp cannot plausibly be in ARCore's clock domain, so it
+         * is treated as absent rather than used to reject the observation.
+         */
+        const val CLOCK_DOMAIN_MISMATCH_NANOS = 60_000_000_000L
     }
 }
