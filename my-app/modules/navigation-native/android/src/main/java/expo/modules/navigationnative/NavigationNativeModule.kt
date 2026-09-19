@@ -1,5 +1,6 @@
 package expo.modules.navigationnative
 
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -105,6 +106,32 @@ class NavigationNativeModule : Module() {
         }
 
         // ---------------------------------------------------------------- introspection
+
+        /**
+         * A picture of the occupancy grid for the debug UI: free space, obstacles, frontiers,
+         * the planned path and the user's pose. The grid itself is never sent - 14 400 cells
+         * several times a second is exactly the traffic this module exists to avoid.
+         */
+        AsyncFunction("getMapImage") { promise: Promise ->
+            NavigationRuntime.renderMap { result ->
+                result.fold(
+                    onSuccess = { map ->
+                        promise.resolve(
+                            mapOf(
+                                "base64" to map.base64,
+                                "width" to map.width,
+                                "height" to map.height,
+                                "resolutionMeters" to map.resolutionMeters,
+                                "sizeMeters" to map.sizeMeters,
+                            ),
+                        )
+                    },
+                    onFailure = { error ->
+                        promise.reject("ERR_MAP_RENDER", error.message ?: "Render failed", error as? Exception)
+                    },
+                )
+            }
+        }
 
         Function("getSnapshot") {
             NavigationRuntime.currentSnapshot().toEventMap()

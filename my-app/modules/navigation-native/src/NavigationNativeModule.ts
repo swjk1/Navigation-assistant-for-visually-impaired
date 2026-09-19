@@ -1,6 +1,7 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
+  NavigationMapImage,
   NavigationNativeModuleEvents,
   NavigationSnapshot,
   NavigationSupport,
@@ -31,6 +32,12 @@ declare class NavigationNativeModuleType extends NativeModule<NavigationNativeMo
   getSnapshot(): NavigationSnapshot;
 
   setDebugEnabled(enabled: boolean): void;
+
+  /**
+   * A rendered picture of the occupancy grid: free space, obstacles, frontiers, the planned path
+   * and the user's pose. Pulled on demand for debug UI; the grid itself never crosses the bridge.
+   */
+  getMapImage(): Promise<NavigationMapImage>;
 
   /**
    * Hands ARCore session ownership to another native module.

@@ -105,6 +105,18 @@ export type NavigationSnapshot = {
   debug?: NavigationDebugInfo | null;
 };
 
+/** A rendered PNG of the occupancy grid, for debug display. */
+export type NavigationMapImage = {
+  /** PNG bytes, base64. Use as `data:image/png;base64,${base64}`. */
+  base64: string;
+  width: number;
+  height: number;
+  /** Metres per grid cell. */
+  resolutionMeters: number;
+  /** Side length of the mapped window, in metres. */
+  sizeMeters: number;
+};
+
 export type NavigationTarget =
   | { type: 'ROOM'; value: string }
   | { type: 'EXIT' }

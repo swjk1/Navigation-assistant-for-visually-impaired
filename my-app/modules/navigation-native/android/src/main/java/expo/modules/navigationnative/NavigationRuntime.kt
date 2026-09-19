@@ -20,6 +20,7 @@ import expo.modules.navigationnative.platform.ArCoreDepthProvider
 import expo.modules.navigationnative.platform.ArCoreSessionManager
 import expo.modules.navigationnative.platform.DepthCloudPool
 import expo.modules.navigationnative.platform.NavigationSupport
+import expo.modules.navigationnative.platform.OccupancyMapRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -353,6 +354,27 @@ object NavigationRuntime {
     }
 
     fun currentSnapshot(): NavigationSnapshot = snapshot
+
+    /**
+     * Renders the occupancy grid to a PNG, on the engine thread.
+     *
+     * Must run there: it reads the live grid, path and frontier state, which the engine may be
+     * rewriting at 30 Hz. Pulled on demand rather than pushed with every snapshot, because a map
+     * image is orders of magnitude larger than the state the guidance layer actually needs.
+     */
+    fun renderMap(onResult: (Result<OccupancyMapRenderer.RenderedMap>) -> Unit) {
+        if (!debugEnabled) {
+            onResult(Result.failure(IllegalStateException("Map rendering is available only in debug mode")))
+            return
+        }
+        engineScope.launch {
+            try {
+                onResult(Result.success(OccupancyMapRenderer.render(engine)))
+            } catch (e: Throwable) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
 
     // ================================================================= snapshot throttling
 

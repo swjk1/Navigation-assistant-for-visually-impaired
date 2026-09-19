@@ -809,6 +809,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     fun currentPathWorld(): List<Vec2> = currentPath
 
+    /** Most recent device pose, for debug rendering. */
+    fun currentPose(): Pose3D = lastPose
+
+    /** The goal currently being steered at, for debug rendering. */
+    fun currentGoalWorld(): Vec2? = currentGoal
+
     fun floorEstimate() = floorEstimator.estimate
 
     private companion object {

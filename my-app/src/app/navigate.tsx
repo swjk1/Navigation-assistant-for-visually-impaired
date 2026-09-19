@@ -1,6 +1,6 @@
 import { useCameraPermissions } from 'expo-camera';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { executeCommand } from '@/guidance/NavigationController';
@@ -39,6 +39,9 @@ import NavigationNative, {
  */
 const PERCEPTION_INTERVAL_MS = 2500;
 
+/** Map refresh. Fast enough to watch the scan fill in, slow enough not to compete with mapping. */
+const MAP_INTERVAL_MS = 700;
+
 /** Don't repeat an identical instruction; it makes the guidance unlistenable. */
 function isSameInstruction(a: NavigationCommand | null, b: NavigationCommand): boolean {
   if (!a) return false;
@@ -55,6 +58,7 @@ export default function NavigateScreen() {
   const [spoken, setSpoken] = useState<string>('—');
   const [error, setError] = useState<string | null>(null);
   const [perceptionNote, setPerceptionNote] = useState('idle');
+  const [mapUri, setMapUri] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const lastCommand = useRef<NavigationCommand | null>(null);
   const perceptionBusy = useRef(false);
@@ -110,6 +114,7 @@ export default function NavigateScreen() {
   const stop = useCallback(async () => {
     await stopNavigation();
     setRunning(false);
+    setMapUri(null);
   }, []);
 
   const onPerceptionFrame = useCallback((frame: PerceptionFrame) => {
@@ -128,6 +133,36 @@ export default function NavigateScreen() {
       });
     }
   }, []);
+
+  /**
+   * Polls the rendered occupancy map. Pulled rather than pushed: an image is far larger than the
+   * state the guidance layer needs, so it must not ride along with every snapshot.
+   */
+  useEffect(() => {
+    if (!supported || !running) return;
+    let cancelled = false;
+    let busy = false;
+
+    const timer = setInterval(() => {
+      if (busy) return;
+      busy = true;
+      void NavigationNative.getMapImage()
+        .then((map) => {
+          if (!cancelled) setMapUri(`data:image/png;base64,${map.base64}`);
+        })
+        .catch(() => {
+          /* transient - the engine may be mid-reset */
+        })
+        .finally(() => {
+          busy = false;
+        });
+    }, MAP_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [supported, running]);
 
   /**
    * Drives the perception pipeline off the SAME ARCore session navigation is using.
@@ -200,6 +235,31 @@ export default function NavigateScreen() {
             scanning {Math.round(snapshot.debug.scanProgress * 100)}% — sweep the phone slowly
           </Text>
         ) : null}
+
+        {mapUri ? (
+          <View style={styles.mapBlock}>
+            <Image
+              source={{ uri: mapUri }}
+              style={styles.map}
+              accessibilityLabel="Live occupancy map: green is clear space, red is an obstacle, and white marks your position."
+              // Nearest-neighbour-ish: the map is deliberately blocky, one square per 10 cm cell.
+              resizeMode="contain"
+              fadeDuration={0}
+            />
+            <View style={styles.legend}>
+              <Legend color="#408460" label="free" />
+              <Legend color="#D65A4A" label="obstacle" />
+              <Legend color="#18181E" label="unknown" />
+              <Legend color="#F0C85A" label="frontier" />
+              <Legend color="#5AA0F0" label="path" />
+            </View>
+            <Text style={styles.mutedSmall}>
+              {snapshot?.debug
+                ? `${(snapshot.debug.freeCells * 0.01).toFixed(1)} m² mapped · 12 m window`
+                : ''}
+            </Text>
+          </View>
+        ) : null}
         <Text style={styles.mutedSmall}>perception: {perceptionNote}</Text>
 
         {permission?.granted ? null : (
@@ -238,6 +298,15 @@ export default function NavigateScreen() {
   );
 }
 
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendSwatch, { backgroundColor: color }]} />
+      <Text style={styles.legendLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function Button({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -266,6 +335,17 @@ const styles = StyleSheet.create({
   },
   buttonPressed: { opacity: 0.7 },
   buttonText: { color: '#FFFFFF', fontWeight: '600' },
+  mapBlock: { marginTop: 12, gap: 6 },
+  map: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    backgroundColor: '#18181E',
+  },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendSwatch: { width: 10, height: 10, borderRadius: 2 },
+  legendLabel: { color: '#8A8A99', fontSize: 11 },
   debug: { marginTop: 12, gap: 2 },
   error: { color: '#DC2626', marginTop: 12 },
 });
