@@ -4,18 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  hapticArrived,
-  hapticHazard,
-  hapticLeft,
-  hapticRight,
-  hapticStop,
-  hapticStraight,
-  stopHaptics,
-} from '@/guidance/HapticService';
+import { transcribeAudioWithGemini } from '@/ai/GeminiSpeechService';
+import { stopHaptics } from '@/guidance/HapticService';
+import { commandFromTranscript, executeCommand } from '@/guidance/NavigationController';
 
 type UiState = 'IDLE' | 'LISTENING' | 'PROCESSING' | 'GUIDING' | 'ERROR';
-type SimpleCommand = 'RIGHT' | 'LEFT' | 'STRAIGHT' | 'STOP' | 'ARRIVED' | 'HAZARD';
 
 const LISTEN_MS = 3500;
 
@@ -24,9 +17,6 @@ export default function HomeScreen() {
   const [uiState, setUiState] = useState<UiState>('IDLE');
   const [statusText, setStatusText] = useState('Ready');
   const [lastTranscriptHint, setLastTranscriptHint] = useState<string | null>(null);
-  const [commandIndex, setCommandIndex] = useState(0);
-
-  const commandFlow: SimpleCommand[] = ['RIGHT', 'LEFT', 'STRAIGHT', 'STOP', 'ARRIVED', 'HAZARD'];
 
   useEffect(() => {
     void (async () => {
@@ -45,33 +35,6 @@ export default function HomeScreen() {
   const requestMicPermission = useCallback(async () => {
     const permission = await AudioModule.requestRecordingPermissionsAsync();
     return permission.granted;
-  }, []);
-
-  const runSimpleGuidance = useCallback(async (command: SimpleCommand) => {
-    const sentence = command.toLowerCase();
-    setLastTranscriptHint(`Demo command: ${command}`);
-    Speech.speak(sentence, { rate: 1.0 });
-
-    switch (command) {
-      case 'RIGHT':
-        await hapticRight();
-        break;
-      case 'LEFT':
-        await hapticLeft();
-        break;
-      case 'STRAIGHT':
-        await hapticStraight();
-        break;
-      case 'STOP':
-        await hapticStop();
-        break;
-      case 'ARRIVED':
-        await hapticArrived();
-        break;
-      case 'HAZARD':
-        await hapticHazard();
-        break;
-    }
   }, []);
 
   const handleTap = useCallback(async () => {
@@ -100,24 +63,48 @@ export default function HomeScreen() {
 
       await recorder.stop();
       setUiState('PROCESSING');
-      setStatusText('Processing request');
+      setStatusText('Transcribing speech');
 
-      await new Promise<void>((resolve) => setTimeout(resolve, 800));
+      const audioUri = recorder.uri;
+      if (!audioUri) throw new Error('No recorded audio URI');
+
+      const transcript = await transcribeAudioWithGemini(audioUri);
 
       setUiState('GUIDING');
-      setStatusText('Giving guidance');
-      const command = commandFlow[commandIndex];
-      await runSimpleGuidance(command);
-      setCommandIndex((prev) => (prev + 1) % commandFlow.length);
+      setStatusText('Applying command');
+
+      if (transcript.length > 0) {
+        setLastTranscriptHint(`You said: "${transcript}"`);
+        const command = commandFromTranscript(transcript);
+        if (command) {
+          await executeCommand(command);
+        } else {
+          Speech.speak(`Heard: ${transcript}`, { rate: 1.0 });
+          Speech.speak('No navigation command detected. Say left, right, straight, stop, or arrived.', {
+            rate: 1.0,
+          });
+        }
+      } else {
+        setLastTranscriptHint('No speech detected.');
+        Speech.speak('I could not hear any speech. Please try again.');
+      }
 
       setUiState('IDLE');
       setStatusText('Ready');
-    } catch {
+    } catch (error) {
       setUiState('ERROR');
-      setStatusText('Could not capture audio');
-      Speech.speak('Something went wrong. Please tap again.');
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      if (message.includes('EXPO_PUBLIC_GEMINI_API_KEY')) {
+        setStatusText('Missing Gemini API key');
+        setLastTranscriptHint('Add EXPO_PUBLIC_GEMINI_API_KEY to your environment and restart Expo.');
+        Speech.speak('Gemini API key is missing.');
+      } else {
+        setStatusText('Could not process speech');
+        setLastTranscriptHint(message);
+        Speech.speak('Something went wrong. Please tap again.');
+      }
     }
-  }, [commandFlow, commandIndex, recorder, requestMicPermission, runSimpleGuidance, uiState]);
+  }, [recorder, requestMicPermission, uiState]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
