@@ -6,7 +6,9 @@ Hackathon monorepo. The Expo client and Person 1 Perception Engine live in [`my-
 
 See [`my-app/README.md`](./my-app/README.md) and step docs under [`my-app/docs/person1/`](./my-app/docs/person1/).
 
-**Current checkpoint:** Step 1 complete (secure setup + camera harness). Live hardware snapshot pending device capture.
+**Status:** Steps 1–5 complete (offline). PRD §7 final verification: `npm run test:final` in `my-app/`.
+
+Teammates: [`my-app/docs/person1/TEAMMATE_INTEGRATION.md`](./my-app/docs/person1/TEAMMATE_INTEGRATION.md).
 
 ## Security
 

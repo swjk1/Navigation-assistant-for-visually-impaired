@@ -1,8 +1,8 @@
 {
   "step": "security",
   "name": "security_audit",
-  "timestamp": 1789839182421,
-  "timedAt": "2026-09-19T17:33:02.421Z",
+  "timestamp": 1789839776167,
+  "timedAt": "2026-09-19T17:42:56.167Z",
   "status": "pass",
   "findings": [
     {
@@ -28,7 +28,7 @@
     {
       "ok": true,
       "id": "secret-scan",
-      "detail": "scanned 60 files — no key patterns"
+      "detail": "scanned 66 files — no key patterns"
     },
     {
       "ok": true,

@@ -47,6 +47,7 @@
     "test:step3": "node test/run_edge_case_tests.js",
     "test:step4": "node test/run_step4_latency.mjs",
     "test:step5": "node test/run_step5_final_contract.mjs",
+    "test:final": "node test/run_final_verification.mjs",
     "test:schema": "node test/run_schema_tests.mjs",
     "test:handoff": "node test/run_teammate_handoff.mjs",
     "test:security": "node scripts/security_audit.mjs",

@@ -29,6 +29,7 @@ const step3 = loadJson('snapshot_step3_edge_cases.json');
 const step4 = loadJson('snapshot_step4_latency_profile.json');
 const step5 = loadJson('snapshot_step5_final_contract.json');
 const security = loadJson('snapshot_security_audit.json');
+const finalV = loadJson('snapshot_final_verification.json');
 
 const checklist = [
   {
@@ -146,6 +147,17 @@ const checklist = [
     status: security?.status === 'pass' ? 'done' : 'gap',
     note: '.env gitignored; snapshots must not contain keys',
   },
+  {
+    id: 'S7-final',
+    prd: 'PRD §7: all five review checkpoints answered',
+    status:
+      finalV?.status === 'person1_prd_complete_with_notes'
+        ? 'done'
+        : finalV
+          ? 'partial'
+          : 'not_started',
+    note: finalV?.reviewSummary || null,
+  },
 ];
 
 const stepStatuses = checklist.map((c) => c.status);
@@ -157,14 +169,14 @@ const alignment = {
   timestamp: Date.now(),
   timedAt: new Date().toISOString(),
   verdict: allDone
-    ? 'ALIGNED_THROUGH_STEP_5_WITH_NOTES'
+    ? 'PERSON1_PRD_COMPLETE_WITH_NOTES'
     : 'GAPS_REMAINING',
   notes: [
     'PRD model name gemini-2.0-flash was retired by Google; code uses gemini-3.6-flash (same Flash-class role).',
-    'Phone live capture latency for Step 1 still pending.',
+    'Phone live capture latency for Step 1 still pending (optional hardware proof).',
     'Hybrid YOLO+ML Kit is an agreed extension; public contract remains PerceptionFrame.',
     'Step 3 complete with fixture JPEGs + mock scenarios; replace fixtures with venue photos when available.',
-    'Step 5 contract verified offline for Person 2/3; live phone YOLO wiring still optional.',
+    'Original PRD has no Step 6 — §7 final verification + §8 README close the Person 1 track.',
   ],
   checklist,
   snapshotInventory: {
@@ -181,6 +193,7 @@ const alignment = {
       loadJson('snapshot_teammate_handoff.json')
     ),
     snapshot_step5_final_contract: Boolean(step5),
+    snapshot_final_verification: Boolean(finalV),
   },
 };
 

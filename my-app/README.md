@@ -24,6 +24,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 Prefer `GEMINI_API_KEY` over `EXPO_PUBLIC_GEMINI_API_KEY` — the public Expo prefix embeds the key in the client bundle.
+
 ### 2. Verify Security Guardrails
 
 Check that `.env` is ignored by git before staging files:
@@ -74,18 +75,19 @@ Latency budget (round-trip ≤ 1500 ms): capture ≤ 150 ms · inference+parse �
 | 3 Schema & edge cases | [docs/person1/STEP_03_EDGE_CASES.md](docs/person1/STEP_03_EDGE_CASES.md) | `snapshots/snapshot_step3_edge_cases.json` |
 | 4 Latency profile | [docs/person1/STEP_04_LATENCY.md](docs/person1/STEP_04_LATENCY.md) | `snapshots/snapshot_step4_latency_profile.json` |
 | 5 Integration contract | [docs/person1/STEP_05_INTEGRATION.md](docs/person1/STEP_05_INTEGRATION.md) | `snapshots/snapshot_step5_final_contract.json` |
+| §7 Final verification | [docs/person1/FINAL_VERIFICATION.md](docs/person1/FINAL_VERIFICATION.md) | `snapshots/snapshot_final_verification.json` |
 
 ---
 
 ## Testing & Snapshots
 
-### Run regressions
+### Run Edge Case & Latency Regressions
 
 ```bash
-npm run test:step5
-npm run test:handoff
 npm run test:step3
 npm run test:step4
+npm run test:step5
+npm run test:final
 ```
 
 ### Snapshot Structure
@@ -97,13 +99,27 @@ Every pipeline stage produces a frozen JSON snapshot in `/snapshots`:
 * `snapshot_step3_edge_cases.json` — Regression results across hazards, drop-offs, and signs
 * `snapshot_step4_latency_profile.json` — Processing times and token efficiency
 * `snapshot_step5_final_contract.json` — Validated contract signed off for Person 2
+* `snapshot_final_verification.json` — PRD §7 all review checkpoints answered
+
+Full inventory: [docs/person1/SNAPSHOTS.md](docs/person1/SNAPSHOTS.md).
 
 ---
 
 ## Public contract (after Step 5)
 
 ```js
-import { getLatestPerceptionFrame } from './src/index.js';
+import {
+  getLatestPerceptionFrame,
+  getMockTeammateHandoff,
+  analyzeAndStore,
+} from './src/index.js';
+
+// Offline bootstrap for Person 2 / 3
+const handoff = getMockTeammateHandoff('hallway');
+
+// After a capture
+await analyzeAndStore(base64Jpeg);
+const frame = getLatestPerceptionFrame();
 ```
 
 Persons 2 and 3 should depend only on `PerceptionFrame` / handoff helpers from [`src/index.js`](src/index.js) — see [`docs/person1/TEAMMATE_INTEGRATION.md`](docs/person1/TEAMMATE_INTEGRATION.md).

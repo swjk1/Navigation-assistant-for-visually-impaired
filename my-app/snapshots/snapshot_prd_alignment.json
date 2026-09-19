@@ -1,15 +1,15 @@
 {
   "name": "prd_alignment_checkpoint",
   "throughStep": 5,
-  "timestamp": 1789839507998,
-  "timedAt": "2026-09-19T17:38:27.998Z",
-  "verdict": "ALIGNED_THROUGH_STEP_5_WITH_NOTES",
+  "timestamp": 1789839775546,
+  "timedAt": "2026-09-19T17:42:55.546Z",
+  "verdict": "PERSON1_PRD_COMPLETE_WITH_NOTES",
   "notes": [
     "PRD model name gemini-2.0-flash was retired by Google; code uses gemini-3.6-flash (same Flash-class role).",
-    "Phone live capture latency for Step 1 still pending.",
+    "Phone live capture latency for Step 1 still pending (optional hardware proof).",
     "Hybrid YOLO+ML Kit is an agreed extension; public contract remains PerceptionFrame.",
     "Step 3 complete with fixture JPEGs + mock scenarios; replace fixtures with venue photos when available.",
-    "Step 5 contract verified offline for Person 2/3; live phone YOLO wiring still optional."
+    "Original PRD has no Step 6 — §7 final verification + §8 README close the Person 1 track."
   ],
   "checklist": [
     {
@@ -85,6 +85,18 @@
       "prd": "Zero committed API keys",
       "status": "done",
       "note": ".env gitignored; snapshots must not contain keys"
+    },
+    {
+      "id": "S7-final",
+      "prd": "PRD §7: all five review checkpoints answered",
+      "status": "done",
+      "note": {
+        "step1": "pass_size_phone_latency_pending",
+        "step2": "pass",
+        "step3": "pass",
+        "step4": "pass",
+        "step5": "pass"
+      }
     }
   ],
   "snapshotInventory": {
@@ -98,6 +110,7 @@
     "snapshot_step4_latency_profile": true,
     "snapshot_security_audit": true,
     "snapshot_teammate_handoff": true,
-    "snapshot_step5_final_contract": true
+    "snapshot_step5_final_contract": true,
+    "snapshot_final_verification": true
   }
 }

@@ -9,6 +9,7 @@ npm run test:hybrid
 npm run test:step3
 npm run test:step4
 npm run test:step5
+npm run test:final
 npm run test:handoff
 npm run test:security
 npm run test:prd
@@ -27,4 +28,5 @@ npm run test:prd
 | `snapshot_security_audit.json` | Secret / .env leak audit |
 | `snapshot_teammate_handoff.json` | Person 2/3 speakable handoff |
 | `snapshot_step5_final_contract.json` | Final public contract — zero schema errors for Person 2 |
+| `snapshot_final_verification.json` | PRD §7 all five review questions answered |
 | `snapshot_prd_alignment.json` | PRD checklist verdict |
