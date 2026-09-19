@@ -55,3 +55,7 @@ fixtures/live_captures/
 *.log
 *.jks
 *.keystore
+
+# On-device model weights (download via npm run download:yolo26)
+*.tflite
+!modules/indoor-perception/android/src/main/assets/.gitkeep

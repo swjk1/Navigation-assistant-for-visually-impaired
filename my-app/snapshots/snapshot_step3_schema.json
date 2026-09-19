@@ -1,0 +1,47 @@
+{
+  "step": 3,
+  "name": "schema_validator_regressions",
+  "timestamp": 1789837498573,
+  "timedAt": "2026-09-19T17:04:58.573Z",
+  "summary": {
+    "passed": 7,
+    "total": 7
+  },
+  "cases": [
+    {
+      "name": "rejects non-object root",
+      "passed": true,
+      "ms": 0.1915000000000049
+    },
+    {
+      "name": "clamps out-of-range box coords to 0..1",
+      "passed": true,
+      "ms": 0.13750000000000284
+    },
+    {
+      "name": "drops unknown labels",
+      "passed": true,
+      "ms": 0.0782999999999987
+    },
+    {
+      "name": "invalid clock falls back to 12 o'clock",
+      "passed": true,
+      "ms": 0.04290000000000305
+    },
+    {
+      "name": "truncates hazardDescription and OCR text",
+      "passed": true,
+      "ms": 0.06990000000000407
+    },
+    {
+      "name": "non-array objects/text become empty arrays",
+      "passed": true,
+      "ms": 0.042300000000004445
+    },
+    {
+      "name": "allowed label/clock catalogs match PRD",
+      "passed": true,
+      "ms": 0.02410000000000423
+    }
+  ]
+}

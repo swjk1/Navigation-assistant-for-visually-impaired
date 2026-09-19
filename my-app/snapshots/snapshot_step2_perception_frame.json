@@ -1,0 +1,173 @@
+{
+  "step": 2,
+  "name": "perception_frame_verification",
+  "status": "mock_verified",
+  "timestamp": 1789836682736,
+  "timedAt": "2026-09-19T16:51:22.736Z",
+  "mode": "mock",
+  "geminiCalled": false,
+  "scenario": "hallway",
+  "reviewCheckpoint": "Inspect PerceptionFrame output. Does clock direction match target position?",
+  "reviewAnswers": {
+    "doorAt11OClock": true,
+    "room204Detected": true,
+    "schemaValid": true,
+    "usedGemini": false
+  },
+  "timing": {
+    "runs": 10,
+    "wallClock": {
+      "n": 10,
+      "avgMs": 0.079,
+      "p90Ms": 0.065,
+      "maxMs": 0.395,
+      "minMs": 0.026
+    },
+    "samples": [
+      {
+        "run": 1,
+        "wallClockMs": 0.395,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 2,
+        "wallClockMs": 0.065,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 3,
+        "wallClockMs": 0.052,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 4,
+        "wallClockMs": 0.048,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 5,
+        "wallClockMs": 0.06,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 6,
+        "wallClockMs": 0.046,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 7,
+        "wallClockMs": 0.032,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 8,
+        "wallClockMs": 0.026,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 9,
+        "wallClockMs": 0.031,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      },
+      {
+        "run": 10,
+        "wallClockMs": 0.03,
+        "frameLatencyMs": 0,
+        "objectCount": 3,
+        "textCount": 1,
+        "immediateHazard": false
+      }
+    ]
+  },
+  "failures": [],
+  "frame": {
+    "timestamp": 1789836682736,
+    "latencyMs": 0,
+    "objects": [
+      {
+        "label": "door",
+        "confidence": 0.92,
+        "box": {
+          "x": 0.18,
+          "y": 0.22,
+          "width": 0.28,
+          "height": 0.55
+        },
+        "clockPosition": "11 o'clock",
+        "approxDistanceMeters": 3.5
+      },
+      {
+        "label": "wall",
+        "confidence": 0.88,
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 0.15,
+          "height": 1
+        },
+        "clockPosition": "9 o'clock",
+        "approxDistanceMeters": 1.2
+      },
+      {
+        "label": "sign",
+        "confidence": 0.85,
+        "box": {
+          "x": 0.55,
+          "y": 0.18,
+          "width": 0.2,
+          "height": 0.12
+        },
+        "clockPosition": "1 o'clock",
+        "approxDistanceMeters": 4
+      }
+    ],
+    "text": [
+      {
+        "text": "ROOM 204",
+        "confidence": 0.91,
+        "box": {
+          "x": 0.55,
+          "y": 0.18,
+          "width": 0.2,
+          "height": 0.12
+        }
+      }
+    ],
+    "floorDetected": true,
+    "immediateHazard": false,
+    "hazardDescription": null
+  },
+  "promptMeta": {
+    "temperature": 0.1,
+    "maxOutputTokens": 256,
+    "abortTimeoutMs": 3500,
+    "promptCharLength": 1234
+  }
+}

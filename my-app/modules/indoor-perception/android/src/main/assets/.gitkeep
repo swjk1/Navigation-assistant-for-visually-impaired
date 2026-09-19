@@ -1,0 +1,2 @@
+# Place yolo26n_int8.tflite here (gitignored if large).
+# Download: npm run download:yolo26

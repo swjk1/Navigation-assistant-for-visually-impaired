@@ -66,8 +66,9 @@ Latency budget (round-trip ≤ 1500 ms): capture ≤ 150 ms · inference+parse �
 | Step | Doc | Snapshot |
 | --- | --- | --- |
 | 1 Hardware & secrets | [docs/person1/STEP_01_HARDWARE.md](docs/person1/STEP_01_HARDWARE.md) | `snapshots/snapshot_step1_hardware.json` |
-| 2 Perception service | *pending* | `snapshots/snapshot_step2_perception_frame.json` |
-| 3 Schema & edge cases | *pending* | `snapshots/snapshot_step3_edge_cases.json` |
+| 2 Perception service | [docs/person1/STEP_02_PERCEPTION.md](docs/person1/STEP_02_PERCEPTION.md) | `snapshots/snapshot_step2_perception_frame.json` |
+| Hybrid YOLO+OCR+VLM | [docs/person1/HYBRID_YOLO_OCR_VLM.md](docs/person1/HYBRID_YOLO_OCR_VLM.md) | `snapshots/snapshot_hybrid_yolo_ocr_vlm.json` |
+| 3 Schema & edge cases | [docs/person1/STEP_03_EDGE_CASES.md](docs/person1/STEP_03_EDGE_CASES.md) | `snapshots/snapshot_step3_edge_cases.json` |
 | 4 Latency profile | *pending* | `snapshots/snapshot_step4_latency_profile.json` |
 | 5 Integration contract | *pending* | `snapshots/snapshot_step5_final_contract.json` |
 
@@ -101,4 +102,4 @@ Every pipeline stage produces a frozen JSON snapshot in `/snapshots`:
 import { getLatestPerceptionFrame } from './src/index.js';
 ```
 
-Persons 2 and 3 should depend only on `PerceptionFrame` from `src/types/perception.ts` and the exported getter / mocks — not on Gemini or camera internals.
+Persons 2 and 3 should depend only on `PerceptionFrame` / handoff helpers from [`src/index.js`](src/index.js) — see [`docs/person1/TEAMMATE_INTEGRATION.md`](docs/person1/TEAMMATE_INTEGRATION.md).

@@ -1,0 +1,48 @@
+{
+  "step": 2,
+  "name": "perception_frame_live_gemini",
+  "status": "live_ok",
+  "timestamp": 1789837312286,
+  "timedAt": "2026-09-19T17:01:52.286Z",
+  "mode": "live",
+  "geminiCalled": true,
+  "model": "gemini-3.6-flash",
+  "wallClockMs": 5987.5,
+  "frame": {
+    "timestamp": 1789837312286,
+    "latencyMs": 5986,
+    "objects": [
+      {
+        "label": "sign",
+        "confidence": 0.95,
+        "box": {
+          "x": 1,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        },
+        "clockPosition": "12 o'clock",
+        "approxDistanceMeters": 1.2
+      }
+    ],
+    "text": [
+      {
+        "text": "204",
+        "confidence": 0.98,
+        "box": {
+          "x": 1,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        }
+      }
+    ],
+    "floorDetected": false,
+    "immediateHazard": false,
+    "hazardDescription": null,
+    "meta": {
+      "geminiModel": "gemini-3.6-flash",
+      "geminiAttempts": 1
+    }
+  }
+}

@@ -18,6 +18,9 @@ import {
   buildHardwareSnapshot,
   captureFrame,
 } from '@/services/cameraService';
+import { hasValidGeminiApiKey } from '@/services/envCheck';
+import { getPerceptionMode } from '@/services/perceptionEngine';
+import { processHybridFrame } from '@/services/hybridPerception';
 
 export default function PerceptionHarnessScreen() {
   const cameraRef = useRef(null);
@@ -26,18 +29,42 @@ export default function PerceptionHarnessScreen() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const liveReady =
+    getPerceptionMode() === 'live' && hasValidGeminiApiKey();
+
   async function onCapture() {
     setBusy(true);
     setError(null);
     try {
       const result = await captureFrame(cameraRef.current);
-      const record = buildHardwareSnapshot(result, {
+      const hardware = buildHardwareSnapshot(result, {
         permissionGranted: true,
         platform: Platform.OS,
       });
+
+      let hybrid = null;
+      try {
+        hybrid = await processHybridFrame(result.base64, {
+          // Gemini only when ML Kit/YOLO unsure (reduces 503 demand)
+          allowLiveVlm: liveReady,
+          vlmOnTop: false,
+          useMockVlmOnGate: !liveReady,
+        });
+      } catch (hybridErr) {
+        hybrid = {
+          error: hybridErr?.message || String(hybridErr),
+          note: 'Native YOLO/OCR needs Android dev build; Gemini needs a real key in .env',
+        };
+      }
+
+      const record = {
+        mode: liveReady ? 'live' : 'mock-fallback',
+        hardware,
+        hybrid,
+      };
       setSnapshot(record);
       // eslint-disable-next-line no-console
-      console.log('[Step1 Hardware Snapshot]', JSON.stringify(record, null, 2));
+      console.log('[Hybrid Perception Snapshot]', JSON.stringify(record, null, 2));
     } catch (err) {
       setError(err?.message || String(err));
     } finally {
@@ -82,7 +109,7 @@ export default function PerceptionHarnessScreen() {
           disabled={busy}
         >
           <Text style={styles.buttonText}>
-            {busy ? 'Capturing…' : 'Capture Step 1 frame'}
+            {busy ? 'Running…' : 'Capture + hybrid YOLO/OCR'}
           </Text>
         </Pressable>
         {error ? <Text style={styles.error}>{error}</Text> : null}

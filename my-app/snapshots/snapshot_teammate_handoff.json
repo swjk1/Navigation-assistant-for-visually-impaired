@@ -1,0 +1,115 @@
+{
+  "step": "handoff",
+  "name": "teammate_integration_contract",
+  "status": "verified",
+  "timestamp": 1789837870287,
+  "timedAt": "2026-09-19T17:11:10.287Z",
+  "note": "Person 1 vision → Person 2 nav anchors + Person 3 speakable lines (no TTS engine here).",
+  "reviewAnswers": {
+    "doorReachableViaClockLanguage": true,
+    "ocrAvailableForDestinationConfirm": true,
+    "hazardPreemptsGuidance": true
+  },
+  "failures": [],
+  "examples": {
+    "hallway": {
+      "frame": {
+        "timestamp": 1789837870286,
+        "latencyMs": 0,
+        "objects": [
+          {
+            "label": "door",
+            "confidence": 0.92,
+            "box": {
+              "x": 0.18,
+              "y": 0.22,
+              "width": 0.28,
+              "height": 0.55
+            },
+            "clockPosition": "11 o'clock",
+            "approxDistanceMeters": 3.5
+          },
+          {
+            "label": "wall",
+            "confidence": 0.88,
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0.15,
+              "height": 1
+            },
+            "clockPosition": "9 o'clock",
+            "approxDistanceMeters": 1.2
+          },
+          {
+            "label": "sign",
+            "confidence": 0.85,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            },
+            "clockPosition": "1 o'clock",
+            "approxDistanceMeters": 4
+          }
+        ],
+        "text": [
+          {
+            "text": "ROOM 204",
+            "confidence": 0.91,
+            "box": {
+              "x": 0.55,
+              "y": 0.18,
+              "width": 0.2,
+              "height": 0.12
+            }
+          }
+        ],
+        "floorDetected": true,
+        "immediateHazard": false,
+        "hazardDescription": null
+      },
+      "navAnchors": [
+        {
+          "label": "door",
+          "confidence": 0.92,
+          "box": {
+            "x": 0.18,
+            "y": 0.22,
+            "width": 0.28,
+            "height": 0.55
+          },
+          "clockPosition": "11 o'clock",
+          "approxDistanceMeters": 3.5
+        },
+        {
+          "label": "sign",
+          "confidence": 0.85,
+          "box": {
+            "x": 0.55,
+            "y": 0.18,
+            "width": 0.2,
+            "height": 0.12
+          },
+          "clockPosition": "1 o'clock",
+          "approxDistanceMeters": 4
+        }
+      ],
+      "obstacles": [],
+      "signs": [
+        "ROOM 204"
+      ],
+      "speakableLines": [
+        "Door at 11 o'clock, about 3.5 meters.",
+        "Sign at 1 o'clock, about 4.0 meters.",
+        "Sign reads ROOM 204."
+      ],
+      "speechPriority": "guidance"
+    },
+    "stairsSpeakable": [
+      "Descending stairs ahead within 3 meters. Stop.",
+      "Stairs at 12 o'clock, about 2.0 meters."
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "indoor-perception",
+  "version": "1.0.0",
+  "description": "On-device YOLO26n + ML Kit OCR for Person 1 perception (Expo Android module)",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {},
+  "keywords": ["expo", "yolo", "mlkit", "ocr"],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "expo-modules-core": "*"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

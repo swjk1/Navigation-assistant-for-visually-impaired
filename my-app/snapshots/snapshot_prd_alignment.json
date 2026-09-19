@@ -1,0 +1,97 @@
+{
+  "name": "prd_alignment_checkpoint",
+  "throughStep": 2,
+  "timestamp": 1789837519969,
+  "timedAt": "2026-09-19T17:05:19.969Z",
+  "verdict": "ALIGNED_THROUGH_STEP_2_WITH_NOTES",
+  "notes": [
+    "PRD model name gemini-2.0-flash was retired by Google; code uses gemini-3.6-flash (same Flash-class role).",
+    "Phone live capture latency for Step 1 still pending.",
+    "Hybrid YOLO+ML Kit is an agreed extension; public contract remains PerceptionFrame.",
+    "Step 3 complete with fixture JPEGs + mock scenarios; replace fixtures with venue photos when available.",
+    "Step 4 not started; Step 5 partially exported via src/index.js."
+  ],
+  "checklist": [
+    {
+      "id": "S1-security",
+      "prd": "Step 1: .gitignore blocks .env; .env.example present; envCheck",
+      "status": "done"
+    },
+    {
+      "id": "S1-types",
+      "prd": "PerceptionFrame contract in types/perception.ts",
+      "status": "done"
+    },
+    {
+      "id": "S1-camera",
+      "prd": "Camera harness 640x480 JPEG @0.4, capture budgets",
+      "status": "done"
+    },
+    {
+      "id": "S1-snapshot",
+      "prd": "snapshot_step1_hardware.json",
+      "status": "done_offline_phone_pending",
+      "note": "offline_timed_run_phone_pending"
+    },
+    {
+      "id": "S2-engine",
+      "prd": "perceptionEngine + system prompt + 3500ms abort + sanitize",
+      "status": "done"
+    },
+    {
+      "id": "S2-snapshot-mock",
+      "prd": "snapshot_step2_perception_frame.json with clock/OCR checks",
+      "status": "done"
+    },
+    {
+      "id": "S2-snapshot-live",
+      "prd": "Live Gemini Flash call produces PerceptionFrame (or safe fallback)",
+      "status": "done",
+      "note": {
+        "status": "live_ok",
+        "model": "gemini-3.6-flash",
+        "latencyMs": 5986,
+        "hazardDescription": null
+      }
+    },
+    {
+      "id": "HYBRID-ext",
+      "prd": "Extension (beyond original PRD): YOLO26n + ML Kit OCR + Gemini on top",
+      "status": "done_extension",
+      "note": "Still emits same PerceptionFrame contract for Person 2/3"
+    },
+    {
+      "id": "S3",
+      "prd": "Step 3: edge-case fixture suite + snapshot_step3_edge_cases.json",
+      "status": "done_mock_synthetic"
+    },
+    {
+      "id": "S4",
+      "prd": "Step 4: latency profile 10 captures + timeout fallback snapshot",
+      "status": "not_started"
+    },
+    {
+      "id": "S5",
+      "prd": "Step 5: getLatestPerceptionFrame + mockPerception export",
+      "status": "done_partial",
+      "note": "getLatestPerceptionFrame + mocks exported; final Person 2 sign-off snapshot pending"
+    },
+    {
+      "id": "SECURITY",
+      "prd": "Zero committed API keys",
+      "status": "done",
+      "note": ".env gitignored; snapshots must not contain keys"
+    }
+  ],
+  "snapshotInventory": {
+    "snapshot_step1_hardware": true,
+    "snapshot_step1_timing_profile": true,
+    "snapshot_step2_perception_frame": true,
+    "snapshot_step2_perception_frame_live": true,
+    "snapshot_hybrid_yolo_ocr_vlm": true,
+    "snapshot_step3_edge_cases": true,
+    "snapshot_step3_schema": true,
+    "snapshot_step4_latency_profile": false,
+    "snapshot_step5_final_contract": false
+  }
+}

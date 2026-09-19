@@ -24,6 +24,9 @@ test-output/
 fixtures/live_captures/
 *.log
 
+# Large on-device model weights
+*.tflite
+
 # OS / IDE
 .DS_Store
 .idea/
