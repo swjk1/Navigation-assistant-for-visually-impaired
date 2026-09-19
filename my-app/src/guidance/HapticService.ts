@@ -11,236 +11,113 @@ export type HapticPatternName =
   | 'HAZARD';
 
 /**
- * Haptic vocabulary for HapticNav.
+ * Requested haptic rhythm mapping.
  *
- * Direction patterns intentionally use different:
- * - pulse counts
- * - intensities
- * - spacing
- *
- * so LEFT and RIGHT remain distinguishable without looking
- * at the screen.
+ * ._ = short pulse
+ * __ = long pulse
  */
-export const HapticTuning = {
-  /**
-   * Large gap between direction pulses.
-   * 250ms makes 2 vs 3 pulses much easier to count.
-   */
-  directionGap: 250,
-
-  /**
-   * STOP is faster and more urgent than normal directions.
-   */
-  urgentGap: 120,
-
-  /**
-   * Gap used for the ARRIVED swell.
-   */
-  swellGap: 45,
-
-  /**
-   * More taps = stronger feeling of a sustained vibration.
-   */
-  swellCount: 12,
-
-  /**
-   * Gap after the initial hazard notification.
-   */
-  leadGap: 180,
-
-  /**
-   * Gap between hazard impacts.
-   */
-  hazardGap: 100,
+const RHYTHM: Record<HapticPatternName, string> = {
+  LEFT: '._ ._',
+  RIGHT: '._ ._ ._ ._',
+  STRAIGHT: '._ ._ ._',
+  STOP: '__ __',
+  ARRIVED: '._ ._ ._ ._ ._',
+  HAZARD: '__ ._ __ ._',
 };
 
-interface Pulse {
-  style: Haptics.ImpactFeedbackStyle;
-  gapAfter: number;
-}
+/**
+ * Tune these values on the physical phone.
+ */
+export const HapticTuning = {
+  // Length of a short pulse.
+  shortDuration: 180,
 
-interface HapticPattern {
-  description: string;
-  lead?: Haptics.NotificationFeedbackType;
-  pulses: Pulse[];
-}
+  // Length of a long pulse.
+  longDuration: 540,
 
-function counted(
-  count: number,
-  style: Haptics.ImpactFeedbackStyle,
-  gap: number,
-): Pulse[] {
-  return Array.from({ length: count }, (_, i) => ({
-    style,
-    gapAfter: i === count - 1 ? 0 : gap,
-  }));
-}
+  // Gap between pulses in the same command.
+  pulseGap: 180,
 
-const {
-  directionGap,
-  urgentGap,
-  swellGap,
-  swellCount,
-  leadGap,
-  hazardGap,
-} = HapticTuning;
-
-export const HapticPatterns: Record<
-  HapticPatternName,
-  HapticPattern
-> = {
-  /**
-   * STRAIGHT
-   *
-   * One strong, unmistakable pulse.
-   */
-  STRAIGHT: {
-    description: 'Straight, one strong pulse',
-    pulses: counted(
-      1,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      directionGap,
-    ),
-  },
-
-  /**
-   * RIGHT
-   *
-   * Two heavy pulses with a large gap.
-   */
-  RIGHT: {
-    description: 'Right, two heavy pulses',
-    pulses: counted(
-      2,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      directionGap,
-    ),
-  },
-
-  /**
-   * LEFT
-   *
-   * Three rigid pulses.
-   *
-   * Rigid feels sharper/crisper than Heavy, making
-   * LEFT feel different from RIGHT even before counting.
-   */
-  LEFT: {
-    description: 'Left, three sharp pulses',
-    pulses: counted(
-      3,
-      Haptics.ImpactFeedbackStyle.Rigid,
-      directionGap,
-    ),
-  },
-
-  /**
-   * STOP
-   *
-   * Four rapid heavy pulses.
-   *
-   * The faster rhythm distinguishes STOP from the
-   * slower direction patterns.
-   */
-  STOP: {
-    description: 'STOP, four rapid heavy pulses',
-    pulses: counted(
-      4,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      urgentGap,
-    ),
-  },
-
-  /**
-   * ARRIVED
-   *
-   * Repeated light taps create a sustained sensation,
-   * followed by one heavy confirmation pulse.
-   */
-  ARRIVED: {
-    description: 'Arrived, sustained swell + confirmation',
-
-    pulses: [
-      ...counted(
-        swellCount,
-        Haptics.ImpactFeedbackStyle.Light,
-        swellGap,
-      ).map((pulse) => ({
-        ...pulse,
-        gapAfter: swellGap,
-      })),
-
-      {
-        style: Haptics.ImpactFeedbackStyle.Heavy,
-        gapAfter: 0,
-      },
-    ],
-  },
-
-  /**
-   * HAZARD
-   *
-   * Deliberately irregular and strong.
-   * This should never sound like normal navigation.
-   */
-  HAZARD: {
-    description: 'Hazard, emergency warning',
-
-    lead: Haptics.NotificationFeedbackType.Error,
-
-    pulses: [
-      {
-        style: Haptics.ImpactFeedbackStyle.Heavy,
-        gapAfter: leadGap,
-      },
-      {
-        style: Haptics.ImpactFeedbackStyle.Rigid,
-        gapAfter: hazardGap,
-      },
-      {
-        style: Haptics.ImpactFeedbackStyle.Heavy,
-        gapAfter: hazardGap,
-      },
-      {
-        style: Haptics.ImpactFeedbackStyle.Rigid,
-        gapAfter: 0,
-      },
-    ],
-  },
+  // Gap before starting the next command.
+  commandGap: 700,
 };
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 let generation = 0;
-
 let queue: Promise<void> = Promise.resolve();
 
-async function run(
-  pattern: HapticPattern,
+/** Play one token from the rhythm map. */
+async function playToken(
+  token: '._' | '__',
   myGeneration: number,
 ): Promise<void> {
   if (myGeneration !== generation) return;
 
-  if (pattern.lead !== undefined) {
-    await Haptics.notificationAsync(pattern.lead);
-    await sleep(leadGap);
+  const isLong = token === '__';
+  const duration = isLong
+    ? HapticTuning.longDuration
+    : HapticTuning.shortDuration;
+
+  /*
+   * expo-haptics does not expose a true "vibrate for N milliseconds"
+   * API on iOS.
+   *
+   * We therefore use a Heavy impact for both symbols and create
+   * the perception of duration through repeated impacts.
+   */
+  if (!isLong) {
+    await Haptics.impactAsync(
+      Haptics.ImpactFeedbackStyle.Heavy,
+    );
+
+    await sleep(duration);
+  } else {
+    // Create a longer-feeling dash using repeated Heavy impacts.
+    const dashImpacts = 3;
+
+    for (let i = 0; i < dashImpacts; i++) {
+      if (myGeneration !== generation) return;
+
+      await Haptics.impactAsync(
+        Haptics.ImpactFeedbackStyle.Heavy,
+      );
+
+      if (i < dashImpacts - 1) {
+        await sleep(120);
+      }
+    }
+
+    await sleep(180);
   }
+}
 
-  for (const pulse of pattern.pulses) {
+/**
+ * Play a mapped pulse command.
+ */
+async function runPattern(
+  rhythm: string,
+  myGeneration: number,
+): Promise<void> {
+  const tokens = rhythm
+    .split(' ')
+    .map((part) => part.trim())
+    .filter((part): part is '._' | '__' => part === '._' || part === '__');
+
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
     if (myGeneration !== generation) return;
-
-    await Haptics.impactAsync(pulse.style);
-
-    if (pulse.gapAfter > 0) {
-      await sleep(pulse.gapAfter);
+    await playToken(tokens[tokenIndex], myGeneration);
+    if (tokenIndex < tokens.length - 1) {
+      await sleep(HapticTuning.pulseGap);
     }
   }
 }
 
 /**
- * Plays a pattern to completion.
- * A newer call supersedes any pattern still playing.
+ * Plays a navigation command using the requested pulse rhythm map.
+ *
+ * A newer command immediately supersedes the old one.
  */
 export function playPattern(
   name: HapticPatternName,
@@ -248,21 +125,23 @@ export function playPattern(
   const myGeneration = ++generation;
 
   queue = queue
-    .then(() => run(HapticPatterns[name], myGeneration))
+    .then(() =>
+      runPattern(RHYTHM[name], myGeneration),
+    )
     .catch(() => {});
 
   return queue;
 }
 
 /**
- * Abandons whatever is playing at the next pulse boundary.
+ * Stop the current haptic sequence.
  */
 export function stopHaptics(): void {
   generation++;
 }
 
 /**
- * Hazard warnings outrank navigation.
+ * Hazard always takes priority over normal navigation.
  */
 export function patternForCommand(
   command: NavigationCommand,
@@ -275,8 +154,12 @@ export function patternForCommand(
 export function playForCommand(
   command: NavigationCommand,
 ): Promise<void> {
-  return playPattern(patternForCommand(command));
+  return playPattern(
+    patternForCommand(command),
+  );
 }
+
+// Convenience functions
 
 export function hapticStraight(): Promise<void> {
   return playPattern('STRAIGHT');
