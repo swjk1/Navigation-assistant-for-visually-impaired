@@ -108,14 +108,40 @@ object NavigationRuntime {
         return created
     }
 
+    /**
+     * Depth support as reported by whoever owns the ARCore session.
+     *
+     * `isDepthModeSupported` can only be answered by an open Session, and in external mode we
+     * deliberately never open one - so this module cannot discover it for itself and must be told.
+     * Null means nobody has reported yet.
+     */
+    @Volatile
+    private var externalDepthSupported: Boolean? = null
+
+    /** Called by the session owner (see NavigationSensorBridge.reportCapabilities). */
+    fun reportExternalCapabilities(depthSupported: Boolean) {
+        externalDepthSupported = depthSupported
+    }
+
     fun support(context: Context): NavigationSupport {
         val manager = attach(context)
         val availability = manager.queryAvailability()
+        val sessionOwned = if (externalFrameSource) session() != null else manager.session != null
         return availability.copy(
-            depthSupported = manager.depthSupported || availability.depthSupported,
-            trackingAvailable = manager.session != null &&
+            depthSupported = when {
+                // In external mode our own manager never opened a session, so its flag is
+                // meaningless; the owner's report is the only real answer.
+                externalFrameSource -> externalDepthSupported ?: availability.depthSupported
+                else -> manager.depthSupported || availability.depthSupported
+            },
+            trackingAvailable = sessionOwned &&
                 snapshot.status != NavigationStatus.LOST_TRACKING &&
                 snapshot.status != NavigationStatus.IDLE,
+            reason = if (externalFrameSource && externalDepthSupported == null) {
+                "Waiting for the session owner to report capabilities"
+            } else {
+                availability.reason
+            },
         )
     }
 
@@ -139,7 +165,11 @@ object NavigationRuntime {
         frameProcessor.reset()
     }
 
-    fun session(): Session? = sessionManager?.session
+    /** The session this module owns, or the externally owned one once a frame has arrived. */
+    fun session(): Session? = sessionManager?.session ?: externalSession
+
+    @Volatile
+    private var externalSession: Session? = null
 
     fun setCameraTexture(textureId: Int) = sessionManager?.setCameraTexture(textureId)
 
@@ -217,6 +247,7 @@ object NavigationRuntime {
     }
 
     private fun ingest(session: Session, arFrame: Frame) {
+        externalSession = session
         val navigationFrame = frameProcessor.process(session, arFrame)
         // Copy the reusable depth buffer into a hand-off slot before publishing.
         val handOff = navigationFrame.copy(points = cloudPool.copyOf(navigationFrame.points))

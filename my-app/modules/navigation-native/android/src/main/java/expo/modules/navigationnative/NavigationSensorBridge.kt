@@ -54,6 +54,16 @@ object NavigationSensorBridge {
      */
     fun takeOverFrameSource() = NavigationRuntime.useExternalFrameSource(true)
 
+    /**
+     * Reports what the owned session can do. Call once, right after configuring the session.
+     *
+     * `isDepthModeSupported` needs an open Session to answer, and in external mode this module
+     * never opens one - so without this, `isSupported()` would report `depthSupported: false` on
+     * a perfectly capable phone and navigation would refuse to start.
+     */
+    fun reportCapabilities(depthSupported: Boolean) =
+        NavigationRuntime.reportExternalCapabilities(depthSupported)
+
     /** Returns ownership to this module (it will create its own session again). */
     fun releaseFrameSource() = NavigationRuntime.useExternalFrameSource(false)
 

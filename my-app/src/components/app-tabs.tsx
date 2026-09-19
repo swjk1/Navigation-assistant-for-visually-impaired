@@ -20,6 +20,24 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      {/* NativeTabs only renders routes that have a Trigger. navigate.tsx and
+          navigation-debug.tsx exist as routes but were unreachable without these. */}
+      <NativeTabs.Trigger name="navigate">
+        <NativeTabs.Trigger.Label>Navigate</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/home.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="navigation-debug">
+        <NativeTabs.Trigger.Label>Engine</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/explore.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="perception-harness">
         <NativeTabs.Trigger.Label>Harness</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

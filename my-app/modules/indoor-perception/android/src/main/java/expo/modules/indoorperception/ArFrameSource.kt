@@ -95,6 +95,10 @@ object ArFrameSource {
             config.updateMode = Config.UpdateMode.BLOCKING
             created.configure(config)
 
+            // We own the session, so we are the only one who can answer this. Without the report,
+            // the navigation module would see depthSupported = false and refuse to start.
+            NavigationSensorBridge.reportCapabilities(depthSupported)
+
             session = created
             lastError = null
             null
