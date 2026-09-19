@@ -7,8 +7,11 @@ import {
 import { NETWORK_TIMEOUT_FALLBACK_MS } from '../constants/cameraConfig.js';
 
 function readTimeoutMs() {
-  // Clamp abort slightly above PRD 3000ms fallback threshold (default 3500)
-  return Number(process.env.GEMINI_TIMEOUT_MS) || 3500;
+  // Abort slightly above network fallback so Gemini can finish before clamp
+  return (
+    Number(process.env.GEMINI_TIMEOUT_MS) ||
+    NETWORK_TIMEOUT_FALLBACK_MS + 500
+  );
 }
 
 /** Primary + fallbacks when a model is retired or overloaded. */
@@ -16,10 +19,9 @@ export function getGeminiModelCandidates() {
   const primary = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
   const extras = [
     'gemini-flash-latest',
-    'gemini-3.5-flash',
-    'gemini-3.7-flash',
-    'gemini-3.8-flash',
     'gemini-flash-lite-latest',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
   ];
   return [primary, ...extras.filter((m) => m !== primary)];
 }
@@ -27,9 +29,9 @@ export function getGeminiModelCandidates() {
 export const GEMINI_MODEL = getGeminiModelCandidates()[0];
 
 const MAX_RETRIES = Number(process.env.GEMINI_MAX_RETRIES) || 3;
-const BASE_BACKOFF_MS = Number(process.env.GEMINI_BACKOFF_MS) || 800;
-/** Gap between Gemini calls — keep below pipeline budget so it cannot dominate a frame. */
-const MIN_CALL_GAP_MS = Number(process.env.GEMINI_MIN_GAP_MS) || 1500;
+const BASE_BACKOFF_MS = Number(process.env.GEMINI_BACKOFF_MS) || 600;
+/** Gap between Gemini calls — keep short so phone demos aren't blocked. */
+const MIN_CALL_GAP_MS = Number(process.env.GEMINI_MIN_GAP_MS) || 800;
 
 let lastGeminiCallAt = 0;
 
@@ -139,6 +141,8 @@ async function callGeminiOnce(base64Image, model, apiKey, signal) {
           temperature: 0.1,
           maxOutputTokens: 1024,
           responseMimeType: 'application/json',
+          // Gemini 3.x Flash defaults to "thinking" which blows the phone latency budget.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     }
@@ -191,7 +195,8 @@ export function buildScanTimeoutFrame(latencyMs) {
   return validateAndSanitizeFrame(
     {
       ...MOCK_TIMEOUT_SAFE_FRAME,
-      hazardDescription: 'Scan timeout. Stop and hold position.',
+      hazardDescription:
+        'Vision service slow. Hold still and try again.',
     },
     latencyMs
   );
@@ -199,21 +204,23 @@ export function buildScanTimeoutFrame(latencyMs) {
 
 /**
  * Live Gemini Flash with retries / backoff / model fallbacks.
- * If total network time exceeds NETWORK_TIMEOUT_FALLBACK_MS (3000), returns timeout frame.
+ * If total network time exceeds NETWORK_TIMEOUT_FALLBACK_MS, returns timeout frame.
  */
 export async function processFrameLive(base64Image) {
   const API_KEY = requireGeminiApiKey();
-  const startTime = Date.now();
   const timeoutMs = readTimeoutMs();
   const models = getGeminiModelCandidates();
   let lastError = null;
 
+  // Rate-limit wait must NOT count against the network budget (otherwise
+  // back-to-back captures "timeout" even with a still photo).
   await respectMinCallGap();
-  lastGeminiCallAt = Date.now();
+  const startTime = Date.now();
+  lastGeminiCallAt = startTime;
 
   let modelIndex = 0;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // PRD: if already past 3000ms network budget, stop and return safe frame
+    // If already past network budget, stop and return safe frame
     if (Date.now() - startTime > NETWORK_TIMEOUT_FALLBACK_MS) {
       return buildScanTimeoutFrame(Date.now() - startTime);
     }
@@ -267,12 +274,17 @@ export async function processFrameLive(base64Image) {
         break;
       }
 
-      if (err?.status === 404 || err?.status === 503) {
+      // On 404/429/503, flip to next model immediately (don't burn budget on same model)
+      if (err?.status === 404 || err?.status === 503 || err?.status === 429) {
         modelIndex = Math.min(modelIndex + 1, models.length - 1);
       }
 
-      const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
-      await sleep(backoff);
+      const room = NETWORK_TIMEOUT_FALLBACK_MS - (Date.now() - startTime);
+      if (room < 800) break;
+
+      // Short pause only — long exponential backoff caused phone "vision slow" timeouts
+      const pause = err?.status === 429 ? 400 : Math.min(BASE_BACKOFF_MS, room - 500);
+      await sleep(Math.max(200, pause));
     }
   }
 
@@ -286,15 +298,16 @@ export async function processFrameLive(base64Image) {
     return buildScanTimeoutFrame(latencyMs);
   }
 
-  // Never put API keys, URLs, or raw error text into speakable hazard copy
+  const quotaHit = lastError?.status === 429;
   return validateAndSanitizeFrame(
     {
       objects: [],
       text: [],
       floorDetected: false,
       immediateHazard: true,
-      hazardDescription:
-        'Perception temporarily unavailable. Hold position.',
+      hazardDescription: quotaHit
+        ? 'Vision quota reached. Wait one minute then retry.'
+        : 'Perception temporarily unavailable. Hold position.',
     },
     latencyMs
   );

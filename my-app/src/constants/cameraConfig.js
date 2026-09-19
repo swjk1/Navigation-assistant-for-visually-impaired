@@ -18,5 +18,8 @@ export const JPEG_QUALITY_CANDIDATES = [0.3, 0.4, 0.5];
 /** End-to-end perception budget (ms) */
 export const PIPELINE_BUDGET_MS = 1500;
 
-/** If network work exceeds this, return deterministic timeout frame (PRD Step 4) */
-export const NETWORK_TIMEOUT_FALLBACK_MS = 3000;
+/** If network work exceeds this, return deterministic timeout frame (PRD Step 4).
+ *  Default 6000ms — free-tier Gemini often exceeds the PRD's 3000ms on phone.
+ *  Override with NETWORK_TIMEOUT_FALLBACK_MS in .env if needed. */
+export const NETWORK_TIMEOUT_FALLBACK_MS =
+  Number(process.env.NETWORK_TIMEOUT_FALLBACK_MS) || 12000;

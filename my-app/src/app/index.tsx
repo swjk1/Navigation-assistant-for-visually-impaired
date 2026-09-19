@@ -1,5 +1,5 @@
 import * as Device from 'expo-device';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -44,16 +44,17 @@ export default function HomeScreen() {
           get started
         </ThemedText>
 
-        <Link href="/perception-harness" asChild>
-          <Pressable style={styles.harnessButton}>
-            <ThemedText type="smallBold" style={styles.harnessButtonText}>
-              Open perception harness
-            </ThemedText>
-            <ThemedText type="small" style={styles.harnessHint}>
-              /perception-harness — camera + capture test
-            </ThemedText>
-          </Pressable>
-        </Link>
+        <Pressable
+          style={styles.harnessButton}
+          onPress={() => router.push('/perception-harness')}
+        >
+          <ThemedText type="smallBold" style={styles.harnessButtonText}>
+            Open perception harness
+          </ThemedText>
+          <ThemedText type="small" style={styles.harnessHint}>
+            Or tap the Harness tab below
+          </ThemedText>
+        </Pressable>
 
         <ThemedView type="backgroundElement" style={styles.stepContainer}>
           <HintRow

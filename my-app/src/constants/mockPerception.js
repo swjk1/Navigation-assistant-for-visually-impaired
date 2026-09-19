@@ -108,8 +108,9 @@ export const MOCK_TIMEOUT_SAFE_FRAME = {
   text: [],
   floorDetected: false,
   immediateHazard: true,
-  /** PRD Step 4 deterministic fallback copy (safe for Person 3 TTS) */
-  hazardDescription: 'Scan timeout. Stop and hold position.',
+  /** Safe for Person 3 TTS — not a scene hazard; cloud vision was too slow */
+  hazardDescription:
+    'Vision service slow. Hold still and try again.',
 };
 
 function clone(obj) {

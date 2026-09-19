@@ -2,8 +2,8 @@
   "step": 5,
   "name": "final_contract_person2_handover",
   "status": "contract_verified",
-  "timestamp": 1789839507036,
-  "timedAt": "2026-09-19T17:38:27.037Z",
+  "timestamp": 1789841844091,
+  "timedAt": "2026-09-19T18:17:24.091Z",
   "prdReviewQuestion": "Can Person 2 consume getLatestPerceptionFrame() with zero schema errors?",
   "reviewAnswers": {
     "getLatestPerceptionFrameExported": true,
@@ -105,7 +105,7 @@
   },
   "examples": {
     "hallwayFrame": {
-      "timestamp": 1789839507035,
+      "timestamp": 1789841844090,
       "latencyMs": 0,
       "objects": [
         {
@@ -163,7 +163,7 @@
     },
     "hallwayHandoff": {
       "frame": {
-        "timestamp": 1789839507037,
+        "timestamp": 1789841844092,
         "latencyMs": 0,
         "objects": [
           {
@@ -261,8 +261,8 @@
       "Stairs at 12 o'clock, about 2.0 meters."
     ],
     "latestAfterAnalyze": {
-      "timestamp": 1789839507036,
-      "latencyMs": 0,
+      "timestamp": 1789841844091,
+      "latencyMs": 1,
       "objects": [
         {
           "label": "door",

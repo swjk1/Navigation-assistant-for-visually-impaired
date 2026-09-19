@@ -142,7 +142,8 @@ for (let i = 0; i < RUNS; i++) {
 const timeoutFrame = buildScanTimeoutFrame(NETWORK_TIMEOUT_FALLBACK_MS + 120);
 const timeoutOk =
   timeoutFrame.immediateHazard === true &&
-  timeoutFrame.hazardDescription === 'Scan timeout. Stop and hold position.' &&
+  timeoutFrame.hazardDescription ===
+    'Vision service slow. Hold still and try again.' &&
   Array.isArray(timeoutFrame.objects) &&
   timeoutFrame.objects.length === 0;
 
@@ -178,7 +179,7 @@ const snapshot = {
     maxUnder1500ms: wallSummary.maxMs <= PIPELINE_BUDGET_MS,
     timeoutFallbackWorks: timeoutOk,
     timeoutMessage:
-      'Scan timeout. Stop and hold position.',
+      'Vision service slow. Hold still and try again.',
     networkFallbackThresholdMs: NETWORK_TIMEOUT_FALLBACK_MS,
   },
   budgets: {
