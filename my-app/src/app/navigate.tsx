@@ -1,3 +1,4 @@
+import { useCameraPermissions } from 'expo-camera';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,8 +14,9 @@ import { perceptionHazard, toSemanticObservations } from '@/perception/perceptio
 import type { NavigationCommand } from '@/types/NavigationCommand';
 import type { PerceptionFrame } from '@/types/perception';
 
+import { analyzeAndStore, getLatestPerceptionFrame } from '@/index.js';
+import IndoorPerception, { PerceptionArView } from '../../modules/indoor-perception';
 import NavigationNative, {
-  NavigationArView,
   type NavigationSnapshot,
   type NavigationTarget,
 } from '../../modules/navigation-native';
@@ -31,6 +33,12 @@ import NavigationNative, {
  * someone's screen.
  */
 
+/**
+ * How often to run the perception pipeline. Much slower than the navigation loop on purpose:
+ * YOLO + OCR + a Gemini call take a while, and signs do not move.
+ */
+const PERCEPTION_INTERVAL_MS = 2500;
+
 /** Don't repeat an identical instruction; it makes the guidance unlistenable. */
 function isSameInstruction(a: NavigationCommand | null, b: NavigationCommand): boolean {
   if (!a) return false;
@@ -46,13 +54,19 @@ export default function NavigateScreen() {
   const [snapshot, setSnapshot] = useState<NavigationSnapshot | null>(null);
   const [spoken, setSpoken] = useState<string>('—');
   const [error, setError] = useState<string | null>(null);
+  const [perceptionNote, setPerceptionNote] = useState('idle');
+  const [permission, requestPermission] = useCameraPermissions();
   const lastCommand = useRef<NavigationCommand | null>(null);
+  const perceptionBusy = useRef(false);
 
   const supported = Platform.OS === 'android';
 
   useEffect(() => {
     if (!supported) return;
     NavigationNative.setDebugEnabled(true);
+    // The perception module owns the ARCore session (it mounts PerceptionArView below), so the
+    // navigation module must not open one of its own. ARCore allows exactly one.
+    NavigationNative.setExternalFrameSource(true);
 
     const subscription = subscribeNavigationCommands((command, next) => {
       setSnapshot(next);
@@ -77,6 +91,10 @@ export default function NavigateScreen() {
     async (target: NavigationTarget) => {
       setError(null);
       try {
+        if (!permission?.granted) {
+          const granted = await requestPermission();
+          if (!granted.granted) throw new Error('Camera permission is required');
+        }
         const support = NavigationNative.isSupported();
         if (!support.arCoreSupported) throw new Error(support.reason ?? 'ARCore not supported');
         if (!support.depthSupported) throw new Error('This device has no ARCore Depth support');
@@ -86,7 +104,7 @@ export default function NavigateScreen() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    []
+    [permission?.granted, requestPermission]
   );
 
   const stop = useCallback(async () => {
@@ -94,10 +112,6 @@ export default function NavigateScreen() {
     setRunning(false);
   }, []);
 
-  /**
-   * Perception hand-off. Call this from whatever drives the camera pipeline; it is exported as a
-   * callback rather than wired to a timer here so the capture cadence stays Person 1's decision.
-   */
   const onPerceptionFrame = useCallback((frame: PerceptionFrame) => {
     const observations = toSemanticObservations(frame);
     if (observations.length > 0) {
@@ -114,7 +128,48 @@ export default function NavigateScreen() {
       });
     }
   }, []);
-  void onPerceptionFrame;
+
+  /**
+   * Drives the perception pipeline off the SAME ARCore session navigation is using.
+   *
+   *   captureFrame() -> analyzeAndStore() -> PerceptionFrame -> SemanticObservation[] -> engine
+   *
+   * Guarded by `perceptionBusy` because a Gemini round trip can outlast the interval; queuing
+   * them would pile up stale frames behind a walking user.
+   */
+  useEffect(() => {
+    if (!supported || !running || !permission?.granted) return;
+
+    let cancelled = false;
+    const timer = setInterval(() => {
+      if (perceptionBusy.current) return;
+      perceptionBusy.current = true;
+      void (async () => {
+        try {
+          const captured = await IndoorPerception.captureFrame();
+          await analyzeAndStore(captured.base64);
+          const frame = getLatestPerceptionFrame() as PerceptionFrame | null;
+          if (frame && !cancelled) {
+            onPerceptionFrame(frame);
+            setPerceptionNote(
+              `${frame.objects.length} objects, ${frame.text.length} signs`
+            );
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setPerceptionNote(e instanceof Error ? e.message : String(e));
+          }
+        } finally {
+          perceptionBusy.current = false;
+        }
+      })();
+    }, PERCEPTION_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [supported, running, permission?.granted, onPerceptionFrame]);
 
   if (!supported) {
     return (
@@ -127,8 +182,9 @@ export default function NavigateScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* ARCore produces frames only while this is mounted. Do not unmount while guiding. */}
-      <NavigationArView style={styles.arView} debug />
+      {/* The app's ONE ARCore session. Navigation gets pose + depth from it, perception gets
+          the RGB image. Do not unmount while guiding. */}
+      <PerceptionArView style={styles.arView} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Navigation</Text>
@@ -139,6 +195,11 @@ export default function NavigateScreen() {
           {snapshot?.stopReason ? ` · ${snapshot.stopReason}` : ''}
         </Text>
         <Text style={styles.muted}>spoken: {spoken}</Text>
+        <Text style={styles.mutedSmall}>perception: {perceptionNote}</Text>
+
+        {permission?.granted ? null : (
+          <Button label="Grant camera permission" onPress={() => void requestPermission()} />
+        )}
 
         <View style={styles.buttons}>
           {running ? (

@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from 'expo-modules-core';
+import { NativeModule, requireOptionalNativeModule } from 'expo-modules-core';
 
 export type NativeDetectedObject = {
   label: string;
@@ -75,7 +75,59 @@ type IndoorPerceptionModuleNative = NativeModule & {
   ): Promise<NativePerceptionResult>;
 };
 
+/**
+ * Optional: missing in Expo Go. Present only after `npx expo run:android`
+ * (dev build with the indoor-perception native module).
+ */
+const NativeIndoorPerception =
+  requireOptionalNativeModule<IndoorPerceptionModuleNative>('IndoorPerception');
+
+export const isNativePerceptionAvailable = Boolean(NativeIndoorPerception);
+
+const StubIndoorPerception: IndoorPerceptionModuleNative = {
+  async getStatus() {
+    return {
+      platform: 'unavailable',
+      modelLoaded: false,
+      modelAssetName: 'yolo26n_int8.tflite',
+    };
+  },
+  async ensureModelLoaded() {
+    return false;
+  },
+  async captureFrame(): Promise<CapturedArFrame> {
+    // Without the native module there is no ARCore session, so there are no frames to give.
+    // Failing loudly beats returning an empty image that silently produces no detections.
+    throw new Error(
+      'IndoorPerception native module not in this build, so the camera is not running. ' +
+        'Use npx expo run:android (Expo Go unsupported).'
+    );
+  },
+  getCameraStatus(): ArCameraStatus {
+    return {
+      sessionActive: false,
+      depthSupported: false,
+      lastError: 'IndoorPerception native module not in this build',
+    };
+  },
+  async analyzeFrame() {
+    return {
+      objects: [],
+      text: [],
+      yoloMs: 0,
+      ocrMs: 0,
+      totalMs: 0,
+      modelLoaded: false,
+      modelPath: null,
+      yoloError:
+        'IndoorPerception native module not in this build. Use npx expo run:android (Expo Go unsupported).',
+      ocrError: null,
+      platform: 'unavailable',
+    };
+  },
+} as unknown as IndoorPerceptionModuleNative;
+
 const IndoorPerceptionModule =
-  requireNativeModule<IndoorPerceptionModuleNative>('IndoorPerception');
+  NativeIndoorPerception ?? StubIndoorPerception;
 
 export default IndoorPerceptionModule;

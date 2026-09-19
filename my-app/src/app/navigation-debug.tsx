@@ -26,6 +26,9 @@ export default function NavigationDebugScreen() {
   useEffect(() => {
     if (!available) return;
     try {
+      // Engine-only screen: this module owns the ARCore session here. The flag is global, so it
+      // must be reset in case /navigate handed ownership to the perception module earlier.
+      NavigationNative.setExternalFrameSource(false);
       setSupport(NavigationNative.isSupported());
       NavigationNative.setDebugEnabled(true);
     } catch (e) {

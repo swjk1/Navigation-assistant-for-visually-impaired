@@ -2,8 +2,8 @@
   "step": 1,
   "name": "hardware_camera_verification",
   "status": "offline_timed_run_phone_pending",
-  "timestamp": 1789839185244,
-  "timedAt": "2026-09-19T17:33:05.244Z",
+  "timestamp": 1789841841225,
+  "timedAt": "2026-09-19T18:17:21.225Z",
   "note": "Timed offline utility path only. Live CameraView captureLatencyMs still requires phone (/perception-harness).",
   "permissionGranted": false,
   "platform": "offline-node",
@@ -38,120 +38,120 @@
     "samples": [
       {
         "run": 1,
-        "stripPrefixMs": 0.064,
-        "estimateBytesMs": 0.069,
-        "buildSnapshotMs": 0.197,
-        "utilityPipelineMs": 0.355,
+        "stripPrefixMs": 0.063,
+        "estimateBytesMs": 0.038,
+        "buildSnapshotMs": 0.169,
+        "utilityPipelineMs": 0.296,
         "estimatedBytes": 54000
       },
       {
         "run": 2,
-        "stripPrefixMs": 0.693,
+        "stripPrefixMs": 0.621,
         "estimateBytesMs": 0.034,
-        "buildSnapshotMs": 0.053,
-        "utilityPipelineMs": 0.797,
+        "buildSnapshotMs": 0.052,
+        "utilityPipelineMs": 0.722,
         "estimatedBytes": 54000
       },
       {
         "run": 3,
-        "stripPrefixMs": 0.037,
+        "stripPrefixMs": 0.033,
         "estimateBytesMs": 0.059,
         "buildSnapshotMs": 0.014,
-        "utilityPipelineMs": 0.135,
+        "utilityPipelineMs": 0.132,
         "estimatedBytes": 54000
       },
       {
         "run": 4,
-        "stripPrefixMs": 0.064,
-        "estimateBytesMs": 0.031,
-        "buildSnapshotMs": 0.011,
-        "utilityPipelineMs": 0.116,
+        "stripPrefixMs": 0.054,
+        "estimateBytesMs": 0.06,
+        "buildSnapshotMs": 0.059,
+        "utilityPipelineMs": 0.211,
         "estimatedBytes": 54000
       },
       {
         "run": 5,
-        "stripPrefixMs": 0.046,
-        "estimateBytesMs": 0.03,
-        "buildSnapshotMs": 0.01,
-        "utilityPipelineMs": 0.098,
+        "stripPrefixMs": 0.057,
+        "estimateBytesMs": 0.039,
+        "buildSnapshotMs": 0.041,
+        "utilityPipelineMs": 0.197,
         "estimatedBytes": 54000
       },
       {
         "run": 6,
-        "stripPrefixMs": 0.038,
-        "estimateBytesMs": 0.029,
-        "buildSnapshotMs": 0.009,
-        "utilityPipelineMs": 0.082,
+        "stripPrefixMs": 0.078,
+        "estimateBytesMs": 0.083,
+        "buildSnapshotMs": 0.048,
+        "utilityPipelineMs": 0.251,
         "estimatedBytes": 54000
       },
       {
         "run": 7,
-        "stripPrefixMs": 0.659,
-        "estimateBytesMs": 0.043,
-        "buildSnapshotMs": 0.021,
-        "utilityPipelineMs": 0.741,
+        "stripPrefixMs": 0.585,
+        "estimateBytesMs": 0.076,
+        "buildSnapshotMs": 0.019,
+        "utilityPipelineMs": 0.7,
         "estimatedBytes": 54000
       },
       {
         "run": 8,
-        "stripPrefixMs": 0.008,
-        "estimateBytesMs": 0.101,
-        "buildSnapshotMs": 0.014,
-        "utilityPipelineMs": 0.13,
+        "stripPrefixMs": 0.009,
+        "estimateBytesMs": 0.035,
+        "buildSnapshotMs": 0.023,
+        "utilityPipelineMs": 0.076,
         "estimatedBytes": 54000
       },
       {
         "run": 9,
         "stripPrefixMs": 0.007,
-        "estimateBytesMs": 0.061,
-        "buildSnapshotMs": 0.013,
-        "utilityPipelineMs": 0.086,
+        "estimateBytesMs": 0.066,
+        "buildSnapshotMs": 0.108,
+        "utilityPipelineMs": 0.214,
         "estimatedBytes": 54000
       },
       {
         "run": 10,
-        "stripPrefixMs": 0.006,
-        "estimateBytesMs": 0.032,
-        "buildSnapshotMs": 0.024,
-        "utilityPipelineMs": 0.068,
+        "stripPrefixMs": 0.012,
+        "estimateBytesMs": 0.033,
+        "buildSnapshotMs": 0.025,
+        "utilityPipelineMs": 0.078,
         "estimatedBytes": 54000
       }
     ],
     "summary": {
       "envSoftCheck": {
         "n": 1,
-        "avgMs": 0.098,
-        "p90Ms": 0.098,
-        "maxMs": 0.098,
-        "minMs": 0.098
+        "avgMs": 0.085,
+        "p90Ms": 0.085,
+        "maxMs": 0.085,
+        "minMs": 0.085
       },
       "stripPrefix": {
         "n": 10,
-        "avgMs": 0.162,
-        "p90Ms": 0.659,
-        "maxMs": 0.693,
-        "minMs": 0.006
+        "avgMs": 0.152,
+        "p90Ms": 0.585,
+        "maxMs": 0.621,
+        "minMs": 0.007
       },
       "estimateBytes": {
         "n": 10,
-        "avgMs": 0.049,
-        "p90Ms": 0.069,
-        "maxMs": 0.101,
-        "minMs": 0.029
+        "avgMs": 0.052,
+        "p90Ms": 0.076,
+        "maxMs": 0.083,
+        "minMs": 0.033
       },
       "buildSnapshot": {
         "n": 10,
-        "avgMs": 0.036,
-        "p90Ms": 0.053,
-        "maxMs": 0.197,
-        "minMs": 0.009
+        "avgMs": 0.056,
+        "p90Ms": 0.108,
+        "maxMs": 0.169,
+        "minMs": 0.014
       },
       "fullUtilityPipeline": {
         "n": 10,
-        "avgMs": 0.261,
-        "p90Ms": 0.741,
-        "maxMs": 0.797,
-        "minMs": 0.068
+        "avgMs": 0.288,
+        "p90Ms": 0.7,
+        "maxMs": 0.722,
+        "minMs": 0.076
       }
     }
   },

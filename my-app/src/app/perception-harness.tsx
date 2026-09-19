@@ -20,7 +20,6 @@ import { buildHardwareSnapshot } from '@/services/cameraService';
 import IndoorPerception, { PerceptionArView } from '../../modules/indoor-perception';
 import { hasValidGeminiApiKey } from '@/services/envCheck';
 import { getPerceptionMode } from '@/services/perceptionEngine';
-import { analyzeAndStore } from '@/index.js';
 
 export default function PerceptionHarnessScreen() {
   // Camera permission is still requested through expo-camera, but the camera itself is opened
@@ -51,12 +50,19 @@ export default function PerceptionHarnessScreen() {
       });
 
       let handoff = null;
+      let debug = null;
       try {
-        handoff = await analyzeAndStore(result.base64, {
+        // Prefer public API, but also keep raw hybrid meta for phone debugging
+        const { processHybridFrame } = await import('@/services/hybridPerception');
+        const frame = await processHybridFrame(result.base64, {
           allowLiveVlm: liveReady,
           vlmOnTop: false,
+          forceVlm: true, // Expo Go has no YOLO — always need Gemini
           useMockVlmOnGate: !liveReady,
         });
+        debug = frame.meta || null;
+        const { buildTeammateHandoff } = await import('@/services/teammateHandoff');
+        handoff = buildTeammateHandoff(frame);
       } catch (hybridErr) {
         handoff = {
           error: hybridErr instanceof Error ? hybridErr.message : String(hybridErr),
@@ -68,6 +74,7 @@ export default function PerceptionHarnessScreen() {
         mode: liveReady ? 'live' : 'mock-fallback',
         hardware,
         handoff,
+        debug,
       };
       setSnapshot(record);
       // eslint-disable-next-line no-console

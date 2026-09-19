@@ -2,10 +2,10 @@
   "step": "hybrid",
   "name": "yolo26_mlkit_gemini_gated",
   "status": "mock_verified",
-  "timestamp": 1789839170834,
-  "timedAt": "2026-09-19T17:32:50.834Z",
+  "timestamp": 1789841842112,
+  "timedAt": "2026-09-19T18:17:22.112Z",
   "geminiCalled": false,
-  "wallClockMs": 1.139,
+  "wallClockMs": 0.875,
   "reviewAnswers": {
     "yoloObjectsMerged": true,
     "mlkitOcrPrimary": true,
@@ -17,7 +17,7 @@
   },
   "failures": [],
   "frameConfident": {
-    "timestamp": 1789839170833,
+    "timestamp": 1789841842112,
     "latencyMs": 1,
     "objects": [
       {

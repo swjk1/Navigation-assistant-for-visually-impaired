@@ -3,10 +3,7 @@ import { CAMERA_CAPTURE_CONFIG } from '../constants/cameraConfig.js';
 /**
  * Low-latency camera frame harness for Expo CameraView / takePictureAsync.
  *
- * Target: 640×480 JPEG @ quality 0.4, capture ≤ 150 ms, payload < 150 KB.
- *
- * Usage (from a screen that holds a CameraView ref):
- *   const result = await captureFrame(cameraRef.current);
+ * Target: ~640×480 JPEG @ quality 0.4, capture ≤ 150 ms, payload < 150 KB.
  */
 
 /**
@@ -33,22 +30,10 @@ export function stripDataUriPrefix(base64OrDataUri) {
 
 /**
  * Capture a single compressed frame from an Expo CameraView instance.
+ * Always downscales to the PRD budget — Android otherwise returns full sensor size.
  *
- * @param {object} cameraRefValue - Result of cameraRef.current (must expose takePictureAsync)
+ * @param {object} cameraRefValue
  * @param {object} [overrides]
- * @param {number} [overrides.quality]
- * @param {number} [overrides.width]
- * @param {number} [overrides.height]
- * @returns {Promise<{
- *   base64: string,
- *   width: number,
- *   height: number,
- *   captureLatencyMs: number,
- *   estimatedBytes: number,
- *   mimeType: 'image/jpeg',
- *   withinLatencyBudget: boolean,
- *   withinSizeBudget: boolean,
- * }>}
  */
 export async function captureFrame(cameraRefValue, overrides = {}) {
   if (!cameraRefValue || typeof cameraRefValue.takePictureAsync !== 'function') {
@@ -61,49 +46,63 @@ export async function captureFrame(cameraRefValue, overrides = {}) {
   const width = overrides.width ?? CAMERA_CAPTURE_CONFIG.width;
   const height = overrides.height ?? CAMERA_CAPTURE_CONFIG.height;
 
-  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const start =
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
 
+  // skipProcessing:true returns full-res (~4K) and ignores quality — do NOT use it.
   const photo = await cameraRefValue.takePictureAsync({
     quality,
-    base64: true,
-    skipProcessing: true,
+    base64: false,
+    skipProcessing: false,
     exif: false,
-    // Hint preferred size when the native layer supports it
-    ...(width && height ? { imageSize: { width, height } } : {}),
   });
 
-  const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  if (!photo?.uri) {
+    throw new Error('captureFrame: takePictureAsync returned no image uri.');
+  }
+
+  // Lazy import so Node mock tests can use estimateBase64Bytes without Expo natives
+  const { SaveFormat, manipulateAsync } = await import(
+    'expo-image-manipulator'
+  );
+
+  const resized = await manipulateAsync(
+    photo.uri,
+    [{ resize: { width, height } }],
+    {
+      compress: quality,
+      format: SaveFormat.JPEG,
+      base64: true,
+    }
+  );
+
+  const end =
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
   const captureLatencyMs = Math.round(end - start);
 
-  const base64 = stripDataUriPrefix(photo?.base64 || '');
+  const base64 = stripDataUriPrefix(resized?.base64 || '');
   if (!base64) {
-    throw new Error('captureFrame: takePictureAsync returned no Base64 payload.');
+    throw new Error('captureFrame: resize returned no Base64 payload.');
   }
 
   const estimatedBytes = estimateBase64Bytes(base64);
 
   return {
     base64,
-    width: photo.width ?? width,
-    height: photo.height ?? height,
-    uri: photo.uri ?? null,
+    width: resized.width ?? width,
+    height: resized.height ?? height,
+    uri: resized.uri ?? photo.uri ?? null,
     captureLatencyMs,
     estimatedBytes,
     mimeType: 'image/jpeg',
-    withinLatencyBudget: captureLatencyMs <= CAMERA_CAPTURE_CONFIG.maxCaptureLatencyMs,
+    withinLatencyBudget:
+      captureLatencyMs <= CAMERA_CAPTURE_CONFIG.maxCaptureLatencyMs,
     withinSizeBudget: estimatedBytes <= CAMERA_CAPTURE_CONFIG.maxBase64Bytes,
   };
 }
 
 /**
  * Build a Step-1 hardware verification record (for snapshots).
- * Call after a successful captureFrame().
- *
- * @param {object} captureResult - return value of captureFrame
- * @param {object} [meta]
- * @param {boolean} [meta.permissionGranted]
- * @param {string} [meta.platform]
- * @returns {object}
  */
 export function buildHardwareSnapshot(captureResult, meta = {}) {
   return {
@@ -120,7 +119,6 @@ export function buildHardwareSnapshot(captureResult, meta = {}) {
       estimatedBytes: captureResult.estimatedBytes,
       mimeType: captureResult.mimeType,
       base64Length: captureResult.base64?.length ?? 0,
-      // Never persist full Base64 in committed snapshots — only a short prefix for validity
       base64Prefix: (captureResult.base64 || '').slice(0, 32),
       looksLikeBase64: /^[A-Za-z0-9+/]+=*$/.test(
         (captureResult.base64 || '').slice(0, 64).replace(/\s/g, '')

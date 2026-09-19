@@ -1,8 +1,8 @@
 {
   "step": 4,
   "name": "latency_efficiency_profile",
-  "timestamp": 1789839184307,
-  "timedAt": "2026-09-19T17:33:04.307Z",
+  "timestamp": 1789841843582,
+  "timedAt": "2026-09-19T18:17:23.582Z",
   "mode": "mock_profile",
   "reviewCheckpoint": "Is average round-trip latency under 1500ms? Does timeout gracefully fallback?",
   "reviewAnswers": {
@@ -10,28 +10,28 @@
     "p90Under1500ms": true,
     "maxUnder1500ms": true,
     "timeoutFallbackWorks": true,
-    "timeoutMessage": "Scan timeout. Stop and hold position.",
-    "networkFallbackThresholdMs": 3000
+    "timeoutMessage": "Vision service slow. Hold still and try again.",
+    "networkFallbackThresholdMs": 12000
   },
   "budgets": {
     "pipelineBudgetMs": 1500,
     "captureBudgetMs": 150,
     "maxBase64Bytes": 153600,
-    "networkTimeoutFallbackMs": 3000
+    "networkTimeoutFallbackMs": 12000
   },
   "timing": {
     "runs": 10,
     "wallClock": {
       "n": 10,
-      "avgMs": 0.188,
-      "p90Ms": 0.321,
-      "maxMs": 0.877,
-      "minMs": 0.04
+      "avgMs": 0.182,
+      "p90Ms": 0.278,
+      "maxMs": 0.871,
+      "minMs": 0.044
     },
     "samples": [
       {
         "run": 1,
-        "wallClockMs": 0.877,
+        "wallClockMs": 0.871,
         "frameLatencyMs": 1,
         "objectCount": 1,
         "textCount": 1,
@@ -40,7 +40,7 @@
       },
       {
         "run": 2,
-        "wallClockMs": 0.321,
+        "wallClockMs": 0.278,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -49,7 +49,7 @@
       },
       {
         "run": 3,
-        "wallClockMs": 0.085,
+        "wallClockMs": 0.081,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -58,7 +58,7 @@
       },
       {
         "run": 4,
-        "wallClockMs": 0.178,
+        "wallClockMs": 0.17,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -67,7 +67,7 @@
       },
       {
         "run": 5,
-        "wallClockMs": 0.078,
+        "wallClockMs": 0.072,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -76,7 +76,7 @@
       },
       {
         "run": 6,
-        "wallClockMs": 0.086,
+        "wallClockMs": 0.078,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -85,7 +85,7 @@
       },
       {
         "run": 7,
-        "wallClockMs": 0.04,
+        "wallClockMs": 0.044,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -94,7 +94,7 @@
       },
       {
         "run": 8,
-        "wallClockMs": 0.062,
+        "wallClockMs": 0.066,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -103,7 +103,7 @@
       },
       {
         "run": 9,
-        "wallClockMs": 0.054,
+        "wallClockMs": 0.051,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -112,7 +112,7 @@
       },
       {
         "run": 10,
-        "wallClockMs": 0.096,
+        "wallClockMs": 0.105,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -147,8 +147,8 @@
     "note": "Prefer 0.3 when OCR still readable on-device; keep 0.4 default; avoid 0.5 unless OCR fails."
   },
   "timeoutFallbackDemo": {
-    "latencyMs": 3120,
+    "latencyMs": 12120,
     "immediateHazard": true,
-    "hazardDescription": "Scan timeout. Stop and hold position."
+    "hazardDescription": "Vision service slow. Hold still and try again."
   }
 }

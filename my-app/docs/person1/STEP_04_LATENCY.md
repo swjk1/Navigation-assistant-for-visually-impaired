@@ -22,7 +22,7 @@ Keep the perception pipeline under the PRD latency budget and shrink payloads wh
 
 Timeout copy (exact):
 
-> Scan timeout. Stop and hold position.
+> Vision service slow. Hold still and try again.
 
 ## What was delivered
 

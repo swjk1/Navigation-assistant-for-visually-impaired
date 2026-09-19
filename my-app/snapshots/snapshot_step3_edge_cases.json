@@ -1,8 +1,8 @@
 {
   "step": 3,
   "name": "edge_case_efficiency_suite",
-  "timestamp": 1789839183812,
-  "timedAt": "2026-09-19T17:33:03.812Z",
+  "timestamp": 1789841843071,
+  "timedAt": "2026-09-19T18:17:23.071Z",
   "mode": "mock",
   "reviewCheckpoint": "Did hazard alerts fire on stairs and trash cans? Did OCR pick up room numbers?",
   "reviewAnswers": {
@@ -14,10 +14,10 @@
   },
   "performance": {
     "n": 5,
-    "avgMs": 0.452,
-    "p90Ms": 1.466,
-    "maxMs": 1.466,
-    "minMs": 0.145
+    "avgMs": 0.52,
+    "p90Ms": 1.565,
+    "maxMs": 1.565,
+    "minMs": 0.205
   },
   "summary": {
     "passed": 5,
@@ -28,15 +28,15 @@
       "testId": "EC-01",
       "name": "Descending Stairs (Drop Hazard)",
       "passed": true,
-      "latencyMs": 1,
-      "wallClockMs": 1.466,
+      "latencyMs": 2,
+      "wallClockMs": 1.565,
       "fixturePresent": true,
       "failures": [],
       "warnings": [],
       "source": "fixture+mock:edge_stairs_down.jpg",
       "frame": {
-        "timestamp": 1789839183810,
-        "latencyMs": 1,
+        "timestamp": 1789841843068,
+        "latencyMs": 2,
         "objects": [
           {
             "label": "stairs",
@@ -62,13 +62,13 @@
       "name": "Obstacle in Path (Trashcan / Cart)",
       "passed": true,
       "latencyMs": 0,
-      "wallClockMs": 0.237,
+      "wallClockMs": 0.321,
       "fixturePresent": true,
       "failures": [],
       "warnings": [],
       "source": "fixture+mock:edge_trashcan.jpg",
       "frame": {
-        "timestamp": 1789839183811,
+        "timestamp": 1789841843069,
         "latencyMs": 0,
         "objects": [
           {
@@ -95,13 +95,13 @@
       "name": "Room Sign OCR Detection",
       "passed": true,
       "latencyMs": 0,
-      "wallClockMs": 0.235,
+      "wallClockMs": 0.29,
       "fixturePresent": true,
       "failures": [],
       "warnings": [],
       "source": "fixture+mock:edge_room_204.jpg",
       "frame": {
-        "timestamp": 1789839183811,
+        "timestamp": 1789841843070,
         "latencyMs": 0,
         "objects": [
           {
@@ -163,13 +163,13 @@
       "name": "Clear Hallway (No Hazards)",
       "passed": true,
       "latencyMs": 0,
-      "wallClockMs": 0.178,
+      "wallClockMs": 0.217,
       "fixturePresent": true,
       "failures": [],
       "warnings": [],
       "source": "fixture+mock:edge_clear_hallway.jpg",
       "frame": {
-        "timestamp": 1789839183812,
+        "timestamp": 1789841843070,
         "latencyMs": 0,
         "objects": [
           {
@@ -208,13 +208,13 @@
       "name": "High Motion Blur / Low Contrast",
       "passed": true,
       "latencyMs": 0,
-      "wallClockMs": 0.145,
+      "wallClockMs": 0.205,
       "fixturePresent": true,
       "failures": [],
       "warnings": [],
       "source": "fixture+mock:edge_blurry_motion.jpg",
       "frame": {
-        "timestamp": 1789839183812,
+        "timestamp": 1789841843071,
         "latencyMs": 0,
         "objects": [],
         "text": [],
