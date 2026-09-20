@@ -85,29 +85,36 @@ class ArCoreFrameProcessor(
      * which is also how an ARKit plane anchor will be delivered later.
      */
     private fun estimateFloorHint(session: Session, deviceY: Float): Pair<Float, Float>? {
-        var bestY: Float? = null
-        var bestExtent = 0f
+        var lowestY: Float? = null
+        var lowestExtent = 0f
         for (plane in session.getAllTrackables(Plane::class.java)) {
             if (plane.trackingState != TrackingState.TRACKING) continue
             if (plane.type != Plane.Type.HORIZONTAL_UPWARD_FACING) continue
             if (plane.subsumedBy != null) continue
 
+            val extent = plane.extentX * plane.extentZ
+            if (extent < MIN_FLOOR_PLANE_AREA) continue
+
             val center = plane.centerPose
             val canonical: Vec3 = poseProvider.toCanonicalPoint(center.tx(), center.ty(), center.tz())
             val drop = deviceY - canonical.y
-            // The floor is below the phone, but not by an implausible amount. A table top or a
-            // stair landing sits in the same band, so extent is used to pick the dominant surface.
-            if (drop < 0.6f || drop > 2.6f) continue
+            if (drop < MIN_FLOOR_DROP || drop > MAX_FLOOR_DROP) continue
 
-            val extent = plane.extentX * plane.extentZ
-            if (extent > bestExtent) {
-                bestExtent = extent
-                bestY = canonical.y
+            // LOWEST, not largest. A desk, a table or a bed is a horizontal upward-facing plane
+            // sitting in the same band as the floor, and near the start of a session it is often
+            // the biggest one ARCore has tracked - it is close, well lit and textured. Picking by
+            // area therefore hands back the desk height, and everything beneath it (the real
+            // floor, chairs, bags) then classifies as "below floor" and is integrated as free
+            // space. The floor is by definition the lowest surface you can stand on.
+            if (lowestY == null || canonical.y < lowestY) {
+                lowestY = canonical.y
+                lowestExtent = extent
             }
         }
-        val y = bestY ?: return null
-        // A 1 m^2 patch is weak evidence; 6 m^2 of tracked floor is strong.
-        val confidence = min(1f, 0.35f + bestExtent / 6f)
+        val y = lowestY ?: return null
+        // Capped below 1.0 on purpose: a plane is a hint, and the depth-based estimator must stay
+        // able to pull the estimate down if this is still a table.
+        val confidence = min(MAX_FLOOR_HINT_CONFIDENCE, 0.4f + lowestExtent / 8f)
         return y to confidence
     }
 
@@ -117,4 +124,14 @@ class ArCoreFrameProcessor(
         normalizedY: Float,
         timestampNanos: Long?,
     ): Vec3? = depthProvider.resolveWorldPosition(normalizedX, normalizedY, timestampNanos)
+
+    private companion object {
+        /** Ignore specks: a real floor patch ARCore is tracking is at least this many m^2. */
+        const val MIN_FLOOR_PLANE_AREA = 0.6f
+        /** A held phone is at least this far above the floor. */
+        const val MIN_FLOOR_DROP = 0.7f
+        const val MAX_FLOOR_DROP = 2.6f
+        /** A plane never fully overrides depth-based floor estimation. */
+        const val MAX_FLOOR_HINT_CONFIDENCE = 0.8f
+    }
 }

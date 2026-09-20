@@ -344,11 +344,12 @@ score = weightInformation * informationGain     (+1.5)
 
 Selection adds two behaviours that matter more than the weights:
 
-- **Hysteresis** — frontier ids are regenerated every detection pass, so the manager tracks its
-  choice by *position* and only switches when a rival wins by `frontierSwitchHysteresis` (0.8).
-  Without it the user gets "left, right, left" halfway down a corridor.
+- **Waypoint commitment** — once selected, the world waypoint stays fixed despite frontier
+  splits, merges, or score changes. It is released on arrival, blockage, repeated route failure,
+  or 20 seconds without approaching by at least 0.3 m. Progress renews this timeout.
 - **Blacklisting** — after `frontierFailuresBeforeBlacklist` (3) failed planning attempts a
-  frontier is abandoned.
+  frontier is abandoned. Counted failures are spaced at least one second apart, and a successful
+  route resets the consecutive-failure count. Blocked or stalled waypoints are also blacklisted.
 
 Clusters smaller than `minFrontierCells` (6) are rejected as depth speckle. The grid's border ring
 is excluded from detection: out-of-bounds reads report UNKNOWN, so including it would ring the

@@ -367,7 +367,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         // ---------------------------------------------------------- 8. local path
         val path = refreshPath(frame.pose, inflatedGrid, goal, nowMillis)
         if (path.size < 2) {
-            exploration.reportPlanningFailure()
+            exploration.reportPlanningFailure(nowMillis)
             recordTargetRouteOutcome(succeeded = false, nowMillis = nowMillis)
             stateMachine.on(NavigationEvent.RouteUnavailable)
             return finish(
@@ -428,6 +428,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             when {
                 // Overhead structure: tells us nothing about the floor plan under it.
                 height > maxHeight -> continue
+                // Below the floor we think we have: the estimate is wrong, so this point says
+                // nothing trustworthy about what is walkable. Dropping it is the safe failure.
+                height < -config.floorBandBelowMeters -> continue
                 // Floor / low ground: the ray crossed free space and ends on walkable ground.
                 height < minHeight -> grid.integrateRay(origin, Vec2(px, pz), endpointOccupied = false)
                 // Body-height obstacle.

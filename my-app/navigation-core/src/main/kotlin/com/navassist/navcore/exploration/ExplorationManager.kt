@@ -21,9 +21,8 @@ data class ExplorationResult(
  *
  * Three behaviours matter more than the scoring maths:
  *
- *  1. HYSTERESIS. Frontier ids are regenerated on every detection pass, so the manager tracks its
- *     choice by POSITION and only switches when a rival beats the current choice by a margin.
- *     Without this the user gets "left, right, left, right" halfway down a corridor.
+ *  1. COMMITMENT. Keep a fixed world waypoint despite frontier splits, merges and score changes.
+ *     Release it on arrival, blockage, repeated route failure or a progress timeout.
  *
  *  2. BLACKLISTING. A frontier the planner repeatedly fails to reach is abandoned, permanently
  *     enough that the engine stops re-selecting it every second.
@@ -41,9 +40,10 @@ class ExplorationManager(
 
     private val blacklist = ArrayList<Blacklisted>()
 
-    private var selectedId: String? = null
     private var selectedCentroid: Vec2? = null
-    private var selectedAtMillis: Long = 0
+    private var lastProgressMillis: Long = 0
+    private var bestDistanceMeters = Float.POSITIVE_INFINITY
+    private var lastFailureMillis: Long? = null
 
     var frontiers: List<Frontier> = emptyList()
         private set
@@ -53,8 +53,7 @@ class ExplorationManager(
 
     fun reset() {
         blacklist.clear()
-        selectedId = null
-        selectedCentroid = null
+        clearSelection()
         frontiers = emptyList()
         selected = null
         detector.resetIds()
@@ -62,9 +61,10 @@ class ExplorationManager(
 
     /** Drops the current choice without blacklisting it (e.g. the destination was just found). */
     fun clearSelection() {
-        selectedId = null
         selectedCentroid = null
-        selectedAtMillis = 0
+        lastProgressMillis = 0
+        bestDistanceMeters = Float.POSITIVE_INFINITY
+        lastFailureMillis = null
         selected = null
     }
 
@@ -81,58 +81,36 @@ class ExplorationManager(
         val scored = scorer.score(detected, userPose, target, semantics, topology, inflated, nowMillis)
         frontiers = scored
 
-        if (scored.isEmpty()) {
-            selected = null
-            selectedId = null
-            selectedCentroid = null
-            return ExplorationResult(scored, null, exhausted = true)
-        }
-
-        val best = scored.first()
-        val incumbent = matchIncumbent(scored)
-        val committed = incumbent != null &&
-            nowMillis - selectedAtMillis < config.frontierCommitMillis
-
-        val choice = when {
-            incumbent == null -> best
-            // Reached the current frontier: it is no longer worth holding on to.
-            incumbent.distanceMeters <= config.frontierReachedMeters -> best
-            // Inside the commitment window the current choice stands, whatever the scores say.
-            // Without this the user is sent left, then right, then left as the frontier set
-            // churns underneath them, and never covers any ground.
-            committed -> incumbent
-            best.score > incumbent.score + config.frontierSwitchHysteresis -> best
-            else -> incumbent
-        }
-
-        if (choice.id != selectedId) selectedAtMillis = nowMillis
-        selectedId = choice.id
-        selectedCentroid = choice.centroid
-        selected = choice
-        return ExplorationResult(scored, choice, exhausted = false)
-    }
-
-    /**
-     * Re-identifies the previously selected frontier in the freshly detected set. Detection is
-     * stateless, so identity has to come from geometry.
-     */
-    private fun matchIncumbent(scored: List<Frontier>): Frontier? {
-        val previousCentroid = selectedCentroid ?: return null
-        val previousId = selectedId ?: return null
-        // Generous on purpose: centroids shift as the map fills in, and losing track of the
-        // incumbent means a fresh winner is picked - which is the churn this is here to prevent.
-        val tolerance = config.frontierReachedMeters * 4f
-        var best: Frontier? = null
-        var bestDistance = tolerance * tolerance
-        for (frontier in scored) {
-            val d = frontier.centroid.distanceSquaredTo(previousCentroid)
-            if (d <= bestDistance) {
-                bestDistance = d
-                best = frontier
+        // Commit to a WORLD waypoint, not a regenerated cluster or its moving centroid.
+        // A sweep can split, merge or erase frontier clusters without invalidating the route.
+        val previous = selected
+        if (previous != null) {
+            val distance = previous.centroid.distanceTo(userPose.position2D)
+            if (distance < bestDistanceMeters - config.frontierProgressMeters) {
+                bestDistanceMeters = distance
+                lastProgressMillis = nowMillis
             }
+            val cell = inflated.worldToGrid(previous.centroid)
+            val reached = distance <= config.frontierReachedMeters
+            val blocked = inflated.isBlocked(cell)
+            val stalled = nowMillis - lastProgressMillis >= config.frontierNoProgressMillis
+            if (!reached && !blocked && !stalled) {
+                selected = previous.copy(centroidCell = cell, distanceMeters = distance)
+                return ExplorationResult(scored, selected, exhausted = false)
+            }
+            if (blocked || stalled) blacklistArea(previous.centroid)
+            clearSelection()
         }
-        // Keep the original id so the JS layer sees a stable selectedFrontierId while walking.
-        return best?.copy(id = previousId)
+
+        val choice = scored.firstOrNull {
+            it.distanceMeters > config.frontierReachedMeters &&
+                !isBlacklisted(it.centroid) && !inflated.isBlocked(inflated.worldToGrid(it.centroid))
+        }
+        selectedCentroid = choice?.centroid
+        selected = choice
+        lastProgressMillis = nowMillis
+        bestDistanceMeters = choice?.distanceMeters ?: Float.POSITIVE_INFINITY
+        return ExplorationResult(scored, choice, exhausted = choice == null)
     }
 
     // ------------------------------------------------------------------ failure handling
@@ -142,8 +120,12 @@ class ExplorationManager(
      * [NavigationConfig.frontierFailuresBeforeBlacklist] consecutive failures the frontier is
      * abandoned so exploration can move on.
      */
-    fun reportPlanningFailure() {
+    fun reportPlanningFailure(nowMillis: Long) {
         val centroid = selectedCentroid ?: return
+        // Count spaced failures, not render frames. Give mapping time to settle after a turn.
+        val lastFailure = lastFailureMillis
+        if (lastFailure != null && nowMillis - lastFailure < config.frontierFailureIntervalMillis) return
+        lastFailureMillis = nowMillis
         val existing = blacklist.firstOrNull {
             it.position.distanceTo(centroid) <= config.frontierBlacklistRadiusMeters
         }
@@ -159,10 +141,11 @@ class ExplorationManager(
 
     /** Called when a planning attempt succeeded, so transient failures do not accumulate. */
     fun reportPlanningSuccess() {
+        lastFailureMillis = null
         val centroid = selectedCentroid ?: return
         blacklist.firstOrNull {
             it.position.distanceTo(centroid) <= config.frontierBlacklistRadiusMeters
-        }?.let { if (it.failures > 0) it.failures-- }
+        }?.let { if (it.failures < config.frontierFailuresBeforeBlacklist) it.failures = 0 }
     }
 
     /** Permanently abandons the area around [position] (e.g. a confirmed dead end). */

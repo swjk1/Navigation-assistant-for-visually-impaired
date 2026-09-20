@@ -52,6 +52,15 @@ data class NavigationConfig(
     // ---------------------------------------------------------------- floor + obstacle extraction
     /** Points below this height above the floor count as floor, not obstacle. */
     val minObstacleHeightMeters: Float = 0.10f,
+    /**
+     * How far below the floor estimate a point may sit and still be believed.
+     *
+     * Anything lower is not evidence of free space - it is evidence that the floor estimate is
+     * too high, usually because a desk or table was mistaken for the floor. Treating those points
+     * as "floor, therefore walkable" is how a map fills with green that bleeds through walls and
+     * over obstacles. Discarding them fails safe: less claimed free space, not more.
+     */
+    val floorBandBelowMeters: Float = 0.12f,
     /** Points above this height above the floor count as ceiling / overhead, not obstacle. */
     val maxObstacleHeightMeters: Float = 2.10f,
     /** Floor estimation histogram bin size. */
@@ -93,26 +102,18 @@ data class NavigationConfig(
     val weightDistance: Float = -1.0f,
     val weightRevisit: Float = -2.0f,
     val weightRisk: Float = -2.0f,
-    /**
-     * Once a frontier is selected we stick with it until it is reached or invalidated, unless a
-     * competitor beats it by this margin. Prevents the guidance flip-flopping mid-corridor.
-     */
-    val frontierSwitchHysteresis: Float = 1.2f,
-    /**
-     * Minimum time to stay committed to a chosen frontier, regardless of score.
-     *
-     * Score hysteresis alone is not enough: frontier ids are regenerated every detection pass and
-     * centroids shift as the map fills, so the previous choice is regularly not recognised at all
-     * and a fresh winner is picked - possibly on the other side. Committing for a few seconds
-     * gives the user time to actually walk somewhere.
-     */
-    val frontierCommitMillis: Long = 5000,
     /** A frontier counts as reached within this distance. */
     val frontierReachedMeters: Float = 0.9f,
     /** Frontiers we failed to route to are blacklisted within this radius. */
     val frontierBlacklistRadiusMeters: Float = 0.8f,
     /** Consecutive planning failures before a frontier is abandoned. */
     val frontierFailuresBeforeBlacklist: Int = 3,
+    /** Minimum spacing between failed attempts counted against an exploration waypoint. */
+    val frontierFailureIntervalMillis: Long = 1000,
+    /** Abandon a waypoint after this long without measurable approach, allowing time to turn. */
+    val frontierNoProgressMillis: Long = 20_000,
+    /** Approach needed to renew the exploration progress timeout. */
+    val frontierProgressMeters: Float = 0.3f,
 
     // ---------------------------------------------------------------- topological memory
     /** A new graph node is created once the user has travelled this far from the last one. */
