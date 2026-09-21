@@ -24,9 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 (npm 11), matching the toolchain the lockfile is authored with. npm 10 and 11
+      # resolve the peer dependencies of OPTIONAL packages differently, so an npm 10 runner
+      # rejects this lockfile over @emnapi/core and @emnapi/runtime - peers of a wasm fallback
+      # that only Linux resolves. Keep this in step with the Node developers actually use.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: my-app/package-lock.json
 
