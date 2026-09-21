@@ -85,13 +85,13 @@ Create a secure project layout, isolate Gemini credentials, and provide a low-la
 - [x] Directory layout  
 - [x] `.gitignore` + `.env.example`  
 - [x] Types + camera harness + env guard  
-- [x] Offline timed snapshot run (`npm run test:step1`)  
+- [x] Offline timed snapshot run (`npm run profile:capture`)  
 - [ ] Live device capture confirming <150 KB and <150 ms (needs physical phone)
 
 ### Offline timing (latest)
 
 ```bash
-npm run test:step1
+npm run profile:capture
 ```
 
 Writes:

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 
 import { buildHardwareSnapshot } from '@/services/cameraService';
-import IndoorPerception, { PerceptionArView } from '../../modules/indoor-perception';
+import IndoorPerception, { PerceptionArView } from 'indoor-perception';
 import { hasValidGeminiApiKey } from '@/services/envCheck';
 import { getPerceptionMode } from '@/services/perceptionEngine';
 
@@ -77,7 +77,7 @@ export default function PerceptionHarnessScreen() {
         debug,
       };
       setSnapshot(record);
-      // eslint-disable-next-line no-console
+       
       console.log('[Hybrid Perception Snapshot]', JSON.stringify(record, null, 2));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

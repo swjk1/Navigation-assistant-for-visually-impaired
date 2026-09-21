@@ -113,6 +113,11 @@ export const MOCK_TIMEOUT_SAFE_FRAME = {
     'Vision service slow. Hold still and try again.',
 };
 
+/**
+ * @template T
+ * @param {T} obj
+ * @returns {T}
+ */
 function clone(obj) {
   return structuredClone
     ? structuredClone(obj)
@@ -120,8 +125,18 @@ function clone(obj) {
 }
 
 /**
- * @param {string} [scenario]
- * @returns {object}
+ * The offline scenarios every mock consumer shares.
+ *
+ * Declared once here because callers used to restate the union in their own JSDoc, and a
+ * scenario added in one place but not the other silently fell through to the hallway default.
+ *
+ * @typedef {'hallway' | 'stairs' | 'trashcan' | 'clear' | 'clear_hallway' | 'blurry' | 'blur' | 'room_sign'} MockScenario
+ */
+
+/**
+ * @param {MockScenario} [scenario]
+ * @returns {Record<string, any>} A RAW payload - not yet validated. Pass it through
+ *   `validateAndSanitizeFrame` to get a `PerceptionFrame`.
  */
 export function selectMockRawPayload(scenario = 'hallway') {
   switch (scenario) {

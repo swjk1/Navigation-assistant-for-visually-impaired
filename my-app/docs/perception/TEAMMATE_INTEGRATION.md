@@ -76,6 +76,6 @@ Person 3 chooses voice engine, pacing, and interruption — we only supply the l
 
 ## Step 5 checkpoint
 
-Run `npm run test:step5` → `snapshots/snapshot_step5_final_contract.json`.
+Run `npm test` → `snapshots/snapshot_step5_final_contract.json`.
 
 Full guide: [STEP_05_INTEGRATION.md](./STEP_05_INTEGRATION.md).

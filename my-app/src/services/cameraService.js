@@ -1,5 +1,38 @@
 import { CAMERA_CAPTURE_CONFIG } from '../constants/cameraConfig.js';
 
+/** @typedef {import('../types/perception').CameraCaptureResult} CameraCaptureResult */
+
+/**
+ * The slice of Expo's `CameraView` ref this module actually uses.
+ *
+ * Typed structurally rather than as `CameraView` so the Node-side tests can pass a stub without
+ * pulling in Expo natives - which is the same reason `expo-image-manipulator` is imported lazily
+ * further down.
+ *
+ * @typedef {object} CameraRefLike
+ * @property {(options: {
+ *   quality?: number,
+ *   base64?: boolean,
+ *   skipProcessing?: boolean,
+ *   exif?: boolean,
+ * }) => Promise<{ uri?: string, base64?: string } | undefined>} takePictureAsync
+ */
+
+/**
+ * @typedef {object} CaptureOverrides
+ * @property {number} [quality]
+ * @property {number} [width]
+ * @property {number} [height]
+ */
+
+/**
+ * @typedef {CameraCaptureResult & {
+ *   uri: string | null,
+ *   withinLatencyBudget: boolean,
+ *   withinSizeBudget: boolean,
+ * }} HarnessCaptureResult
+ */
+
 /**
  * Low-latency camera frame harness for Expo CameraView / takePictureAsync.
  *
@@ -32,8 +65,9 @@ export function stripDataUriPrefix(base64OrDataUri) {
  * Capture a single compressed frame from an Expo CameraView instance.
  * Always downscales to the PRD budget — Android otherwise returns full sensor size.
  *
- * @param {object} cameraRefValue
- * @param {object} [overrides]
+ * @param {CameraRefLike | null | undefined} cameraRefValue
+ * @param {CaptureOverrides} [overrides]
+ * @returns {Promise<HarnessCaptureResult>}
  */
 export async function captureFrame(cameraRefValue, overrides = {}) {
   if (!cameraRefValue || typeof cameraRefValue.takePictureAsync !== 'function') {
@@ -102,9 +136,34 @@ export async function captureFrame(cameraRefValue, overrides = {}) {
 }
 
 /**
- * Build a Step-1 hardware verification record (for snapshots).
+ * Build a hardware verification record for the capture-timing harness.
+ *
+ * Two different capture paths feed this: [captureFrame] above (Expo `CameraView`) and
+ * `IndoorPerception.captureFrame()` (a frame lifted straight off the live ARCore session).
+ * They agree on the measured fields but only the first carries the budget verdicts, so those
+ * are optional here and recomputed from the same config when missing. Recomputing rather than
+ * reporting `undefined` keeps every snapshot comparable no matter which path produced it.
+ *
+ * @param {{
+ *   base64?: string,
+ *   width?: number,
+ *   height?: number,
+ *   captureLatencyMs: number,
+ *   estimatedBytes: number,
+ *   mimeType?: string,
+ *   withinLatencyBudget?: boolean,
+ *   withinSizeBudget?: boolean,
+ * }} captureResult
+ * @param {{ permissionGranted?: boolean, platform?: string }} [meta]
  */
 export function buildHardwareSnapshot(captureResult, meta = {}) {
+  const withinLatencyBudget =
+    captureResult.withinLatencyBudget ??
+    captureResult.captureLatencyMs <= CAMERA_CAPTURE_CONFIG.maxCaptureLatencyMs;
+  const withinSizeBudget =
+    captureResult.withinSizeBudget ??
+    captureResult.estimatedBytes <= CAMERA_CAPTURE_CONFIG.maxBase64Bytes;
+
   return {
     step: 1,
     name: 'hardware_camera_verification',
@@ -127,8 +186,8 @@ export function buildHardwareSnapshot(captureResult, meta = {}) {
     budgets: {
       maxCaptureLatencyMs: CAMERA_CAPTURE_CONFIG.maxCaptureLatencyMs,
       maxBase64Bytes: CAMERA_CAPTURE_CONFIG.maxBase64Bytes,
-      withinLatencyBudget: captureResult.withinLatencyBudget,
-      withinSizeBudget: captureResult.withinSizeBudget,
+      withinLatencyBudget,
+      withinSizeBudget,
     },
     reviewCheckpoint:
       'Did camera capture a sample image with Base64 size < 150KB and latency < 150ms?',

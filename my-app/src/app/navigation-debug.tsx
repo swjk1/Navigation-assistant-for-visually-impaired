@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import NavigationNative, {
+import {
   NavigationArView,
+  NavigationNative,
   addNavigationStateListener,
   type NavigationSnapshot,
   type NavigationSupport,
-} from '../../modules/navigation-native';
+} from 'navigation-native';
 
 /**
  * Minimal diagnostics screen for the navigation engine.
@@ -29,6 +30,11 @@ export default function NavigationDebugScreen() {
       // Engine-only screen: this module owns the ARCore session here. The flag is global, so it
       // must be reset in case /navigate handed ownership to the perception module earlier.
       NavigationNative.setExternalFrameSource(false);
+      // `isSupported()` can only be answered AFTER the line above reclaims ownership, so this
+      // cannot move to a lazy state initializer without reporting the PREVIOUS owner's
+      // capabilities. It runs once on mount and nothing re-triggers it, so there is no render
+      // cascade for the rule to protect against here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSupport(NavigationNative.isSupported());
       NavigationNative.setDebugEnabled(true);
     } catch (e) {

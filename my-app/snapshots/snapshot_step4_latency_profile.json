@@ -1,8 +1,8 @@
 {
   "step": 4,
   "name": "latency_efficiency_profile",
-  "timestamp": 1789841843582,
-  "timedAt": "2026-09-19T18:17:23.582Z",
+  "timestamp": 1789960371460,
+  "timedAt": "2026-09-21T03:12:51.460Z",
   "mode": "mock_profile",
   "reviewCheckpoint": "Is average round-trip latency under 1500ms? Does timeout gracefully fallback?",
   "reviewAnswers": {
@@ -23,16 +23,16 @@
     "runs": 10,
     "wallClock": {
       "n": 10,
-      "avgMs": 0.182,
-      "p90Ms": 0.278,
-      "maxMs": 0.871,
-      "minMs": 0.044
+      "avgMs": 0.102,
+      "p90Ms": 0.181,
+      "maxMs": 0.502,
+      "minMs": 0.022
     },
     "samples": [
       {
         "run": 1,
-        "wallClockMs": 0.871,
-        "frameLatencyMs": 1,
+        "wallClockMs": 0.502,
+        "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
         "immediateHazard": false,
@@ -40,7 +40,7 @@
       },
       {
         "run": 2,
-        "wallClockMs": 0.278,
+        "wallClockMs": 0.181,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -49,7 +49,7 @@
       },
       {
         "run": 3,
-        "wallClockMs": 0.081,
+        "wallClockMs": 0.038,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -58,7 +58,7 @@
       },
       {
         "run": 4,
-        "wallClockMs": 0.17,
+        "wallClockMs": 0.08,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -67,7 +67,7 @@
       },
       {
         "run": 5,
-        "wallClockMs": 0.072,
+        "wallClockMs": 0.037,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -76,7 +76,7 @@
       },
       {
         "run": 6,
-        "wallClockMs": 0.078,
+        "wallClockMs": 0.048,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -85,7 +85,7 @@
       },
       {
         "run": 7,
-        "wallClockMs": 0.044,
+        "wallClockMs": 0.022,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -94,7 +94,7 @@
       },
       {
         "run": 8,
-        "wallClockMs": 0.066,
+        "wallClockMs": 0.039,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -103,7 +103,7 @@
       },
       {
         "run": 9,
-        "wallClockMs": 0.051,
+        "wallClockMs": 0.026,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,
@@ -112,7 +112,7 @@
       },
       {
         "run": 10,
-        "wallClockMs": 0.105,
+        "wallClockMs": 0.049,
         "frameLatencyMs": 0,
         "objectCount": 1,
         "textCount": 1,

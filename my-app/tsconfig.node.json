@@ -1,0 +1,34 @@
+{
+  // scripts/ runs under Node, not Metro: Node globals, no React Native runtime. Checking it
+  // against the app's config would report both the wrong globals and the wrong missing ones,
+  // so it gets its own pass. `npm run typecheck` runs both.
+  //
+  // test/ is deliberately NOT included. Those tests exist to feed the sanitizer exactly the
+  // input a type checker forbids - a confidence of 2.5, a label that is not in the catalog, a
+  // box with no coordinates - because that is what a model actually returns on a bad day.
+  // Type-checking them would mean casting away the very thing under test at every call site,
+  // which documents nothing and hides real mistakes among the deliberate ones. The tests are
+  // validated by running: `npm test` is in `npm run verify` and in CI, so a typo in a test
+  // fails the build the same way a typo in the tooling does.
+  //
+  // `noImplicitAny` is off because these are one-file tools where the value of checking is
+  // catching typos and bad property access, not annotating every callback parameter. The app
+  // config under tsconfig.json stays fully strict.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": false,
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "target": "es2023",
+    "lib": ["es2023"],
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["scripts/**/*.js", "scripts/**/*.mjs"]
+}

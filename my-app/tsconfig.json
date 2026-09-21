@@ -2,19 +2,24 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // src/services and src/constants are JavaScript carrying JSDoc types. Without these two
+    // flags a third of src/ - including the layer that parses model output and handles API
+    // keys - is invisible to the compiler.
+    "allowJs": true,
+    "checkJs": true,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@/assets/*": [
-        "./assets/*"
-      ]
+      "@/*": ["./src/*"],
+      "@/assets/*": ["./assets/*"]
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "modules/**/*.ts",
+    "modules/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+  ],
+  "exclude": ["node_modules", "android", "ios", ".expo", "dist"]
 }

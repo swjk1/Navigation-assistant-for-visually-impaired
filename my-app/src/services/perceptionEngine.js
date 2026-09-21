@@ -6,6 +6,48 @@ import {
 } from '../constants/mockPerception.js';
 import { NETWORK_TIMEOUT_FALLBACK_MS } from '../constants/cameraConfig.js';
 
+/** @typedef {import('../types/perception').PerceptionFrame} PerceptionFrame */
+/** @typedef {import('../constants/mockPerception.js').MockScenario} MockScenario */
+/** @typedef {import('./hybridPerception.js').RawFrame} RawFrame */
+
+/**
+ * A Gemini call that failed in a way the retry loop needs to reason about.
+ *
+ * This used to be a plain `Error` with `status` / `retryable` / `model` bolted on at each throw
+ * site, which meant the retry loop read properties the type system knew nothing about - and a
+ * typo in any of them would silently disable retrying rather than fail loudly.
+ */
+export class GeminiCallError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ status?: number, retryable?: boolean, model?: string }} [info]
+   */
+  constructor(message, info = {}) {
+    super(message);
+    this.name = 'GeminiCallError';
+    /** HTTP status, when the failure came back from the API at all. */
+    this.status = info.status;
+    /** Whether trying again (usually against the next model) could plausibly work. */
+    this.retryable = info.retryable ?? false;
+    /** Which model candidate produced this. */
+    this.model = info.model;
+  }
+}
+
+/**
+ * Narrow an unknown thrown value to just the fields the retry loop reads.
+ *
+ * @param {unknown} err
+ * @returns {{ name?: string, status?: number, retryable?: boolean }}
+ */
+function errorInfo(err) {
+  if (err instanceof GeminiCallError) {
+    return { name: err.name, status: err.status, retryable: err.retryable };
+  }
+  if (err instanceof Error) return { name: err.name };
+  return {};
+}
+
 function readTimeoutMs() {
   // Abort slightly above network fallback so Gemini can finish before clamp
   return (
@@ -70,6 +112,10 @@ export function getPerceptionMode() {
   return hasValidGeminiApiKey() ? 'live' : 'mock';
 }
 
+/**
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -80,12 +126,20 @@ async function respectMinCallGap() {
   if (wait > 0) await sleep(wait);
 }
 
+/**
+ * @param {number} status
+ * @returns {boolean}
+ */
 function isRetryableStatus(status) {
   return status === 429 || status === 503 || status === 500 || status === 404;
 }
 
 /**
- * Offline path: prompt rules encoded as fixed fixtures → schema sanitize.
+ * Offline path: the prompt rules encoded as fixed fixtures, then run through the same validator
+ * the live path uses - so a fixture cannot pass a check a real frame would fail.
+ *
+ * @param {{ scenario?: MockScenario }} [options]
+ * @returns {Promise<PerceptionFrame>}
  */
 export async function processFrameMock(options = {}) {
   const startTime = Date.now();
@@ -94,6 +148,13 @@ export async function processFrameMock(options = {}) {
   return validateAndSanitizeFrame(raw, latencyMs);
 }
 
+/**
+ * Pull the JSON object out of a model response that may be wrapped in markdown fences.
+ *
+ * @param {unknown} rawText
+ * @returns {RawFrame}
+ * @throws {Error} If there is no parseable object anywhere in the text.
+ */
 function extractJsonObject(rawText) {
   const cleaned = String(rawText || '')
     .replace(/```json/gi, '')
@@ -111,6 +172,14 @@ function extractJsonObject(rawText) {
   }
 }
 
+/**
+ * @param {string} base64Image
+ * @param {string} model
+ * @param {string} apiKey
+ * @param {AbortSignal} signal
+ * @returns {Promise<RawFrame>}
+ * @throws {GeminiCallError}
+ */
 async function callGeminiOnce(base64Image, model, apiKey, signal) {
   // Prefer header auth — never put the key in the URL (logs / proxies).
   const response = await fetch(
@@ -156,40 +225,45 @@ async function callGeminiOnce(base64Image, model, apiKey, signal) {
     } catch {
       detail = '';
     }
-    const err = new Error(
-      `API HTTP Error: ${response.status}${detail ? ` — ${detail}` : ''}`
+    throw new GeminiCallError(
+      `API HTTP Error: ${response.status}${detail ? ` — ${detail}` : ''}`,
+      {
+        status: response.status,
+        retryable: isRetryableStatus(response.status),
+        model,
+      }
     );
-    err.status = response.status;
-    err.retryable = isRetryableStatus(response.status);
-    err.model = model;
-    throw err;
   }
 
   const data = await response.json();
   const finish = data.candidates?.[0]?.finishReason;
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) {
-    const err = new Error(
-      `Empty candidate payload from Gemini (finishReason=${finish || 'unknown'})`
+    throw new GeminiCallError(
+      `Empty candidate payload from Gemini (finishReason=${finish || 'unknown'})`,
+      { retryable: true, model }
     );
-    err.retryable = true;
-    err.model = model;
-    throw err;
   }
 
   try {
     return extractJsonObject(rawText);
   } catch (parseErr) {
-    const err = new Error(`JSON parse failed: ${parseErr.message}`);
-    err.retryable = true;
-    err.model = model;
-    throw err;
+    const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    throw new GeminiCallError(`JSON parse failed: ${detail}`, {
+      retryable: true,
+      model,
+    });
   }
 }
 
 /**
- * PRD Step 4 deterministic timeout frame (safe for TTS).
+ * The deterministic frame returned when perception ran out of time.
+ *
+ * Safe to speak verbatim, and deliberately NOT an empty frame: "nothing detected" reads to the
+ * guidance layer as "clear ahead", which is the opposite of what a timeout means.
+ *
  * @param {number} latencyMs
+ * @returns {PerceptionFrame}
  */
 export function buildScanTimeoutFrame(latencyMs) {
   return validateAndSanitizeFrame(
@@ -203,13 +277,20 @@ export function buildScanTimeoutFrame(latencyMs) {
 }
 
 /**
- * Live Gemini Flash with retries / backoff / model fallbacks.
- * If total network time exceeds NETWORK_TIMEOUT_FALLBACK_MS, returns timeout frame.
+ * Live Gemini Flash with retries, backoff and model fallbacks.
+ *
+ * Never throws on a network failure: past `NETWORK_TIMEOUT_FALLBACK_MS` it returns the
+ * deterministic timeout frame instead, because a walking user needs an answer more than they
+ * need an accurate one.
+ *
+ * @param {string} base64Image
+ * @returns {Promise<PerceptionFrame & { meta?: Record<string, any> }>}
  */
 export async function processFrameLive(base64Image) {
   const API_KEY = requireGeminiApiKey();
   const timeoutMs = readTimeoutMs();
   const models = getGeminiModelCandidates();
+  /** @type {unknown} */
   let lastError = null;
 
   // Rate-limit wait must NOT count against the network budget (otherwise
@@ -260,22 +341,23 @@ export async function processFrameLive(base64Image) {
     } catch (err) {
       clearTimeout(timeoutId);
       lastError = err;
+      const info = errorInfo(err);
 
-      if (err?.name === 'AbortError') {
+      if (info.name === 'AbortError') {
         break;
       }
 
       const retryable =
-        err?.retryable ||
-        err?.status === 503 ||
-        err?.status === 429 ||
-        err?.status === 404;
+        info.retryable ||
+        info.status === 503 ||
+        info.status === 429 ||
+        info.status === 404;
       if (!retryable || attempt === MAX_RETRIES - 1) {
         break;
       }
 
       // On 404/429/503, flip to next model immediately (don't burn budget on same model)
-      if (err?.status === 404 || err?.status === 503 || err?.status === 429) {
+      if (info.status === 404 || info.status === 503 || info.status === 429) {
         modelIndex = Math.min(modelIndex + 1, models.length - 1);
       }
 
@@ -283,14 +365,15 @@ export async function processFrameLive(base64Image) {
       if (room < 800) break;
 
       // Short pause only — long exponential backoff caused phone "vision slow" timeouts
-      const pause = err?.status === 429 ? 400 : Math.min(BASE_BACKOFF_MS, room - 500);
+      const pause = info.status === 429 ? 400 : Math.min(BASE_BACKOFF_MS, room - 500);
       await sleep(Math.max(200, pause));
     }
   }
 
   const latencyMs = Date.now() - startTime;
+  const lastInfo = errorInfo(lastError);
   const timedOut =
-    lastError?.name === 'AbortError' ||
+    lastInfo.name === 'AbortError' ||
     latencyMs > NETWORK_TIMEOUT_FALLBACK_MS ||
     latencyMs >= timeoutMs - 50;
 
@@ -298,7 +381,7 @@ export async function processFrameLive(base64Image) {
     return buildScanTimeoutFrame(latencyMs);
   }
 
-  const quotaHit = lastError?.status === 429;
+  const quotaHit = lastInfo.status === 429;
   return validateAndSanitizeFrame(
     {
       objects: [],
@@ -314,7 +397,11 @@ export async function processFrameLive(base64Image) {
 }
 
 /**
- * Main entry: camera Base64 → verified PerceptionFrame.
+ * Main entry: camera Base64 to a verified PerceptionFrame.
+ *
+ * @param {string | null | undefined} base64Image
+ * @param {{ mode?: 'mock' | 'live', scenario?: MockScenario }} [options]
+ * @returns {Promise<PerceptionFrame & { meta?: Record<string, any> }>}
  */
 export async function processFrame(base64Image, options = {}) {
   const mode = options.mode || getPerceptionMode();

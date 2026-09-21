@@ -14,7 +14,7 @@ supplies evidence about what is around; geometry and search decide where to step
 Companion documents: [ARCHITECTURE.md](./ARCHITECTURE.md) for the system diagram,
 [DEMO.md](./DEMO.md) for build and demo instructions,
 [modules/navigation-native/README.md](./my-app/modules/navigation-native/README.md) for the
-engine's own reference, and `my-app/docs/person1/` for the perception module's notes.
+engine's own reference, and `my-app/docs/perception/` for the perception module's notes.
 
 ---
 

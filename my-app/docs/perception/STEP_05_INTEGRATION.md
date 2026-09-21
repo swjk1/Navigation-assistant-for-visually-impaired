@@ -18,7 +18,7 @@ Deliver the public consumption API and static mock fallbacks so Person 2 (naviga
 | Mock fixtures | `src/constants/mockPerception.js` |
 | Handoff helpers | `src/services/teammateHandoff.js` |
 | Types | `src/types/perception.ts` |
-| Teammate guide | `docs/person1/TEAMMATE_INTEGRATION.md` |
+| Teammate guide | `docs/perception/TEAMMATE_INTEGRATION.md` |
 | Final contract snapshot | `snapshots/snapshot_step5_final_contract.json` |
 
 ## Public API (Person 2 / 3)
@@ -62,9 +62,9 @@ const frame = getLatestPerceptionFrame(); // PRD fields only — no meta
 ## Run
 
 ```bash
-npm run test:step5
-npm run test:handoff
-npm run test:prd
+npm test
+npm run report:handoff
+npm run report:prd
 ```
 
 ## Sign-off

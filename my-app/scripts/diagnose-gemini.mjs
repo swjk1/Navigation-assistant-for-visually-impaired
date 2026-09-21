@@ -46,6 +46,7 @@ for (const model of models) {
     console.log(redacted);
     if (res.ok) break;
   } catch (err) {
-    console.log(`\n[${model}] FETCH ERROR: ${err.message}`);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.log(`\n[${model}] FETCH ERROR: ${detail}`);
   }
 }

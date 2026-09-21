@@ -14,6 +14,56 @@ import { selectMockRawPayload } from '../constants/mockPerception.js';
 import { hasValidGeminiApiKey } from './envCheck.js';
 import { CAMERA_CAPTURE_CONFIG } from '../constants/cameraConfig.js';
 
+/** @typedef {import('../types/perception').PerceptionFrame} PerceptionFrame */
+/** @typedef {import('../types/perception').BoundingBox} BoundingBox */
+/** @typedef {import('../types/perception').ClockDirection} ClockDirection */
+
+/**
+ * What the native module hands back, plus the one field it does not set.
+ *
+ * `floorDetected` is only ever known by the VLM - YOLO and ML Kit have no opinion on it - so it
+ * is optional here and defaults to false rather than being assumed true. Assuming a floor is
+ * present when nothing looked for one is the single most dangerous default in this file.
+ *
+ * @typedef {Partial<import('indoor-perception').NativePerceptionResult> & {
+ *   floorDetected?: boolean,
+ * }} NativeLike
+ */
+
+/**
+ * A raw, UNVALIDATED frame payload: what Gemini returns, and what [mergeNativeToRaw] produces.
+ * It becomes a `PerceptionFrame` only by passing through `validateAndSanitizeFrame`.
+ *
+ * @typedef {{
+ *   objects?: Array<Record<string, any>>,
+ *   text?: Array<Record<string, any>>,
+ *   floorDetected?: boolean,
+ *   immediateHazard?: boolean,
+ *   hazardDescription?: string | null,
+ * }} RawFrame
+ */
+
+/**
+ * @typedef {object} VlmGatePolicy
+ * @property {boolean} [forceVlm] Always call Gemini.
+ * @property {boolean} [vlmOnTop] Call Gemini even when the native result looks fine.
+ * @property {number} [everyNth] Call Gemini on every Nth frame. 0 disables.
+ * @property {number} [frameIndex] Required for `everyNth` to mean anything.
+ */
+
+/**
+ * @typedef {VlmGatePolicy & {
+ *   nativeResult?: NativeLike | null,
+ *   confThreshold?: number,
+ *   runYolo?: boolean,
+ *   runOcr?: boolean,
+ *   allowLiveVlm?: boolean,
+ *   vlmEveryNth?: number,
+ *   useMockVlmOnGate?: boolean,
+ *   mockVlmScenario?: import('../constants/mockPerception.js').MockScenario,
+ * }} HybridOptions
+ */
+
 const VLM_FILL_LABELS = new Set([
   'door',
   'stairs',
@@ -25,6 +75,10 @@ const VLM_FILL_LABELS = new Set([
 
 const MLKIT_CONF_UNSURE = 0.55;
 
+/**
+ * @param {Partial<BoundingBox> | null | undefined} box
+ * @returns {ClockDirection}
+ */
 export function clockFromBox(box) {
   const cx = (Number(box?.x) || 0) + (Number(box?.width) || 0) / 2;
   if (cx < 0.12) return "9 o'clock";
@@ -36,14 +90,22 @@ export function clockFromBox(box) {
   return "3 o'clock";
 }
 
+/**
+ * @param {Partial<BoundingBox> | null | undefined} box
+ * @returns {number} Meters, clamped to the catalog's sane range.
+ */
 export function distanceFromBox(box) {
   const h = Math.max(0.01, Number(box?.height) || 0.1);
   const meters = 0.4 / h;
   return Math.max(0.5, Math.min(12, Number(meters.toFixed(1))));
 }
 
+/**
+ * @param {Array<{ text?: unknown }> | null | undefined} [textItems]
+ * @returns {boolean}
+ */
 function hazardHintsFromOcr(textItems = []) {
-  const joined = textItems
+  const joined = (textItems ?? [])
     .map((t) => String(t.text || '').toUpperCase())
     .join(' ');
   const keywords = [
@@ -62,6 +124,10 @@ function hazardHintsFromOcr(textItems = []) {
  * ML Kit unsure = OCR errored, OR text present but low confidence.
  * Empty OCR is normal in blank hallways — does not force Gemini.
  */
+/**
+ * @param {NativeLike | null | undefined} native
+ * @returns {boolean}
+ */
 export function isMlKitUnsure(native) {
   if (native?.ocrError) return true;
   const texts = native?.text || [];
@@ -74,6 +140,10 @@ export function isMlKitUnsure(native) {
  * YOLO unsure = real failure, not merely empty COCO detections.
  * Empty objects are expected when only doors/stairs are visible (not in COCO map).
  */
+/**
+ * @param {NativeLike | null | undefined} native
+ * @returns {boolean}
+ */
 export function isYoloUnsure(native) {
   if (native?.yoloError) return true;
   if (native?.platform === 'unavailable') return true;
@@ -85,6 +155,11 @@ export function isYoloUnsure(native) {
 
 /**
  * Decide whether to call Gemini (sparse by default).
+ */
+/**
+ * @param {NativeLike | null | undefined} native
+ * @param {VlmGatePolicy} [policy]
+ * @returns {boolean}
  */
 export function shouldInvokeVlm(native, policy = {}) {
   if (policy.forceVlm === true) return true;
@@ -101,6 +176,14 @@ export function shouldInvokeVlm(native, policy = {}) {
   return false;
 }
 
+/**
+ * The human-readable reason [shouldInvokeVlm] decided as it did. Kept in lockstep with it -
+ * a gate you cannot explain is a gate you cannot tune.
+ *
+ * @param {NativeLike | null | undefined} native
+ * @param {VlmGatePolicy} [policy]
+ * @returns {string}
+ */
 export function explainVlmGate(native, policy = {}) {
   if (policy.forceVlm) return 'forced';
   if (policy.vlmOnTop) return 'vlm_on_top';
@@ -110,11 +193,23 @@ export function explainVlmGate(native, policy = {}) {
   if (native?.platform === 'unavailable') return 'native_unavailable';
   if (isYoloUnsure(native)) return 'yolo_model_missing';
   if (hazardHintsFromOcr(native?.text)) return 'ocr_caution_keywords';
-  if (policy.everyNth > 0) return 'every_nth';
+  if ((policy.everyNth ?? 0) > 0) return 'every_nth';
   return 'skipped';
 }
 
+/**
+ * Fold an optional Gemini result into the native one.
+ *
+ * Native detections win: they are measured on-device against the real frame. Gemini only fills
+ * gaps - labels the native model has no class for, and the floor/hazard judgement it cannot
+ * make at all.
+ *
+ * @param {NativeLike | null | undefined} native
+ * @param {RawFrame | null} [vlmPartial]
+ * @returns {RawFrame}
+ */
 export function mergeNativeToRaw(native, vlmPartial = null) {
+  /** @type {Array<Record<string, any>>} */
   const objects = (native?.objects || []).map((obj) => ({
     label: obj.label,
     confidence: obj.confidence,
@@ -123,6 +218,7 @@ export function mergeNativeToRaw(native, vlmPartial = null) {
     approxDistanceMeters: distanceFromBox(obj.box),
   }));
 
+  /** @type {Array<Record<string, any>>} */
   const text = (native?.text || []).map((item) => ({
     text: item.text,
     confidence: item.confidence,
@@ -178,6 +274,11 @@ export function mergeNativeToRaw(native, vlmPartial = null) {
   };
 }
 
+/**
+ * @param {string | null | undefined} base64Image
+ * @throws {Error} If the frame is far past the capture budget, which means the caller skipped
+ *   the downscale step and is about to spend seconds uploading a full-sensor image.
+ */
 function assertPayloadSize(base64Image) {
   if (!base64Image || typeof base64Image !== 'string') return;
   // Rough decoded size from base64 length
@@ -190,7 +291,11 @@ function assertPayloadSize(base64Image) {
 }
 
 /**
- * Full hybrid pipeline.
+ * Full hybrid pipeline: native YOLO + ML Kit OCR, with Gemini called only when the gate says so.
+ *
+ * @param {string} base64Image
+ * @param {HybridOptions} [options]
+ * @returns {Promise<PerceptionFrame & { meta: Record<string, any> }>}
  */
 export async function processHybridFrame(base64Image, options = {}) {
   const start = Date.now();
@@ -201,7 +306,7 @@ export async function processHybridFrame(base64Image, options = {}) {
   if (!native) {
     try {
       const mod = await import('indoor-perception');
-      const IndoorPerception = mod.default || mod;
+      const IndoorPerception = mod.default;
       native = await IndoorPerception.analyzeFrame(base64Image, {
         confThreshold: options.confThreshold ?? 0.35,
         runYolo: options.runYolo !== false,
@@ -216,7 +321,7 @@ export async function processHybridFrame(base64Image, options = {}) {
         totalMs: 0,
         modelLoaded: false,
         modelPath: null,
-        yoloError: err?.message || String(err),
+        yoloError: err instanceof Error ? err.message : String(err),
         ocrError: null,
         platform: 'unavailable',
       };

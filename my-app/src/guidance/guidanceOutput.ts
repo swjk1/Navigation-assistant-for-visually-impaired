@@ -1,3 +1,13 @@
+/**
+ * Turns a NavigationCommand into what the user actually perceives: speech and haptics.
+ *
+ * NAMING. This was `NavigationController.ts`, which collided with
+ * `navigation-core/planning/NavigationController.kt` - an unrelated class that does the
+ * geometry, converting a planned path into one instruction. Two files with the same name at
+ * opposite ends of the pipeline made stack traces and code review needlessly ambiguous. The
+ * Kotlin one decides WHAT to say; this one decides HOW it reaches the user.
+ */
+
 import * as Speech from 'expo-speech';
 
 import type { NavigationAction, NavigationCommand } from '@/types/NavigationCommand';

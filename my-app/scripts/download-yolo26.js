@@ -26,12 +26,15 @@ function download(url, dest) {
     const file = fs.createWriteStream(dest);
     https
       .get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // `statusCode` is optional on IncomingMessage (absent only on a destroyed socket);
+        // 0 makes both branches below fall through to the error path rather than crashing.
+        const status = res.statusCode ?? 0;
+        if (status >= 300 && status < 400 && res.headers.location) {
           file.close();
           fs.unlinkSync(dest);
           return download(res.headers.location, dest).then(resolve).catch(reject);
         }
-        if (res.statusCode !== 200) {
+        if (status !== 200) {
           file.close();
           fs.unlinkSync(dest);
           reject(new Error(`HTTP ${res.statusCode} for ${url}`));

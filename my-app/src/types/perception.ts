@@ -4,12 +4,24 @@
  * Overall product goal: help a blind / low-vision user walk indoors
  * (e.g. toward a door) using camera perception + teammate navigation + TTS.
  *
- * Person 1 ONLY produces this structured "what's ahead" frame.
- * - Person 2 (mapping / planning): uses objects, clocks, distances, OCR text
- * - Person 3 (guidance / TTS): speaks hazardDescription + clock/distance phrases
+ * The perception layer ONLY produces this structured "what's ahead" frame.
+ * - mapping / planning consumes objects, clocks, distances and OCR text
+ * - guidance / TTS speaks hazardDescription plus clock/distance phrases
  *
  * Do not put pathfinding, routing graphs, or speech synthesis in this module.
+ *
+ * The label and clock unions below are DERIVED from the runtime allowlists in
+ * `constants/perceptionCatalog.js`. Do not restate them here - that is how they drifted apart
+ * once already, and the validator silently dropped every label the type claimed to allow.
  */
+
+import {
+  ALLOWED_CLOCK,
+  ALLOWED_LABELS,
+  NAV_ANCHOR_LABELS,
+  OBSTACLE_LABELS,
+} from '../constants/perceptionCatalog.js';
+
 
 export interface BoundingBox {
   /** 0.0 to 1.0 (normalized horizontal coordinate) */
@@ -22,36 +34,14 @@ export interface BoundingBox {
   height: number;
 }
 
-export type ObjectLabel =
-  | 'door'
-  | 'person'
-  | 'stairs'
-  | 'elevator'
-  | 'chair'
-  | 'trashcan'
-  | 'wall'
-  | 'sign'
-  // Emitted by the fine-tuned indoor YOLO26 model. Signs are reported as their SUBJECT rather
-  // than flattened to 'sign': an "exit sign" is how a user finds an exit, and the navigation
-  // engine can act on that, whereas a generic 'sign' tells it nothing.
-  | 'exit sign'
-  | 'left arrow'
-  | 'right arrow'
-  | 'washroom';
+export type ObjectLabel = (typeof ALLOWED_LABELS)[number];
 
 /**
  * Clock facing relative to the user walking forward.
  * 12 o'clock = straight ahead (center corridor).
- * Useful for Person 3 speech: "door at 11 o'clock".
+ * Useful for guidance speech: "door at 11 o'clock".
  */
-export type ClockDirection =
-  | "9 o'clock"
-  | "10 o'clock"
-  | "11 o'clock"
-  | "12 o'clock"
-  | "1 o'clock"
-  | "2 o'clock"
-  | "3 o'clock";
+export type ClockDirection = (typeof ALLOWED_CLOCK)[number];
 
 export interface DetectedObject {
   label: ObjectLabel;
@@ -95,29 +85,10 @@ export interface CameraCaptureResult {
   mimeType: 'image/jpeg';
 }
 
-/** Labels Person 2 typically treats as navigation anchors / destinations. */
-export type NavAnchorLabel =
-  | 'door'
-  | 'elevator'
-  | 'stairs'
-  | 'sign'
-  | 'exit sign'
-  | 'washroom';
+/** Labels the navigation layer treats as anchors / destinations. */
+export type NavAnchorLabel = (typeof NAV_ANCHOR_LABELS)[number];
 
-/** Labels Person 2/3 typically treat as path obstacles. */
-export type ObstacleLabel = 'person' | 'chair' | 'trashcan';
+/** Labels the navigation layer treats as path obstacles. */
+export type ObstacleLabel = (typeof OBSTACLE_LABELS)[number];
 
-export const NAV_ANCHOR_LABELS: NavAnchorLabel[] = [
-  'door',
-  'elevator',
-  'stairs',
-  'sign',
-  'exit sign',
-  'washroom',
-];
-
-export const OBSTACLE_LABELS: ObstacleLabel[] = [
-  'person',
-  'chair',
-  'trashcan',
-];
+export { ALLOWED_LABELS, ALLOWED_CLOCK, NAV_ANCHOR_LABELS, OBSTACLE_LABELS };

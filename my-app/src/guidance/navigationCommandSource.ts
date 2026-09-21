@@ -1,10 +1,11 @@
 import type { EventSubscription } from 'expo-modules-core';
 
-import NavigationNative, {
+import {
+  NavigationNative,
   addNavigationStateListener,
   type NavigationSnapshot,
   type NavigationTarget,
-} from '../../modules/navigation-native';
+} from 'navigation-native';
 import type { NavigationAction, NavigationCommand } from '@/types/NavigationCommand';
 
 /**
@@ -80,7 +81,7 @@ export function toNavigationCommand(snapshot: NavigationSnapshot): NavigationCom
   return {
     action: ACTION_BY_COMMAND[snapshot.command] ?? 'STOP',
     target: snapshot.target ?? undefined,
-    // `hazard.type` is read aloud by NavigationController.toSpeechText as
+    // `hazard.type` is read aloud by guidanceOutput.toSpeechText as
     // "Stop. <type> ahead." - so it must be a spoken noun, not a reason code.
     // The machine-readable reason stays on the snapshot.
     hazard: detected ? { detected: true, type: HAZARD_SPOKEN_NOUN } : { detected: false },

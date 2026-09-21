@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { transcribeAudioWithGemini } from '@/ai/GeminiSpeechService';
 import { stopHaptics } from '@/guidance/HapticService';
-import { commandFromTranscript, executeCommand } from '@/guidance/NavigationController';
+import { commandFromTranscript, executeCommand } from '@/guidance/guidanceOutput';
 
 type UiState = 'IDLE' | 'LISTENING' | 'PROCESSING' | 'GUIDING' | 'ERROR';
 

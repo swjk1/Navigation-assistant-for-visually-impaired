@@ -28,7 +28,7 @@ Timeout copy (exact):
 
 | Item | Path |
 |---|---|
-| Latency profile (10 runs) | `test/run_step4_latency.mjs` |
+| Latency profile (10 runs) | `scripts/profile-latency.mjs` |
 | Quality candidates 0.3 / 0.4 / 0.5 | `src/constants/cameraConfig.js` |
 | Timeout helper | `buildScanTimeoutFrame()` in `perceptionEngine.js` |
 | Security audit | `scripts/security_audit.mjs` → `snapshot_security_audit.json` |
@@ -37,9 +37,9 @@ Timeout copy (exact):
 ## Run
 
 ```bash
-npm run test:step4
-npm run test:security
-npm run test:step3
+npm run profile:latency
+npm run audit:security
+npm test
 ```
 
 ## Notes

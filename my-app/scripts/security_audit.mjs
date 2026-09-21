@@ -151,17 +151,22 @@ add(
   'connection errors use TTS-safe hazard copy (no raw API details)'
 );
 
-// 6) Prefer private key in envCheck
+// 6) envCheck states the on-device exposure rather than implying the key is protected.
+//
+// The previous version of this check asserted that envCheck PREFERRED GEMINI_API_KEY over
+// EXPO_PUBLIC_GEMINI_API_KEY and reported that as a security property. It is not one: Expo only
+// inlines EXPO_PUBLIC_ names into the client bundle, so on a phone the private name is always
+// undefined and the bundled one is the only key that can be found. Ordering them changed
+// nothing about what ships in the APK, so the audit was passing on a fact with no bearing on
+// the exposure. What is worth asserting is that the code says so plainly.
 const envCheck = fs.readFileSync(
   path.join(root, 'src', 'services', 'envCheck.js'),
   'utf8'
 );
 add(
-  envCheck.includes('process.env.GEMINI_API_KEY') &&
-    envCheck.indexOf('process.env.GEMINI_API_KEY') <
-      envCheck.indexOf('process.env.EXPO_PUBLIC_GEMINI_API_KEY'),
-  'prefer-private-key',
-  'envCheck prefers GEMINI_API_KEY over EXPO_PUBLIC_'
+  /EXPO_PUBLIC_/.test(envCheck) && /extract|bundle/i.test(envCheck),
+  'documents-key-exposure',
+  'envCheck documents that the EXPO_PUBLIC_ key ships inside the app bundle'
 );
 
 const passed = findings.every((f) => f.ok);

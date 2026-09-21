@@ -15,8 +15,8 @@ Strict schema sanitization and automated regressions across five edge cases from
 | Artifact | Path |
 |---|---|
 | Schema validator | `src/services/schemaValidator.js` |
-| Schema regressions | `test/run_schema_tests.mjs` → `snapshots/snapshot_step3_schema.json` |
-| Edge-case suite | `test/run_edge_case_tests.js` → `snapshots/snapshot_step3_edge_cases.json` |
+| Schema regressions | `test/schema-validator.test.mjs` → `snapshots/snapshot_step3_schema.json` |
+| Edge-case suite | `test/perception-engine.test.mjs` → `snapshots/snapshot_step3_edge_cases.json` |
 | Mock scenarios | `src/constants/mockPerception.js` (stairs, trashcan, room sign, clear, blurry) |
 | Fixture JPEGs | `test/fixtures/edge_*.jpg` (synthetic stand-ins until venue captures) |
 
@@ -33,8 +33,8 @@ Strict schema sanitization and automated regressions across five edge cases from
 ## Run
 
 ```bash
-npm run test:schema
-npm run test:step3
+npm test
+npm test
 ```
 
 Offline mode uses deterministic mocks mapped from each fixture name. Replace `test/fixtures/edge_*.jpg` with venue photos later; the runner auto-detects files.

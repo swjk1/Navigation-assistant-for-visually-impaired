@@ -2,7 +2,7 @@ import type { ClockDirection, DetectedObject, OCRDetection, PerceptionFrame } fr
 import type {
   SemanticDirection,
   SemanticObservation,
-} from '../../modules/navigation-native';
+} from 'navigation-native';
 
 /**
  * The seam between Person 1 (perception) and Person 2 (mapping + planning).

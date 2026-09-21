@@ -1,8 +1,8 @@
 {
   "step": "security",
   "name": "security_audit",
-  "timestamp": 1789841845322,
-  "timedAt": "2026-09-19T18:17:25.322Z",
+  "timestamp": 1789960039488,
+  "timedAt": "2026-09-21T03:07:19.488Z",
   "status": "pass",
   "findings": [
     {
@@ -28,7 +28,7 @@
     {
       "ok": true,
       "id": "secret-scan",
-      "detail": "scanned 66 files — no key patterns"
+      "detail": "scanned 69 files — no key patterns"
     },
     {
       "ok": true,
@@ -42,8 +42,8 @@
     },
     {
       "ok": true,
-      "id": "prefer-private-key",
-      "detail": "envCheck prefers GEMINI_API_KEY over EXPO_PUBLIC_"
+      "id": "documents-key-exposure",
+      "detail": "envCheck documents that the EXPO_PUBLIC_ key ships inside the app bundle"
     }
   ]
 }

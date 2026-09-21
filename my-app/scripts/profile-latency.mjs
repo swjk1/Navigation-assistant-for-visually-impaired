@@ -93,8 +93,9 @@ const wallTimes = [];
 
 for (let i = 0; i < RUNS; i++) {
   const t0 = performance.now();
+  // No 'mode' option here: processHybridFrame reads the mode from the environment and is
+  // pinned offline by allowLiveVlm/useMockVlmOnGate below. Passing mode did nothing.
   const frame = await processHybridFrame(base64, {
-    mode: 'mock',
     allowLiveVlm: false,
     useMockVlmOnGate: false,
     nativeResult: {

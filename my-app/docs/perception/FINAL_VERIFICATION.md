@@ -19,8 +19,8 @@
 ## Run
 
 ```bash
-npm run test:final
-npm run test:prd
+npm run report:verification
+npm run report:prd
 ```
 
 ## What “complete” means

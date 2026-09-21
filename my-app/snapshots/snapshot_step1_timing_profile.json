@@ -1,125 +1,125 @@
 {
   "step": 1,
   "name": "step1_utility_timing_profile",
-  "timestamp": 1789841841227,
-  "timedAt": "2026-09-19T18:17:21.227Z",
+  "timestamp": 1789960370571,
+  "timedAt": "2026-09-21T03:12:50.571Z",
   "runs": 10,
   "summary": {
     "envSoftCheck": {
       "n": 1,
-      "avgMs": 0.085,
-      "p90Ms": 0.085,
-      "maxMs": 0.085,
-      "minMs": 0.085
+      "avgMs": 0.035,
+      "p90Ms": 0.035,
+      "maxMs": 0.035,
+      "minMs": 0.035
     },
     "stripPrefix": {
       "n": 10,
-      "avgMs": 0.152,
-      "p90Ms": 0.585,
-      "maxMs": 0.621,
-      "minMs": 0.007
+      "avgMs": 0.105,
+      "p90Ms": 0.365,
+      "maxMs": 0.464,
+      "minMs": 0.004
     },
     "estimateBytes": {
       "n": 10,
-      "avgMs": 0.052,
-      "p90Ms": 0.076,
-      "maxMs": 0.083,
-      "minMs": 0.033
+      "avgMs": 0.022,
+      "p90Ms": 0.039,
+      "maxMs": 0.043,
+      "minMs": 0.014
     },
     "buildSnapshot": {
       "n": 10,
-      "avgMs": 0.056,
-      "p90Ms": 0.108,
-      "maxMs": 0.169,
-      "minMs": 0.014
+      "avgMs": 0.019,
+      "p90Ms": 0.02,
+      "maxMs": 0.104,
+      "minMs": 0.005
     },
     "fullUtilityPipeline": {
       "n": 10,
-      "avgMs": 0.288,
-      "p90Ms": 0.7,
-      "maxMs": 0.722,
-      "minMs": 0.076
+      "avgMs": 0.155,
+      "p90Ms": 0.431,
+      "maxMs": 0.514,
+      "minMs": 0.036
     }
   },
   "samples": [
     {
       "run": 1,
-      "stripPrefixMs": 0.063,
-      "estimateBytesMs": 0.038,
-      "buildSnapshotMs": 0.169,
-      "utilityPipelineMs": 0.296,
+      "stripPrefixMs": 0.046,
+      "estimateBytesMs": 0.022,
+      "buildSnapshotMs": 0.104,
+      "utilityPipelineMs": 0.187,
       "estimatedBytes": 54000
     },
     {
       "run": 2,
-      "stripPrefixMs": 0.621,
-      "estimateBytesMs": 0.034,
-      "buildSnapshotMs": 0.052,
-      "utilityPipelineMs": 0.722,
+      "stripPrefixMs": 0.031,
+      "estimateBytesMs": 0.014,
+      "buildSnapshotMs": 0.02,
+      "utilityPipelineMs": 0.072,
       "estimatedBytes": 54000
     },
     {
       "run": 3,
-      "stripPrefixMs": 0.033,
-      "estimateBytesMs": 0.059,
-      "buildSnapshotMs": 0.014,
-      "utilityPipelineMs": 0.132,
+      "stripPrefixMs": 0.464,
+      "estimateBytesMs": 0.02,
+      "buildSnapshotMs": 0.009,
+      "utilityPipelineMs": 0.514,
       "estimatedBytes": 54000
     },
     {
       "run": 4,
-      "stripPrefixMs": 0.054,
-      "estimateBytesMs": 0.06,
-      "buildSnapshotMs": 0.059,
-      "utilityPipelineMs": 0.211,
+      "stripPrefixMs": 0.032,
+      "estimateBytesMs": 0.015,
+      "buildSnapshotMs": 0.008,
+      "utilityPipelineMs": 0.063,
       "estimatedBytes": 54000
     },
     {
       "run": 5,
-      "stripPrefixMs": 0.057,
-      "estimateBytesMs": 0.039,
-      "buildSnapshotMs": 0.041,
-      "utilityPipelineMs": 0.197,
+      "stripPrefixMs": 0.036,
+      "estimateBytesMs": 0.015,
+      "buildSnapshotMs": 0.006,
+      "utilityPipelineMs": 0.062,
       "estimatedBytes": 54000
     },
     {
       "run": 6,
-      "stripPrefixMs": 0.078,
-      "estimateBytesMs": 0.083,
-      "buildSnapshotMs": 0.048,
-      "utilityPipelineMs": 0.251,
+      "stripPrefixMs": 0.034,
+      "estimateBytesMs": 0.039,
+      "buildSnapshotMs": 0.006,
+      "utilityPipelineMs": 0.086,
       "estimatedBytes": 54000
     },
     {
       "run": 7,
-      "stripPrefixMs": 0.585,
-      "estimateBytesMs": 0.076,
-      "buildSnapshotMs": 0.019,
-      "utilityPipelineMs": 0.7,
+      "stripPrefixMs": 0.035,
+      "estimateBytesMs": 0.019,
+      "buildSnapshotMs": 0.005,
+      "utilityPipelineMs": 0.063,
       "estimatedBytes": 54000
     },
     {
       "run": 8,
-      "stripPrefixMs": 0.009,
-      "estimateBytesMs": 0.035,
-      "buildSnapshotMs": 0.023,
-      "utilityPipelineMs": 0.076,
+      "stripPrefixMs": 0.365,
+      "estimateBytesMs": 0.043,
+      "buildSnapshotMs": 0.011,
+      "utilityPipelineMs": 0.431,
       "estimatedBytes": 54000
     },
     {
       "run": 9,
-      "stripPrefixMs": 0.007,
-      "estimateBytesMs": 0.066,
-      "buildSnapshotMs": 0.108,
-      "utilityPipelineMs": 0.214,
+      "stripPrefixMs": 0.004,
+      "estimateBytesMs": 0.019,
+      "buildSnapshotMs": 0.011,
+      "utilityPipelineMs": 0.038,
       "estimatedBytes": 54000
     },
     {
       "run": 10,
-      "stripPrefixMs": 0.012,
-      "estimateBytesMs": 0.033,
-      "buildSnapshotMs": 0.025,
-      "utilityPipelineMs": 0.078,
+      "stripPrefixMs": 0.005,
+      "estimateBytesMs": 0.014,
+      "buildSnapshotMs": 0.014,
+      "utilityPipelineMs": 0.036,
       "estimatedBytes": 54000
     }
   ],

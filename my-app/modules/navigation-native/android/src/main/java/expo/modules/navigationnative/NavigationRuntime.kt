@@ -166,8 +166,13 @@ object NavigationRuntime {
         frameProcessor.reset()
     }
 
-    /** The session this module owns, or the externally owned one once a frame has arrived. */
-    fun session(): Session? = sessionManager?.session ?: externalSession
+    /**
+     * The session this module owns, or the externally owned one once a frame has arrived.
+     *
+     * In external mode the reference is only as fresh as the last [onExternalArFrame] call, and
+     * it is cleared the moment ownership returns - see [useExternalFrameSource].
+     */
+    fun session(): Session? = if (externalFrameSource) externalSession else sessionManager?.session
 
     @Volatile
     private var externalSession: Session? = null
@@ -202,6 +207,12 @@ object NavigationRuntime {
         if (external) {
             // Release our own camera claim so the new owner can take it.
             sessionManager?.pause()
+        } else {
+            // Ownership is coming back to us, which means the previous owner is tearing its
+            // session down (ArFrameSource.destroy calls releaseFrameSource right after
+            // Session.close). Holding the reference would leave session() handing out a CLOSED
+            // session, and support() reporting trackingAvailable = true against it.
+            externalSession = null
         }
         frameProcessor.reset()
     }

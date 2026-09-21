@@ -1,21 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * Static rendering hands the browser HTML built on the server, where there is no color scheme to
+ * read. Returning the real scheme on that first render would make the client's markup disagree
+ * with the server's, so 'light' is reported until hydration finishes.
+ *
+ * `useSyncExternalStore` is what expresses that: its third argument is the server snapshot, so
+ * React itself supplies `false` while rendering on the server and `true` once hydrated. The
+ * earlier `useState` + `useEffect` version did the same thing by setting state inside an effect,
+ * which costs an extra render pass and is exactly the cascade React Compiler warns about.
  */
-export function useColorScheme() {
-  const [hasHydrated, setHasHydrated] = useState(false);
 
-  useEffect(() => {
-    setHasHydrated(true);
-  }, []);
+/** Nothing to subscribe to: hydration happens once and never reverts. */
+const subscribe = () => () => {};
+
+export function useColorScheme() {
+  const hasHydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  );
 
   const colorScheme = useRNColorScheme();
 
-  if (hasHydrated) {
-    return colorScheme;
-  }
-
-  return 'light';
+  return hasHydrated ? colorScheme : 'light';
 }

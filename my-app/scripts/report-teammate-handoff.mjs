@@ -31,7 +31,7 @@ if (stairs.speechPriority !== 'hazard') {
   failures.push('stairs should be speechPriority=hazard');
 }
 if (!stairs.speakableLines?.[0]?.toLowerCase().includes('stop') &&
-    !stairs.frame.immediateHazard) {
+    !stairs.frame?.immediateHazard) {
   failures.push('stairs hazard handoff incomplete');
 }
 if ((hallway.speakableLines?.length || 0) > 5) {

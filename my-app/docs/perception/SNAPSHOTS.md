@@ -3,16 +3,16 @@
 Refresh with:
 
 ```bash
-npm run test:step1
-npm run test:step2
-npm run test:hybrid
-npm run test:step3
-npm run test:step4
-npm run test:step5
-npm run test:final
-npm run test:handoff
-npm run test:security
-npm run test:prd
+npm run profile:capture
+npm test
+npm run probe:hybrid
+npm test
+npm run profile:latency
+npm test
+npm run report:verification
+npm run report:handoff
+npm run audit:security
+npm run report:prd
 ```
 
 | Snapshot | Meaning |

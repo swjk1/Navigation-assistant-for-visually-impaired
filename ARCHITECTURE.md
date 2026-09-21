@@ -27,7 +27,7 @@ flowchart TB
             HYB["Hybrid perception<br/>Native inference + optional VLM<br/>Validation + PerceptionFrame cache"]
             SEM["perceptionToSemantic<br/>Landmarks and sign observations"]
             ADAPT["navigationCommandSource<br/>Snapshot to guidance command"]
-            GUIDE["Guidance NavigationController<br/>Speech + haptic patterns"]
+            GUIDE["Guidance output<br/>Speech + haptic patterns"]
             HOME["Home screen<br/>Microphone recording"]
             PARSE["commandFromTranscript<br/>Left / right / straight / stop / arrived"]
         end
@@ -97,7 +97,7 @@ flowchart TB
 | Mapping, exploration, planning, and control | [`NavigationEngine.kt`](my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationEngine.kt) |
 | Native map image | [`OccupancyMapRenderer.kt`](my-app/modules/navigation-native/android/src/main/java/expo/modules/navigationnative/platform/OccupancyMapRenderer.kt) |
 | Snapshot-to-guidance adapter | [`navigationCommandSource.ts`](my-app/src/guidance/navigationCommandSource.ts) |
-| Speech and haptic output | [`NavigationController.ts`](my-app/src/guidance/NavigationController.ts) |
+| Speech and haptic output | [`guidanceOutput.ts`](my-app/src/guidance/guidanceOutput.ts) |
 | Home voice transcription | [`GeminiSpeechService.ts`](my-app/src/ai/GeminiSpeechService.ts) |
 
 This documents source-code wiring, not a new verification of behavior on a physical phone.

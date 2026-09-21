@@ -54,6 +54,7 @@ console.log('====================================================');
 console.log('   PERSON 1: STEP 1 TIMED SNAPSHOT RUN (OFFLINE)    ');
 console.log('====================================================\n');
 
+/** @type {Record<string, number[]>} */
 const timings = {
   envSoftCheckMs: [],
   stripPrefixMs: [],
@@ -93,7 +94,8 @@ for (let i = 0; i < RUNS; i++) {
     captureLatencyMs: 0, // unknown until phone
     estimatedBytes: est.result,
     mimeType: 'image/jpeg',
-    withinLatencyBudget: null,
+    // Unknown until this runs on a phone; buildHardwareSnapshot recomputes it from the budget.
+    withinLatencyBudget: undefined,
     withinSizeBudget: est.result <= CAMERA_CAPTURE_CONFIG.maxBase64Bytes,
   };
 

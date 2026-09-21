@@ -96,7 +96,8 @@ const moveDirectories = async (userInput) => {
       }`
     );
   } catch (error) {
-    console.error(`❌ Error during script execution: ${error.message}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Error during script execution: ${detail}`);
   }
 };
 

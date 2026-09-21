@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { executeCommand } from '@/guidance/NavigationController';
+import { executeCommand } from '@/guidance/guidanceOutput';
 import {
   isScanRequest,
   startNavigation,
@@ -15,11 +15,12 @@ import type { NavigationCommand } from '@/types/NavigationCommand';
 import type { PerceptionFrame } from '@/types/perception';
 
 import { analyzeAndStore, getLatestPerceptionFrame } from '@/index.js';
-import IndoorPerception, { PerceptionArView } from '../../modules/indoor-perception';
-import NavigationNative, {
+import IndoorPerception, { PerceptionArView } from 'indoor-perception';
+import {
+  NavigationNative,
   type NavigationSnapshot,
   type NavigationTarget,
-} from '../../modules/navigation-native';
+} from 'navigation-native';
 
 /**
  * The three parts running together.
@@ -108,7 +109,7 @@ export default function NavigateScreen() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [permission?.granted, requestPermission]
+    [permission, requestPermission]
   );
 
   const stop = useCallback(async () => {

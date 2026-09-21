@@ -1,128 +1,109 @@
-# Handing the camera to the perception module
+# Who owns the camera
 
-**For:** Person 1 (perception — `modules/indoor-perception`)
-**From:** Person 2 (mapping + planning — `modules/navigation-native`)
+**Short answer: `indoor-perception` owns the ARCore session. `navigation-native` is fed from it.**
 
-Short version: your module opens the camera. You just have to open it **through ARCore** rather
-than through `expo-camera`'s `CameraView`, and pass each frame along. Everything downstream of
-`analyzeFrame(base64)` — YOLO, ML Kit, Gemini, `PerceptionFrame` — is untouched.
-
----
-
-## Why this is needed
-
-ARCore requires **exclusive** access to the camera device. The navigation engine cannot run
-without ARCore: depth and 6DoF pose are its only inputs, and it has no other way to know where a
-wall is.
-
-`CameraView` opens the camera device too. Android will not give the same camera to two sessions,
-so whichever starts second either fails to open or silently evicts the first. No crash, no error —
-one of the two features simply stops seeing.
-
-Nothing is broken today, because the perception harness and the navigation screen are separate
-screens. It breaks the first time both are live together.
-
-The good news: your heavy lifting is already decoupled from capture. `IndoorPerceptionModule`
-takes a base64 image and doesn't touch the camera. Only the few lines that *source* the pixels
-change.
+This file previously proposed the opposite arrangement — navigation owning the session and
+handing frames to perception — as work still to be done. That is not what was built, and the
+inverted description outlived the decision. What follows describes the code as it stands.
 
 ---
 
-## What changes
+## Why there can only be one owner
 
-### 1. Gradle — depend on this module
+ARCore requires **exclusive** access to the camera device, and the navigation engine cannot run
+without ARCore: depth and 6DoF pose are its only inputs. A second `CameraView` or Camera2 session
+will either fail to open or silently evict the first — no crash, no error, one of the two
+features simply stops seeing.
 
-`modules/indoor-perception/android/build.gradle`:
+So the module that opens the camera must also be the module that runs the ARCore session. They
+cannot be two different modules.
 
-```groovy
-dependencies {
-  implementation project(':navigation-native')
-  implementation "com.google.ar:core:1.56.0"
-}
+## How ownership actually sits
+
+`indoor-perception` opens the camera, because it is the module that needs the RGB image (YOLO, ML
+Kit OCR, and optionally Gemini). Navigation needs only pose and depth, which can be read off the
+same frame.
+
+```
+PerceptionArView mounts
+  └─ ArFrameSource.initialize(context)
+       ├─ NavigationSensorBridge.takeOverFrameSource()    ← navigation stands down
+       ├─ Session(context), depthMode = AUTOMATIC
+       └─ NavigationSensorBridge.reportCapabilities(depthSupported)
+
+per rendered frame, on the GL thread:
+  ArFrameSource.onDrawFrame()
+    └─ session.update()
+         ├─ NavigationSensorBridge.submitFrame(session, frame)   → pose + depth → engine
+         └─ frame.acquireCameraImage()                           → YOLO / OCR / Gemini
 ```
 
-### 2. Tell the navigation module to stand down
+`ArFrameSource.destroy()` closes the session and calls `releaseFrameSource()`, handing ownership
+back.
 
-Once, before navigation starts. From Kotlin:
+## What enforces it
 
-```kotlin
-NavigationSensorBridge.takeOverFrameSource()
-```
+This is not a convention anyone has to remember. In `NavigationRuntime`:
 
-or from JS:
+- `initializeSession()` returns early while `externalFrameSource` is set, so navigation cannot
+  claim the camera out from under the owner.
+- `onGlFrame()` returns early for the same reason, so a stray `NavigationArView` renders nothing
+  rather than driving a second update loop.
+- `useExternalFrameSource(true)` pauses any session this module already had, releasing its claim.
+- `useExternalFrameSource(false)` clears the cached external `Session` reference, so `session()`
+  cannot hand out a closed session after the owner tears down.
 
-```ts
-NavigationNative.setExternalFrameSource(true);
-```
+`NavigationArView` is not needed in this mode and `/navigate` does not mount it.
 
-After this, `navigation-native` creates no ARCore session of its own, and `<NavigationArView />`
-is no longer needed.
+## The one screen that owns it the other way
 
-### 3. Create the session — depth is required
+`/navigation-debug` is an engine-only diagnostics screen with no perception. It calls
+`setExternalFrameSource(false)` on mount to reclaim ownership, then mounts `NavigationArView` and
+runs its own session.
 
-```kotlin
-val session = Session(context)
-val config = session.config
-if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
-    config.depthMode = Config.DepthMode.AUTOMATIC
-} // if not supported, navigation must not run on this device
-config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL   // floor hint
-config.updateMode = Config.UpdateMode.BLOCKING
-session.configure(config)
-```
+The flag is global and process-wide, which is what makes this work — and also the thing to be
+careful about. **Do not mount both screens at once**, and if you add a third screen, decide
+explicitly which side owns the session on mount.
 
-ARCore needs a GL context and a camera texture to produce frames. The simplest route is to copy
-`NavigationArView.kt` from this module — it is about 60 lines and renders nothing; it exists only
-to give ARCore a surface and call `update()` once per frame.
+## Adding a new consumer of camera frames
 
-### 4. Per frame — one grab, two consumers
+Do not open a camera. Read the frame you are given:
 
-```kotlin
-val frame = session.update()
+1. Depend on this module in your `android/build.gradle`:
 
-// navigation: pose + depth
-NavigationSensorBridge.submitFrame(session, frame)
+   ```groovy
+   implementation project(':navigation-native')
+   ```
 
-// perception: the RGB image, straight off the same frame
-frame.acquireCameraImage().use { image ->
-    val base64 = yuvToJpegBase64(image)      // replaces takePictureAsync
-    // ... existing analyzeFrame(base64) pipeline, unchanged
-}
-```
+2. Call `NavigationSensorBridge.takeOverFrameSource()` once, before navigation starts.
 
-`submitFrame` is cheap and bounded — a pose conversion and one subsampled depth unprojection.
-The mapping and planning work happens on the engine's own thread, so it is safe from a render
-loop. Frames are conflated: if mapping falls behind, old frames are dropped rather than queued.
+3. Create and configure the ARCore session. Depth is required by the engine:
 
-The depth image is acquired, copied and closed inside `submitFrame`, so the frame stays usable.
+   ```kotlin
+   config.depthMode = Config.DepthMode.AUTOMATIC   // when isDepthModeSupported
+   config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
+   ```
 
-### 5. Drop `CameraView`
+4. Report what the session can do, once:
 
-`perception-harness.tsx` and `cameraService.captureFrame()` can go, along with
-`takePictureAsync`. You will need a YUV_420_888 → JPEG conversion in their place; ARCore's
-`hello_ar` sample has one, or ML Kit can take the `Image` directly without any conversion.
+   ```kotlin
+   NavigationSensorBridge.reportCapabilities(depthSupported)
+   ```
 
----
+   Without this, `isSupported()` reports `depthSupported: false` on a perfectly capable phone and
+   navigation refuses to start — the flag can only be read from an open session, and in external
+   mode this module never opens one.
 
-## Two things you get for free
+5. Per frame, on whichever thread called `Session.update()`:
 
-**Correct timestamps.** Frames sourced from ARCore carry `frame.timestamp` — nanoseconds since
-boot, the value `SemanticObservation.timestampNs` expects. Right now `PerceptionFrame.timestamp`
-is a wall clock in milliseconds, which is a different clock domain entirely; passing it would put
-every observation billions of nanoseconds out of range and the depth association would reject all
-of them silently. (This module currently detects that and logs a warning, but getting it right at
-the source is better.)
+   ```kotlin
+   val frame = session.update()
+   NavigationSensorBridge.submitFrame(session, frame)   // navigation
+   frame.acquireCameraImage().use { image -> /* your work */ }
+   ```
 
-**A pose per observation.** Each frame comes with the camera pose, so a sign you read can be
-placed in the world rather than just described relative to the user.
+The depth image is acquired, copied and closed inside `submitFrame`, so the frame stays usable
+afterwards. The RGB image is none of this module's business.
 
----
-
-## If you would rather not own ARCore
-
-The alternative is a third module that owns the session and both of you consume. Same single
-session, but neither module depends on the other — which also means your module stays buildable
-and testable on its own. Happy to set that up instead; it is the same work arranged differently.
-
-Either way, the constraint is the same: **exactly one ARCore session, and nothing else opens the
-camera.**
+Everything on the JavaScript side is unchanged either way: `NavigationNative.start()`, the
+snapshot event and the guidance adapter behave identically.

@@ -18,7 +18,7 @@ function extractTextFromGeminiResponse(payload: unknown): string {
   const candidates = (payload as { candidates?: unknown[] }).candidates;
   if (!Array.isArray(candidates) || candidates.length === 0) return '';
 
-  const first = candidates[0] as { content?: { parts?: Array<{ text?: string }> } };
+  const first = candidates[0] as { content?: { parts?: { text?: string }[] } };
   const parts = first.content?.parts;
   if (!Array.isArray(parts)) return '';
 

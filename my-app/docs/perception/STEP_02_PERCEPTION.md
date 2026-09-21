@@ -27,7 +27,7 @@ Build the multimodal perception client with spatial prompt constraints, low temp
 | Schema sanitizer | `src/services/schemaValidator.js` |
 | Perception engine | `src/services/perceptionEngine.js` |
 | Mock fixtures | `src/constants/mockPerception.js` |
-| Timed runner | `test/run_step2_perception.mjs` |
+| Timed runner | `test/perception-engine.test.mjs` |
 | Snapshot | `snapshots/snapshot_step2_perception_frame.json` |
 
 ## Prompt rules (embedded)
@@ -40,7 +40,7 @@ Build the multimodal perception client with spatial prompt constraints, low temp
 
 ```bash
 cd my-app
-npm run test:step2
+npm test
 ```
 
 Forces mock mode, runs 10 timed iterations, writes the Step 2 snapshot.
@@ -59,7 +59,7 @@ Forces mock mode, runs 10 timed iterations, writes the Step 2 snapshot.
 4. Smoke-test from PC:
 
 ```bash
-npm run test:step2:live
+npm run probe:gemini
 ```
 
 That hits Gemini 2.0 Flash for real and writes `snapshots/snapshot_step2_perception_frame_live.json`.
