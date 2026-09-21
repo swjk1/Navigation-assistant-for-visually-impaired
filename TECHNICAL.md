@@ -157,8 +157,7 @@ building-sized 10 cm grid.
 | `logOddsHit` / `logOddsMiss` | +0.85 / −0.45 | evidence, not a hard enum |
 | `logOddsOccupiedThreshold` | 0.9 | ≥ ⇒ OCCUPIED |
 | `logOddsFreeThreshold` | −0.5 | ≤ ⇒ FREE |
-| `decayPerSecondWeak` | 0.80 | a person who walked past fades in seconds |
-| `decayPerSecondStable` | 0.97 | confirmed walls persist |
+| `decayPerSecondUnconfirmed` | 0.80 | a stray return that never decided a cell fades in seconds |
 | `inflationRadiusMeters` | 0.45 | the user is not a point |
 | `clearanceCostRadiusMeters` | 0.85 | soft cost keeping paths off walls |
 | `minObstacleHeightMeters` | 0.10 | below ⇒ floor |
@@ -171,7 +170,14 @@ FREE evidence, the endpoint gains OCCUPIED evidence. Without this the map would 
 a sea of UNKNOWN, and frontier detection — a FREE cell beside an UNKNOWN cell — could never fire.
 
 Evidence is stored as log-odds rather than a hard enum, so one noisy reading cannot permanently
-block a corridor, and decay lets the map forget a chair that moved.
+block a corridor, and decay clears returns that never added up to anything.
+
+Decay applies **only to cells that have not reached FREE or OCCUPIED**. Decided cells are never
+faded by the passage of time: decay runs over the whole 12 m window every frame while the depth
+sensor sees a narrow cone of it, so a time-based rule is one-way for everything out of view and
+erases the corridor behind the user. A chair that moved is forgotten by *looking through where it
+was* — the rays give the cell FREE evidence — and confirmed map data otherwise leaves only by
+scrolling out of the rolling window.
 
 **UNKNOWN is never traversable.** The single exception is a cell within
 `allowUnknownNearGoalCells` (3) of an *exploration* goal, so a frontier goal sitting exactly on the
@@ -357,6 +363,94 @@ Verified from the model file's own metadata:
  4 exit sign         10 person              16 women-s washroom
  5 fire alarm        11 push handle
 ```
+
+#### Training run
+
+The notebook's own cell outputs were cleared, so these figures come from its saved run artifacts
+(`results.csv`, `summary.json`) and from re-running validation against `best.pt` on the same
+split. That re-run reproduces the best epoch to four decimal places, which confirms the shipped
+ONNX derives from that checkpoint.
+
+| Setting | Value |
+|---|---|
+| Base checkpoint | `yolo26n.pt`, pretrained |
+| Epochs | 50 requested, 50 completed — `patience` 15 never triggered |
+| Best epoch | 41 |
+| Image size | 640 × 640 |
+| Batch | 16 |
+| Optimizer | AdamW, `lr0` 0.001 |
+| Augmentation | `mosaic` 0.5, `mixup` 0.0, `copy_paste` 0.0 |
+| Reproducibility | `seed` 0, `deterministic: True` |
+| Wall-clock | 22.2 min |
+
+Dataset: Roboflow `akhash/indoor-navigation-xs4of` v10, **CC BY 4.0** — separate from the model's
+own AGPL-3.0. Roboflow segmentation polygons were converted to detection boxes before training.
+
+| Split | Images | Boxes |
+|---|---|---|
+| train | 2 844 | 8 935 |
+| val | 105 | 306 |
+| test | 62 | 179 |
+
+Validation-split results:
+
+| Metric | Best (epoch 41) | Final (epoch 50) |
+|---|---|---|
+| mAP50 | **0.833** | 0.819 |
+| mAP50-95 | **0.635** | 0.624 |
+| Precision | **0.919** | 0.901 |
+| Recall | 0.738 | 0.738 |
+
+Precision well above recall is the right bias here: the model misses things rather than inventing
+them, and a hallucinated `exit sign` would actively send someone the wrong way.
+
+#### Per class
+
+Sorted worst-last, with validation support, because the averages hide the part that matters.
+
+| Class | AP50 | AP50-95 | P | R | val boxes |
+|---|---|---|---|---|---|
+| water dispenser | 0.995 | 0.930 | 1.000 | 0.957 | 10 |
+| accessibility | 0.995 | 0.877 | 0.987 | 1.000 | 31 |
+| women-s washroom | 0.995 | 0.861 | 0.990 | 1.000 | 19 |
+| men-s washroom | 0.991 | 0.805 | 0.964 | 0.950 | 20 |
+| push handle | 0.995 | 0.796 | 0.909 | 1.000 | 3 |
+| elevator | 0.912 | 0.787 | 0.828 | 0.750 | 4 |
+| fire extinguisher | 0.992 | 0.782 | 0.999 | 0.977 | 85 |
+| trash can | 0.963 | 0.743 | 0.922 | 0.667 | 12 |
+| door | 0.828 | 0.637 | 0.821 | 0.634 | 29 |
+| person | 0.808 | 0.613 | 1.000 | 0.728 | 4 |
+| fire alarm | 0.798 | 0.489 | 0.927 | 0.677 | 31 |
+| stair sign | 0.680 | 0.427 | 0.919 | 0.545 | 11 |
+| exit sign | 0.701 | 0.395 | 0.707 | 0.727 | 11 |
+| left arrow | 0.563 | 0.366 | 1.000 | 0.331 | 9 |
+| right arrow | 0.444 | 0.355 | 0.740 | 0.333 | 12 |
+| handle | 0.667 | 0.300 | 0.982 | 0.533 | 15 |
+| **elevator sign** | — | — | — | — | **0** |
+
+Three things in this table matter more than the headline number.
+
+**The navigation-critical classes are the weak ones.** `exit sign` (AP50-95 0.395) and the
+directional arrows (`left arrow` 0.366, `right arrow` 0.355) sit near the bottom, and both arrows
+recall barely a third of their instances — roughly two in three are missed. The classes the model
+is best at, `water dispenser` and the washroom signs, are the ones wayfinding needs least. The
+case for fine-tuning made below still holds — COCO could not emit these labels at all — but
+"present in the label set" is not the same as "reliable", and the guidance layer should treat a
+single arrow detection as a hint rather than an instruction.
+
+**`elevator sign` is completely unmeasured.** It has 60 training boxes and zero validation
+instances, so it contributes nothing to mAP and nothing verifies it was learned. It is the one
+class in the list whose real accuracy is unknown.
+
+**The validation split is small.** 105 images and 306 boxes across 17 classes means several
+per-class figures rest on a handful of instances: `push handle` scores AP50 0.995 on three boxes,
+`elevator` and `person` on four each. Those rows are noise, not measurement. Only
+`fire extinguisher` (85), `accessibility` (31), `fire alarm` (31) and `door` (29) have enough
+support to take at face value.
+
+These are validation-set numbers from the training run. They are not on-device accuracy: they say
+nothing about motion blur, the 640 × 640 non-letterboxed resize (§4.2), or the phone's camera at
+walking pace.
 
 This replaced a generic COCO checkpoint, and the improvement is categorical rather than
 incremental. COCO has **no door, no exit sign and no lift** — the three things this application
@@ -614,8 +708,9 @@ no Metro. Debug builds require all three.
 - **No visual loop closure.** Revisit detection is position proximity plus floor compatibility;
   over a long walk ARCore drift will eventually create duplicate graph nodes.
 - **Local grid is 12 m.** Beyond it the engine depends on the topological graph being dense enough.
-- **Moving obstacles** are handled only by evidence decay — no tracking or prediction. A person
-  walking toward the user is a stale obstacle for a second or so.
+- **Moving obstacles** are handled only by re-observation — no tracking or prediction. A person
+  walking toward the user is a stale obstacle until rays pass through where they were, and one
+  who leaves without the user ever looking back stays on the map until the window scrolls past.
 - **Frontier weights are guesses.** They are configuration, not measured optima.
 - **Depth encoding assumption.** `acquireDepthImage16Bits()` is read as 16-bit millimetres per
   ARCore's documentation. A device packing confidence into the top three bits would have readings

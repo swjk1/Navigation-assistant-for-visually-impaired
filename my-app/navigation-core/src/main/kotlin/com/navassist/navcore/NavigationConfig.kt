@@ -30,14 +30,14 @@ data class NavigationConfig(
 
     // ---------------------------------------------------------------- temporal decay
     /**
-     * Per-second multiplicative decay applied to weak evidence, pulling cells back towards
-     * UNKNOWN so that a person or chair that moved away stops blocking the map forever.
+     * Per-second multiplicative decay applied to evidence that has NOT yet decided a cell either
+     * way, clearing stray single returns before they can be mistaken for structure.
+     *
+     * Cells that did reach FREE or OCCUPIED are not decayed at all: a wall does not stop existing
+     * because the user looked away, and only the narrow sensor cone could ever re-confirm it.
+     * A moved obstacle is cleared by looking through it instead (see OccupancyGrid.applyDecay).
      */
-    val decayPerSecondWeak: Float = 0.80f,
-    /** Slower decay for cells that accumulated strong, repeatedly-confirmed evidence. */
-    val decayPerSecondStable: Float = 0.97f,
-    /** |logOdds| above which a cell counts as "stable" for decay purposes. */
-    val stableEvidenceThreshold: Float = 2.0f,
+    val decayPerSecondUnconfirmed: Float = 0.80f,
 
     // ---------------------------------------------------------------- depth handling
     /** Sample every Nth depth pixel (handled by the platform adapter, surfaced here for tuning). */

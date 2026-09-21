@@ -94,18 +94,21 @@ class OccupancyGridTest {
     }
 
     @Test
-    fun `temporal decay returns weak evidence to unknown but preserves confirmed structure`() {
+    fun `temporal decay clears unconfirmed returns but preserves decided cells`() {
         val g = grid()
-        // A brief sighting (a person walking past) versus a repeatedly confirmed wall.
-        repeat(2) { g.markOccupied(2, 2) }
-        repeat(10) { g.markOccupied(4, 4) }
-        assertEquals(CellState.OCCUPIED, g.stateAt(2, 2))
+        // A single stray depth return versus a cell the sensor actually decided on.
+        // Time alone may only remove the former: a person who walked away is cleared by rays
+        // passing through them, not by waiting, so decay must not touch decided structure.
+        g.markOccupied(2, 2)
+        repeat(2) { g.markOccupied(4, 4) }
+        assertEquals(CellState.UNKNOWN, g.stateAt(2, 2), "a single return is not yet an obstacle")
         assertEquals(CellState.OCCUPIED, g.stateAt(4, 4))
+        val decided = g.logOddsAt(4, 4)
 
-        g.applyDecay(deltaSeconds = 3f)
+        g.applyDecay(deltaSeconds = 10f)
 
-        assertEquals(CellState.UNKNOWN, g.stateAt(2, 2), "transient obstacle should fade")
-        assertEquals(CellState.OCCUPIED, g.stateAt(4, 4), "confirmed wall should persist")
+        assertTrue(abs(g.logOddsAt(2, 2)) < 0.1f, "unconfirmed return should fade towards unknown")
+        assertEquals(decided, g.logOddsAt(4, 4), "decided obstacle should not be decayed at all")
     }
 
     @Test

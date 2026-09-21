@@ -302,9 +302,7 @@ building-sized 10 cm grid.
 | `logOddsHit / logOddsMiss` | +0.85 / −0.45 | evidence, not a hard enum |
 | `logOddsOccupiedThreshold` | 0.9 | ≥ this ⇒ OCCUPIED |
 | `logOddsFreeThreshold` | −0.5 | ≤ this ⇒ FREE |
-| `decayPerSecondWeak` | 0.80 | a person who walked past fades in a couple of seconds |
-| `decayPerSecondStable` | 0.97 | confirmed walls persist |
-| `stableEvidenceThreshold` | 2.0 | \|log-odds\| above which decay slows |
+| `decayPerSecondUnconfirmed` | 0.80 | a stray return that never decided a cell fades in seconds; decided cells are never decayed |
 | `inflationRadiusMeters` | 0.45 | the user is not a point |
 | `clearanceCostRadiusMeters` | 0.85 | soft cost that keeps paths off walls |
 | `minObstacleHeightMeters` | 0.10 | below ⇒ floor |
@@ -570,8 +568,9 @@ phone, and `frontierCount` becoming non-zero once there is open space ahead.
   `targetRouteAbandonMillis`.
 - **Multi-floor is structural only.** Nodes carry `floorId`, vertical edges exist and route
   correctly, but nothing automates using a lift or stairs.
-- **Moving obstacles** are handled only by evidence decay — there is no object tracking or
-  prediction. A person walking towards the user is a stale obstacle for a second or so.
+- **Moving obstacles** are handled only by re-observation — there is no object tracking or
+  prediction. A person walking towards the user is a stale obstacle until rays pass through where
+  they were; one who leaves unseen stays on the map until the window scrolls past.
 - **Frontier weights are guesses.** They are configuration, not measured optima, and need tuning
   on real hardware with real users.
 - **Single session per process.** `NavigationRuntime` is a singleton; two simultaneous engines are

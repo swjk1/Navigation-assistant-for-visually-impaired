@@ -35,9 +35,7 @@ class OccupancyGrid(
     private val logOddsMax: Float = 4f,
     private val occupiedThreshold: Float = 0.9f,
     private val freeThreshold: Float = -0.5f,
-    private val decayPerSecondWeak: Float = 0.8f,
-    private val decayPerSecondStable: Float = 0.97f,
-    private val stableEvidenceThreshold: Float = 2.0f,
+    private val decayPerSecondUnconfirmed: Float = 0.8f,
 ) {
     constructor(config: NavigationConfig, originX: Float = 0f, originZ: Float = 0f) : this(
         cells = config.gridCells,
@@ -50,9 +48,7 @@ class OccupancyGrid(
         logOddsMax = config.logOddsMax,
         occupiedThreshold = config.logOddsOccupiedThreshold,
         freeThreshold = config.logOddsFreeThreshold,
-        decayPerSecondWeak = config.decayPerSecondWeak,
-        decayPerSecondStable = config.decayPerSecondStable,
-        stableEvidenceThreshold = config.stableEvidenceThreshold,
+        decayPerSecondUnconfirmed = config.decayPerSecondUnconfirmed,
     )
 
     var originX: Float = originX
@@ -212,18 +208,28 @@ class OccupancyGrid(
     // ------------------------------------------------------------------ decay
 
     /**
-     * Pulls evidence back towards UNKNOWN over time so the map can forget a person or a chair
-     * that moved away. Strongly-confirmed (static) structure decays far more slowly than weak,
-     * single-observation evidence.
+     * Fades UNCONFIRMED evidence back towards UNKNOWN so a stray depth return does not linger as
+     * a phantom obstacle.
+     *
+     * Cells that reached a decided state (FREE or OCCUPIED) are deliberately left alone. Decay
+     * runs over the whole window every frame, but the depth sensor only ever sees a narrow cone
+     * of it, so a time-based rule erases the corridor behind the user - and nothing out of view
+     * can re-observe those cells to offset it. That asymmetry is what made the map hold only the
+     * last few seconds of scans.
+     *
+     * Confirmed map data therefore changes in exactly two ways: counter-evidence from looking at
+     * the place again (a departed obstacle is cleared by rays passing through it - see
+     * [integrateRay]), and scrolling out of the rolling window (see [recenter]). Memory beyond
+     * the window stays the topological map's job.
      */
     fun applyDecay(deltaSeconds: Float) {
         if (deltaSeconds <= 0f) return
-        val weakFactor = decayPerSecondWeak.toDouble().pow(deltaSeconds.toDouble()).toFloat()
-        val stableFactor = decayPerSecondStable.toDouble().pow(deltaSeconds.toDouble()).toFloat()
+        val factor = decayPerSecondUnconfirmed.toDouble().pow(deltaSeconds.toDouble()).toFloat()
         for (i in logOdds.indices) {
             val value = logOdds[i]
             if (value == 0f) continue
-            val factor = if (abs(value) >= stableEvidenceThreshold) stableFactor else weakFactor
+            // Decided cells are map, not noise: only re-observation may overturn them.
+            if (value >= occupiedThreshold || value <= freeThreshold) continue
             val decayed = value * factor
             logOdds[i] = if (abs(decayed) < 0.02f) 0f else decayed
         }
