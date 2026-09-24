@@ -55,6 +55,7 @@ export type NavigationCommand =
  */
 export type StopReason =
   | 'OBSTACLE_AHEAD'
+  | 'UNKNOWN_AHEAD'
   | 'NO_ROUTE'
   | 'TRACKING_LOST'
   | 'NO_DEPTH'

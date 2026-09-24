@@ -121,11 +121,9 @@ class NavigationControllerTest {
         val inflated = TestSupport.inflate(grid, config)
 
         val output = settle(NavigationController(config), Pose3D(0f, 1.4f, 0f, 0f), straightPath, inflated)
-        assertEquals(
-            NavigationCommand.STOP,
-            output.command,
-            "unknown space must not silently become free space",
-        )
+        assertTrue(output.command != NavigationCommand.STRAIGHT, "unknown space must not silently become free space")
+        // Asked to look, not told to freeze: standing still would never reveal the floor.
+        assertEquals(NavigationCommand.SCAN, output.command)
     }
 
     @Test
@@ -196,29 +194,65 @@ class NavigationControllerTest {
     }
 
     @Test
-    fun `an announced turn is held long enough for the user to act on it`() {
+    fun `a turn ends as soon as the user faces the path, not after the dwell`() {
         val inflated = TestSupport.inflate(openGrid(), config)
         val controller = NavigationController(config)
         var t = 0L
         val leftPose = Pose3D(0f, 1.4f, 0f, GeometryUtils.degreesToRadians(30f))
-        // Advance only until the turn is actually announced, so the dwell clock starts HERE
-        // rather than having quietly expired during a long settle.
         while (controller.currentCommand != NavigationCommand.TURN_LEFT && t < 20_000) {
             t += 100
             controller.update(leftPose, straightPath, inflated, t)
         }
-        assertEquals(NavigationCommand.TURN_LEFT, controller.currentCommand)
+        val announced = t
 
-        // Straight ahead is now wanted, and stays wanted - but for less than the dwell.
-        val straightPose = Pose3D(0f, 1.4f, 0f, 0f)
-        repeat(10) { t += 100; controller.update(straightPose, straightPath, inflated, t) }
-        assertEquals(
-            NavigationCommand.TURN_LEFT,
-            controller.currentCommand,
-            "a turn must stand for commandMinDwellMillis",
-        )
-
-        repeat(10) { t += 300; controller.update(straightPose, straightPath, inflated, t) }
+        // The user has come round onto the path well inside the dwell.
+        val onPath = Pose3D(0f, 1.4f, 0f, 0f)
+        while (controller.currentCommand == NavigationCommand.TURN_LEFT && t < announced + 2_000) {
+            t += 33
+            controller.update(onPath, straightPath, inflated, t)
+        }
         assertEquals(NavigationCommand.STRAIGHT, controller.currentCommand)
+        assertTrue(
+            t - announced < config.commandMinDwellMillis,
+            "holding the turn after they face the path is how users overshoot: ended after ${t - announced} ms",
+        )
+    }
+
+    @Test
+    fun `a person with a reaction time is turned onto the path without overshooting`() {
+        // Closed loop with a realistic person: they act 450 ms after each instruction and turn at
+        // 60 degrees a second. With the old 1.4 s dwell this swung 80 degrees either side of the
+        // path indefinitely.
+        val inflated = TestSupport.inflate(openGrid(), config)
+        val controller = NavigationController(config)
+        val reactionMillis = 450L
+        val turnRate = GeometryUtils.degreesToRadians(60f) / 1000f
+        var yaw = GeometryUtils.degreesToRadians(70f)
+        val heard = ArrayDeque<Pair<Long, NavigationCommand>>()
+        var acting = NavigationCommand.STOP
+        var said = NavigationCommand.STOP
+        val spoken = ArrayList<NavigationCommand>()
+
+        var t = 0L
+        while (t < 6_000) {
+            t += 33
+            val command = controller.update(Pose3D(0f, 1.4f, 0f, yaw), straightPath, inflated, t).command
+            if (command != said) {
+                said = command
+                spoken += command
+                heard.addLast(t + reactionMillis to command)
+            }
+            while (heard.isNotEmpty() && heard.first().first <= t) acting = heard.removeFirst().second
+            when (acting) {
+                NavigationCommand.TURN_LEFT -> yaw -= turnRate * 33
+                NavigationCommand.TURN_RIGHT -> yaw += turnRate * 33
+                else -> Unit
+            }
+        }
+
+        val finalError = kotlin.math.abs(GeometryUtils.radiansToDegrees(yaw))
+        assertTrue(finalError < config.straightThresholdDegrees, "ended ${"%.0f".format(finalError)} degrees off the path")
+        assertTrue(NavigationCommand.TURN_RIGHT !in spoken, "never needs correcting back the other way: $spoken")
+        assertEquals(NavigationCommand.STRAIGHT, said)
     }
 }

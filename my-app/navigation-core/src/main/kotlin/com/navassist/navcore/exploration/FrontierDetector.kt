@@ -3,6 +3,7 @@ package com.navassist.navcore.exploration
 import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.geometry.GridCoordinate
 import com.navassist.navcore.mapping.CellState
+import com.navassist.navcore.mapping.InflatedGrid
 import com.navassist.navcore.mapping.OccupancyGrid
 import kotlin.math.min
 
@@ -22,6 +23,7 @@ class FrontierDetector(private val config: NavigationConfig) {
     private lateinit var isFrontier: BooleanArray
     private lateinit var visited: BooleanArray
     private lateinit var stack: IntArray
+    private lateinit var members: IntArray
     private var idCounter = 0
 
     private fun ensureCapacity(n: Int) {
@@ -31,13 +33,20 @@ class FrontierDetector(private val config: NavigationConfig) {
         isFrontier = BooleanArray(size)
         visited = BooleanArray(size)
         stack = IntArray(size)
+        members = IntArray(size)
     }
 
     fun resetIds() {
         idCounter = 0
     }
 
-    fun detect(grid: OccupancyGrid): List<Frontier> {
+    /**
+     * @param inflated when given, each frontier's representative cell is the member nearest the
+     *        centroid that is NOT inside an obstacle's inflation halo. A frontier running along a
+     *        wall is still reachable at its open end; judging it by a centroid that happens to sit
+     *        in the halo discarded it, and with it often the only way forward.
+     */
+    fun detect(grid: OccupancyGrid, inflated: InflatedGrid? = null): List<Frontier> {
         val n = grid.cells
         ensureCapacity(n)
         isFrontier.fill(false)
@@ -73,6 +82,7 @@ class FrontierDetector(private val config: NavigationConfig) {
                 val cz = current / n
                 sumX += cx
                 sumZ += cz
+                members[count] = current
                 count++
                 var dz = -1
                 while (dz <= 1) {
@@ -99,7 +109,8 @@ class FrontierDetector(private val config: NavigationConfig) {
 
             val centroidX = (sumX.toDouble() / count).toInt()
             val centroidZ = (sumZ.toDouble() / count).toInt()
-            val centroidCell = nearestFrontierCell(n, centroidX, centroidZ)
+            val centroidCell = inflated?.let { openMemberNearest(it, n, count, centroidX, centroidZ) }
+                ?: nearestFrontierCell(n, centroidX, centroidZ)
             val centroidWorld = grid.gridToWorld(centroidCell)
             frontiers.add(
                 Frontier(
@@ -112,6 +123,23 @@ class FrontierDetector(private val config: NavigationConfig) {
             )
         }
         return frontiers
+    }
+
+    private fun openMemberNearest(inflated: InflatedGrid, n: Int, count: Int, gx: Int, gz: Int): GridCoordinate? {
+        var best = -1
+        var bestDistance = Int.MAX_VALUE
+        for (k in 0 until count) {
+            val cell = members[k]
+            val x = cell % n
+            val z = cell / n
+            if (inflated.isBlocked(x, z)) continue
+            val d = (x - gx) * (x - gx) + (z - gz) * (z - gz)
+            if (d < bestDistance) {
+                bestDistance = d
+                best = cell
+            }
+        }
+        return if (best < 0) null else GridCoordinate(best % n, best / n)
     }
 
     private fun hasUnknownNeighbour(grid: OccupancyGrid, gx: Int, gz: Int): Boolean =

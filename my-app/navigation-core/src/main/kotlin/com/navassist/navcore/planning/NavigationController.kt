@@ -49,6 +49,11 @@ class NavigationController(private val config: NavigationConfig) {
     private var turning: Boolean = false
     private var nowMillis: Long = 0
 
+    /** Smoothed rate at which the user's heading is changing, radians per second. */
+    private var yawRate: Float = 0f
+    private var lastYaw: Float? = null
+    private var lastYawMillis: Long = 0
+
     val currentCommand: NavigationCommand get() = emittedCommand
 
     fun reset() {
@@ -59,6 +64,8 @@ class NavigationController(private val config: NavigationConfig) {
         emittedAtMillis = 0
         arrivalSinceMillis = null
         turning = false
+        yawRate = 0f
+        lastYaw = null
     }
 
     /** Immediately forces a command, bypassing smoothing. Used for safety stops. */
@@ -86,6 +93,7 @@ class NavigationController(private val config: NavigationConfig) {
         nowMillis: Long,
     ): ControllerOutput {
         this.nowMillis = nowMillis
+        trackYawRate(pose.yawRadians, nowMillis)
         if (path.size < 2) return forceCommand(NavigationCommand.STOP, StopReason.NO_ROUTE)
 
         val waypoint = selectLookahead(pose.position2D, path, inflated)
@@ -105,36 +113,48 @@ class NavigationController(private val config: NavigationConfig) {
         val desired = decideCommand(errorDegrees)
 
         // Safety gate: never tell someone to walk into space we have not confirmed is clear.
-        val gated = if (desired == NavigationCommand.STRAIGHT && !isForwardClear(pose, inflated)) {
-            NavigationCommand.STOP
+        // Something solid ahead is a hazard (STOP). Floor that has simply never been seen is not:
+        // the user is asked to look (SCAN), because standing still would never reveal it.
+        val ahead = if (desired == NavigationCommand.STRAIGHT) {
+            forwardState(pose, inflated, remainingPathMeters(pose.position2D, path))
         } else {
-            desired
+            Ahead.CLEAR
         }
-
-        // A STOP produced by the gate means something is in the way - a genuine hazard, unlike a
-        // STOP caused by lost tracking. The guidance layer plays a different pattern for each.
-        val blocked = gated == NavigationCommand.STOP && desired == NavigationCommand.STRAIGHT
-
-        val emitted = if (gated == NavigationCommand.STOP) {
-            // Fail-safe: emit immediately, do not wait for the stability counter.
-            forceCommand(NavigationCommand.STOP).command
-        } else {
-            stabilize(gated)
+        val emitted = when (ahead) {
+            // Fail-safe: emitted immediately, never held back by the stability counter.
+            Ahead.BLOCKED -> forceCommand(NavigationCommand.STOP).command
+            Ahead.UNKNOWN -> forceCommand(NavigationCommand.SCAN).command
+            Ahead.CLEAR -> stabilize(desired)
         }
 
         turning = emitted == NavigationCommand.TURN_LEFT || emitted == NavigationCommand.TURN_RIGHT
         val stopReason = when {
-            emitted != NavigationCommand.STOP -> null
-            blocked -> StopReason.OBSTACLE_AHEAD
-            else -> StopReason.NO_ROUTE
+            ahead == Ahead.BLOCKED -> StopReason.OBSTACLE_AHEAD
+            ahead == Ahead.UNKNOWN -> StopReason.UNKNOWN_AHEAD
+            emitted == NavigationCommand.STOP -> StopReason.NO_ROUTE
+            else -> null
         }
         return ControllerOutput(emitted, errorDegrees, distance, waypoint, stopReason)
     }
 
     private fun decideCommand(errorDegrees: Float): NavigationCommand {
         val magnitude = abs(errorDegrees)
-        val threshold = if (turning) config.turnReleaseDegrees else config.straightThresholdDegrees
-        if (magnitude <= threshold) return NavigationCommand.STRAIGHT
+        if (turning) {
+            // Where the heading error will be once the user has reacted to "straight": they keep
+            // turning at their current rate for that long. End the turn when THAT is on the path,
+            // not when they already are - otherwise every turn overshoots by a reaction time.
+            // Past the path counts as on it: the next decision corrects from there, with a
+            // straight in between rather than a flip to the opposite turn.
+            val lead = config.turnLeadMillis / 1000f
+            val predicted = errorDegrees - GeometryUtils.radiansToDegrees(yawRate) * lead
+            val ended = if (emittedCommand == NavigationCommand.TURN_LEFT) {
+                predicted >= -config.turnReleaseDegrees
+            } else {
+                predicted <= config.turnReleaseDegrees
+            }
+            return if (ended) NavigationCommand.STRAIGHT else emittedCommand
+        }
+        if (magnitude <= config.straightThresholdDegrees) return NavigationCommand.STRAIGHT
         // Positive yaw error means the waypoint lies clockwise of the heading, i.e. to the right.
         return if (errorDegrees > 0f) NavigationCommand.TURN_RIGHT else NavigationCommand.TURN_LEFT
     }
@@ -159,6 +179,18 @@ class NavigationController(private val config: NavigationConfig) {
 
         val emittedIsTurn = emittedCommand == NavigationCommand.TURN_LEFT ||
             emittedCommand == NavigationCommand.TURN_RIGHT
+        // Ending a turn is never delayed. The dwell exists so the engine does not re-decide before
+        // the user has had time to act - but once they are coming round onto the path they HAVE
+        // acted, and holding the turn only makes them overshoot. (With a 1.4 s dwell, a person
+        // turning at 60 degrees a second swung 80 degrees past the path, then back, forever.)
+        if (emittedIsTurn && desired == NavigationCommand.STRAIGHT) {
+            if (nowMillis - candidateSinceMillis >= config.turnEndStabilityMillis) {
+                emittedCommand = desired
+                emittedAtMillis = nowMillis
+            }
+            return emittedCommand
+        }
+        // Flipping straight from one turn to the other still waits out the dwell.
         if (emittedIsTurn && nowMillis - emittedAtMillis < config.commandMinDwellMillis) {
             return emittedCommand
         }
@@ -174,6 +206,21 @@ class NavigationController(private val config: NavigationConfig) {
      * aim at the furthest point roughly [NavigationConfig.lookaheadMeters] along the path that is
      * still in direct line of sight.
      */
+    private fun trackYawRate(yaw: Float, nowMillis: Long) {
+        val previous = lastYaw
+        val dtMillis = nowMillis - lastYawMillis
+        if (previous != null && dtMillis in 1..500) {
+            // Capped at what a person can do: a bigger jump is tracking noise, not a turn.
+            val rate = (GeometryUtils.angleDifference(previous, yaw) / (dtMillis / 1000f))
+                .coerceIn(-MAX_HUMAN_TURN_RATE, MAX_HUMAN_TURN_RATE)
+            yawRate += (rate - yawRate) * YAW_RATE_SMOOTHING
+        } else if (previous == null || dtMillis > 500) {
+            yawRate = 0f
+        }
+        lastYaw = yaw
+        lastYawMillis = nowMillis
+    }
+
     private fun selectLookahead(position: Vec2, path: List<Vec2>, inflated: InflatedGrid): Vec2? {
         val startCell = inflated.worldToGrid(position)
         var fallback: Vec2? = null
@@ -209,27 +256,54 @@ class NavigationController(private val config: NavigationConfig) {
     private fun hasLineOfSight(inflated: InflatedGrid, from: GridCoordinate, to: Vec2): Boolean =
         inflated.hasLineOfSight(from, inflated.worldToGrid(to))
 
+    private enum class Ahead { CLEAR, UNKNOWN, BLOCKED }
+
+    /** Straight-line distance to the end of the path: where the user is actually going. */
+    private fun remainingPathMeters(position: Vec2, path: List<Vec2>): Float =
+        path.last().distanceTo(position)
+
     /**
      * Sweeps a short corridor straight ahead of the user. Any blocked OR unknown cell within
-     * [NavigationConfig.forwardSafetyDistanceMeters] suppresses STRAIGHT.
+     * [NavigationConfig.forwardSafetyDistanceMeters] suppresses STRAIGHT; a blocked one anywhere
+     * in the sweep makes it a hazard rather than a request to look.
+     *
+     * Beyond the end of the path, known obstacles are ignored - a destination on a wall sits
+     * inside the wall's inflation halo, and a fixed sweep stopped the user 1.4 m short of it,
+     * forever. UNKNOWN space is never ignored, at any distance: an exploration path ends exactly
+     * where unknown space begins, and unknown can be a drop-off. (Ignoring it there walked a
+     * simulated user off the end of a floor.)
      */
-    private fun isForwardClear(pose: Pose3D, inflated: InflatedGrid): Boolean {
+    private fun forwardState(pose: Pose3D, inflated: InflatedGrid, remainingMeters: Float): Ahead {
         val forward = pose.forward2D
         val steps = (config.forwardSafetyDistanceMeters / inflated.resolution).toInt().coerceAtLeast(1)
         val start = inflated.worldToGrid(pose.position2D)
+        var unknown = false
         for (step in 1..steps) {
-            val probe = pose.position2D + forward * (step * inflated.resolution)
+            val distance = step * inflated.resolution
+            val probe = pose.position2D + forward * distance
             val cell = inflated.worldToGrid(probe)
             if (cell == start) continue
-            if (!inflated.isTraversable(cell)) return false
+            if (inflated.isUnknown(cell)) {
+                unknown = true
+                continue
+            }
+            if (inflated.isBlocked(cell) && distance <= remainingMeters) return Ahead.BLOCKED
         }
-        return true
+        return if (unknown) Ahead.UNKNOWN else Ahead.CLEAR
     }
 
     /**
      * Arrival must be stable over several frames: a single noisy pose that happens to land inside
      * the arrival radius should not end the guidance session.
      */
+    private companion object {
+        /** Per-frame blend for the measured turn rate: settles in about a quarter second at 30 fps. */
+        const val YAW_RATE_SMOOTHING = 0.25f
+
+        /** ~200 degrees a second: a brisk turn on the spot. */
+        const val MAX_HUMAN_TURN_RATE = 3.5f
+    }
+
     fun updateArrival(distanceToTargetMeters: Float?, nowMillis: Long): Boolean {
         if (distanceToTargetMeters == null || distanceToTargetMeters > config.arrivalRadiusMeters) {
             arrivalSinceMillis = null

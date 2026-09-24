@@ -115,6 +115,7 @@ class SensorFrameAssembler(
                 config.minDepthMeters,
                 config.maxDepthMeters,
                 cloud,
+                config.depthEdgeRejectFraction,
             )
             snapshots.record(depth, depthIntrinsics, transform)
             lastPointCount = cloud.count

@@ -8,10 +8,11 @@ import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.NotYetAvailableException
 import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.geometry.NavigationFrame
+import com.navassist.navcore.semantic.SemanticObservation
 import com.navassist.navcore.sensing.CameraIntrinsics
 import com.navassist.navcore.sensing.DepthImage
-import com.navassist.navcore.sensing.DepthSnapshotStore
 import com.navassist.navcore.sensing.PlaneObservation
+import com.navassist.navcore.sensing.SemanticLocator
 import com.navassist.navcore.sensing.SensorFrameAssembler
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicInteger
@@ -154,12 +155,9 @@ class ArCoreFrameProcessor(private val config: NavigationConfig) {
         }
     }
 
-    /** Resolves a semantic observation against the depth of the frame it was seen in. Any thread. */
-    fun resolve(
-        normalizedX: Float?,
-        normalizedY: Float?,
-        timestampNanos: Long?,
-    ): DepthSnapshotStore.Resolution = assembler.resolve(normalizedX, normalizedY, timestampNanos)
+    /** Places observations using the depth of the frame each was seen in. Any thread. */
+    fun locate(observations: List<SemanticObservation>): List<SemanticLocator.Located> =
+        SemanticLocator.locate(observations, assembler)
 
     /** Keeps the depth for a frame whose RGB image was just captured for perception. GL thread. */
     fun pinDepth(timestampNanos: Long) = assembler.pinDepth(timestampNanos)

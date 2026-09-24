@@ -13,6 +13,7 @@ import com.navassist.navcore.geometry.NavigationFrame
 import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.semantic.NavigationTarget
 import com.navassist.navcore.semantic.SemanticObservation
+import com.navassist.navcore.sensing.SemanticLocator
 import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.NavigationSnapshot
 import com.navassist.navcore.state.NavigationStatus
@@ -454,45 +455,9 @@ object NavigationRuntime {
     fun submitSemanticObservations(observations: List<SemanticObservation>) {
         if (observations.isEmpty()) return
         // Resolution only touches the depth snapshots, which are locked; do it on this thread.
-        val resolved = observations.map { resolve(it) }
-        engineScope.launch {
-            for ((observerPose, group) in resolved.groupBy { it.second }) {
-                engine.submitSemanticObservations(
-                    group.map { it.first },
-                    engine.clockMillis,
-                    observerPose ?: engine.currentPose(),
-                )
-            }
-        }
+        val located = frameProcessor.locate(observations)
+        engineScope.launch { SemanticLocator.submit(engine, located) }
     }
-
-    private fun resolve(observation: SemanticObservation): Pair<SemanticObservation, Pose3D?> {
-        val (x, y) = imageCoordinatesOf(observation)
-        val resolution = frameProcessor.resolve(x, y, observation.timestampNanos)
-        val world = resolution.worldPosition
-        if (observation.worldPosition != null || world == null) return observation to resolution.observerPose
-        val located = when (observation) {
-            is SemanticObservation.Room -> observation.copy(worldPosition = world)
-            is SemanticObservation.Exit -> observation.copy(worldPosition = world)
-            // Doors were missing here, so a door was never localized and "find a door" could
-            // only ever explore.
-            is SemanticObservation.Door -> observation.copy(worldPosition = world)
-            is SemanticObservation.Stairs -> observation.copy(worldPosition = world)
-            is SemanticObservation.Elevator -> observation.copy(worldPosition = world)
-            else -> observation
-        }
-        return located to resolution.observerPose
-    }
-
-    private fun imageCoordinatesOf(observation: SemanticObservation): Pair<Float?, Float?> =
-        when (observation) {
-            is SemanticObservation.Room -> observation.normalizedX to observation.normalizedY
-            is SemanticObservation.Exit -> observation.normalizedX to observation.normalizedY
-            is SemanticObservation.Door -> observation.normalizedX to observation.normalizedY
-            is SemanticObservation.Stairs -> observation.normalizedX to observation.normalizedY
-            is SemanticObservation.Elevator -> observation.normalizedX to observation.normalizedY
-            else -> null to null
-        }
 
     fun currentSnapshot(): NavigationSnapshot = snapshot
 

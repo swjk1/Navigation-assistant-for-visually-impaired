@@ -79,7 +79,7 @@ class ExplorationManager(
         topology: TopologicalMap,
         nowMillis: Long,
     ): ExplorationResult {
-        val detected = detector.detect(grid).filterNot { isBlacklisted(it.centroid) }
+        val detected = detector.detect(grid, inflated).filterNot { isBlacklisted(it.centroid) }
         val scored = scorer.score(detected, userPose, target, semantics, topology, inflated, nowMillis)
         frontiers = scored
 

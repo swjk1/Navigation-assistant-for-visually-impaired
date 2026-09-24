@@ -124,14 +124,20 @@ class DepthIntegrationTest {
     fun `the user's own footprint is free but never wears away a wall beside them`() {
         val engine = startedEngine()
         val grid = engine.occupancyGrid()
-        // First frame positions the window; then a wall is known 20 cm to the user's left.
+        // First frame positions the window. The phone is at the origin facing +z, so the body
+        // stands 0.3 m behind it; a wall is known 15 cm to the body's left.
         engine.updateFrame(frame(DepthPointCloud.EMPTY))
-        val wall = grid.worldToGrid(Vec2(-0.2f, 0f))
+        val wall = grid.worldToGrid(Vec2(-0.15f, -0.3f))
         grid.setState(wall.gx, wall.gz, CellState.OCCUPIED)
 
         repeat(60) { engine.updateFrame(frame(DepthPointCloud.EMPTY)) }
 
-        assertEquals(CellState.FREE, grid.stateAtWorld(Vec2(0.1f, 0.1f)), "the user is standing here")
+        assertEquals(CellState.FREE, grid.stateAtWorld(Vec2(0.05f, -0.3f)), "the user is standing here")
         assertEquals(CellState.OCCUPIED, grid.stateAt(wall.gx, wall.gz), "out of view is not evidence")
+        assertEquals(
+            CellState.UNKNOWN,
+            grid.stateAtWorld(Vec2(0.05f, 0.25f)),
+            "in front of the phone is unseen floor, not footprint - it may be a stairwell",
+        )
     }
 }

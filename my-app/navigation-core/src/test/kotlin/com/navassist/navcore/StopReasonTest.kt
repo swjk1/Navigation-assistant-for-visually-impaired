@@ -80,7 +80,7 @@ class StopReasonTest {
     }
 
     @Test
-    fun `unknown space ahead is also a hazard, not a fault`() {
+    fun `unknown space ahead is a request to look, not a hazard`() {
         // Free only a small patch; everything beyond is UNKNOWN, which must never read as clear.
         val grid = OccupancyGrid(config, originX = -6f, originZ = -6f)
         val here = grid.worldToGrid(Vec2(0f, 0f))
@@ -92,8 +92,10 @@ class StopReasonTest {
         var output = controller.update(pose(0f, 0f), path, inflated, nextClock())
         repeat(4) { output = controller.update(pose(0f, 0f), path, inflated, nextClock()) }
 
-        assertEquals(NavigationCommand.STOP, output.command)
-        assertEquals(StopReason.OBSTACLE_AHEAD, output.stopReason)
+        // Never STRAIGHT, and never a hazard alert for empty floor that is merely unseen: that
+        // alarmed users for nothing and, paired with STOP, froze them where nothing could change.
+        assertEquals(NavigationCommand.SCAN, output.command)
+        assertEquals(StopReason.UNKNOWN_AHEAD, output.stopReason)
     }
 
     @Test

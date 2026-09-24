@@ -64,6 +64,23 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     private var grid = OccupancyGrid(config)
     private var inflated: InflatedGrid? = null
 
+    /**
+     * How far from the sensor depth is integrated: [NavigationConfig.maxDepthMeters], but never
+     * so far that it reaches the edge of the rolling window.
+     *
+     * The user can stand up to [NavigationConfig.gridRecenterThresholdMeters] from the window's
+     * centre. Depth that reaches the window's border fills it with FREE cells whose unknown
+     * neighbours lie outside the window - and frontiers are never detected on the border - so the
+     * one frontier that says "the corridor carries on" vanishes, and the engine decides there is
+     * nothing left to explore while standing in an open corridor.
+     */
+    private val integrationRangeMeters: Float = run {
+        val insideWindow = config.gridSizeMeters / 2f - config.gridRecenterThresholdMeters -
+            2f * config.gridResolutionMeters
+        // Tiny test grids cannot satisfy this; they are not about range.
+        if (insideWindow > config.minDepthMeters) min(config.maxDepthMeters, insideWindow) else config.maxDepthMeters
+    }
+
     // ---------------------------------------------------------------- session state
     var target: NavigationTarget = NavigationTarget.Explore
         private set
@@ -314,7 +331,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         grid.applyDecay(deltaSeconds)
 
         // One frame is one observation: everything below is collected, then committed once.
-        markFootprint(frame.pose.position2D)
+        markFootprint(frame.pose)
         if (frame.depthAvailable && frame.points.count > 0) {
             lastDepthTimestampNanos = frame.timestampNanos
             lastDepthPointCount = frame.points.count
@@ -330,6 +347,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             }
         }
         grid.commitObservation()
+        bridgeBlindZone(frame.pose)
 
         val depthStale = lastDepthTimestampNanos == 0L ||
             (frame.timestampNanos - lastDepthTimestampNanos) / 1_000_000 > config.depthStarvationMillis
@@ -457,8 +475,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val sensorHeight = sensor.y - floorY
         val minHeight = config.minObstacleHeightMeters
         val maxHeight = config.maxObstacleHeightMeters
-        val maxRangeSq = config.maxDepthMeters * config.maxDepthMeters
+        val maxRangeSq = integrationRangeMeters * integrationRangeMeters
         val minRangeSq = config.minDepthMeters * config.minDepthMeters
+        val obstacleRange = min(config.maxObstacleRangeMeters, integrationRangeMeters)
+        val obstacleRangeSq = obstacleRange * obstacleRange
         val limit = min(points.count, config.maxPointsPerFrame)
 
         for (i in 0 until limit) {
@@ -476,8 +496,14 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             when {
                 // Overhead structure: tells us nothing about the floor plan under it.
                 height > maxHeight -> continue
-                // Below the floor we think we have: the estimate is wrong, so this point says
-                // nothing trustworthy about what is walkable. Dropping it is the safe failure.
+                // Far below the floor: the floor is missing where this ray crossed floor level.
+                height < -config.dropOffDepthMeters && sensorHeight > 0f -> {
+                    val t = sensorHeight / (sensorHeight - height)
+                    val cell = grid.worldToGrid(Vec2(originX + dx * t, originZ + dz * t))
+                    grid.observeOccupied(cell.gx, cell.gz)
+                }
+                // Slightly below the floor we think we have: noise, or an estimate a little off.
+                // It says nothing trustworthy about what is walkable; dropping it is the safe failure.
                 height < -config.floorBandBelowMeters -> continue
                 // Floor / low ground: carve the low end of the ray.
                 height < minHeight -> {
@@ -489,7 +515,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                     }
                     grid.observeFreeLine(Vec2(originX + dx * t, originZ + dz * t), Vec2(px, pz))
                 }
-                // Body-height obstacle.
+                // Body-height obstacle - but only where depth is accurate enough to tell one from
+                // a noisy floor return. See NavigationConfig.maxObstacleRangeMeters.
+                rangeSq > obstacleRangeSq -> continue
                 else -> {
                     val cell = grid.worldToGrid(Vec2(px, pz))
                     grid.observeOccupied(cell.gx, cell.gz)
@@ -499,14 +527,55 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     }
 
     /**
-     * The user is standing here, so it is walkable - the one piece of free space no depth sensor
-     * held at chest height can see. Occupied cells are skipped: a wall beside the user is out of
-     * view, and nothing would ever restore it if the footprint wore it away.
+     * Bridges the floor the phone cannot see: the strip just in front of it, below the camera's
+     * view even when tilted down. Without this nothing can be planned from a standing start - the
+     * body's footprint and the first visible floor are separated by half a metre of unknown.
+     *
+     * Only along the heading, only UNKNOWN cells, and only when seen FREE floor continues
+     * directly beyond the gap. An edge the user has never seen is never bridged: beyond it there
+     * is no seen floor, only unknown or a drop-off (which is an obstacle, see dropOffDepthMeters).
      */
-    private fun markFootprint(position: Vec2) {
+    private fun bridgeBlindZone(phone: Pose3D) {
+        val zone = config.blindZoneMeters
+        if (zone <= 0f) return
+        val step = grid.resolution
+        val forward = phone.forward2D
+        val right = Vec2(forward.z, -forward.x)
+        val lanes = floatArrayOf(-step, 0f, step)
+        for (lane in lanes) {
+            val origin = phone.position2D + right * lane
+            // Find where seen floor resumes, within the zone plus a little.
+            var resume = -1f
+            var d = step
+            while (d <= zone + 3f * step) {
+                val state = grid.stateAtWorld(origin + forward * d)
+                if (state == CellState.OCCUPIED) break
+                if (state == CellState.FREE && d > step) { resume = d; break }
+                d += step
+            }
+            if (resume < 0f) continue
+            var fill = step
+            while (fill < resume) {
+                val cell = grid.worldToGrid(origin + forward * fill)
+                if (grid.stateAt(cell.gx, cell.gz) == CellState.UNKNOWN) grid.observeFree(cell.gx, cell.gz)
+                fill += step
+            }
+        }
+        grid.commitObservation()
+    }
+
+    /**
+     * The user is standing here, so it is walkable - the one piece of free space no depth sensor
+     * held at chest height can see. Centred on the BODY, behind the phone, never on the phone
+     * itself: nothing in front of the phone is known to be floor until it has been seen.
+     * Occupied cells are skipped: a wall beside the user is out of view, and nothing would ever
+     * restore it if the footprint wore it away.
+     */
+    private fun markFootprint(phone: Pose3D) {
         val radius = config.footprintFreeRadiusMeters
         if (radius <= 0f) return
-        val center = grid.worldToGrid(position)
+        val body = phone.position2D - phone.forward2D * config.footprintBehindPhoneMeters
+        val center = grid.worldToGrid(body)
         val radiusCells = radius / grid.resolution
         val reach = kotlin.math.ceil(radiusCells).toInt()
         val radiusSq = radiusCells * radiusCells

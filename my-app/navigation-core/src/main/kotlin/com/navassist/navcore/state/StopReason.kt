@@ -13,8 +13,16 @@ package com.navassist.navcore.state
  * obstacle.
  */
 enum class StopReason {
-    /** Something blocked - or not yet known to be clear - directly ahead. A real hazard. */
+    /** Something solid directly ahead. A real hazard. */
     OBSTACLE_AHEAD,
+
+    /**
+     * The floor just ahead has never been seen - usually right after a turn, because a phone held
+     * upright does not see the floor within about a metre. Not a hazard: the user is asked to look
+     * (SCAN), since standing still would never reveal it. Reporting this as OBSTACLE_AHEAD raised
+     * false hazard alerts and, paired with STOP, left the user frozen in front of empty floor.
+     */
+    UNKNOWN_AHEAD,
 
     /** The planner has no traversable route to the current goal. */
     NO_ROUTE,

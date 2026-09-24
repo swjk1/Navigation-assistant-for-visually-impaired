@@ -15,8 +15,12 @@ data class NavigationConfig(
     /**
      * The grid re-centres on the device once the device drifts further than this from the current
      * grid centre. Keeps the local map small while the user walks across a building.
+     *
+     * Together with the grid size this bounds how far ahead depth can be integrated (see
+     * NavigationEngine.integrationRangeMeters): the user can be this far from the centre, and
+     * depth reaching the window's edge hides the frontier that says "the corridor continues".
      */
-    val gridRecenterThresholdMeters: Float = 2.0f,
+    val gridRecenterThresholdMeters: Float = 1.0f,
 
     // ---------------------------------------------------------------- occupancy evidence (log odds)
     val logOddsHit: Float = 0.85f,
@@ -56,17 +60,46 @@ data class NavigationConfig(
     val maxDepthMeters: Float = 6.0f,
     /** Depth samples closer than this are discarded (lens/holder artefacts). */
     val minDepthMeters: Float = 0.3f,
+    /**
+     * Obstacles are only marked within this horizontal range; floor still carves free space out
+     * to [maxDepthMeters].
+     *
+     * Depth error grows with the square of range. By 5-6 m it is tens of centimetres, and a floor
+     * return seen at a shallow angle lands 10+ cm above the floor often enough to be taken for an
+     * obstacle - a corridor then fills with phantom walls exactly where its frontier is. An
+     * obstacle further away than this is re-observed, accurately, long before the user reaches it.
+     * (ROS costmaps split obstacle range from clearing range for the same reason.)
+     */
+    val maxObstacleRangeMeters: Float = 4.0f,
     /** Upper bound on points fed into the engine per frame. */
     val maxPointsPerFrame: Int = 6000,
     /**
-     * Radius around the user's own position that is marked FREE on every tracked frame.
+     * Depth samples that jump by more than this fraction of their range (and at least 5 cm) from
+     * a neighbouring pixel are dropped as "flying pixels".
      *
-     * Free space otherwise only comes from floor the sensor actually sees, and the floor under
-     * and immediately around a person holding a phone upright is never in view. They are
-     * standing on it, though, which is better evidence than any depth return. Cells already
-     * OCCUPIED are left alone, so a wall beside the user is never walked out of the map.
+     * At a depth edge - a door jamb against the room behind it - depth sensors return values
+     * smeared between the two surfaces. Kept, they land in the gap and thicken every edge by a
+     * cell or two, which is enough to close a doorway. Dropping them loses nothing real: the
+     * surfaces either side are still seen by their other pixels.
      */
-    val footprintFreeRadiusMeters: Float = 0.3f,
+    val depthEdgeRejectFraction: Float = 0.06f,
+    /**
+     * Radius of the user's body footprint, marked FREE on every tracked frame.
+     *
+     * Free space otherwise only comes from floor the sensor actually sees, and the floor under a
+     * person holding a phone upright is never in view. They are standing on it, though, which is
+     * better evidence than any depth return. Cells already OCCUPIED are left alone, so a wall
+     * beside the user is never walked out of the map.
+     */
+    val footprintFreeRadiusMeters: Float = 0.25f,
+    /**
+     * How far behind the phone the body's centre is: people hold the phone out in front.
+     *
+     * The footprint is centred there, never on the phone. Centred on the phone it reached ~0.5 m
+     * AHEAD of where the person stands, marked the edge of a stairwell as floor, and walked a
+     * simulated user into it.
+     */
+    val footprintBehindPhoneMeters: Float = 0.3f,
 
     // ---------------------------------------------------------------- floor + obstacle extraction
     /** Points below this height above the floor count as floor, not obstacle. */
@@ -82,6 +115,22 @@ data class NavigationConfig(
     val floorBandBelowMeters: Float = 0.12f,
     /** Points above this height above the floor count as ceiling / overhead, not obstacle. */
     val maxObstacleHeightMeters: Float = 2.10f,
+    /**
+     * A return this far BELOW the floor means the floor is missing where its ray crossed floor
+     * level: a stairwell, a step down, a platform edge. That crossing is marked as an obstacle.
+     *
+     * Such returns used to be discarded, so a stairwell was merely unknown - and anything that
+     * treated unknown floor as walkable (the footprint did, once) walked straight into it. If the
+     * floor estimate itself is wrong the same rule produces phantom obstacles, never phantom
+     * floor: it fails safe.
+     */
+    val dropOffDepthMeters: Float = 0.2f,
+    /**
+     * The floor within about this distance in front of the phone is below the camera's view even
+     * when it is tilted down. Unknown cells there are bridged as floor, but ONLY when seen floor
+     * continues directly beyond them - so an unseen edge is never bridged. See NavigationEngine.
+     */
+    val blindZoneMeters: Float = 0.5f,
     /** Floor estimation histogram bin size. */
     val floorHistogramBinMeters: Float = 0.05f,
     /** Minimum points in the winning bin before a floor estimate is trusted at all. */
@@ -107,8 +156,17 @@ data class NavigationConfig(
     val floorRiseConfirmMillis: Long = 2000,
 
     // ---------------------------------------------------------------- obstacle inflation
-    /** The user is not a point. Obstacles are inflated by this radius before planning. */
-    val inflationRadiusMeters: Float = 0.45f,
+    /**
+     * The user is not a point. Obstacles are inflated by this radius before planning, and nothing
+     * inside it is ever walked into: this is the HARD envelope - a body radius (~0.25 m) plus a
+     * small margin.
+     *
+     * Keeping paths away from walls is [clearanceCostRadiusMeters]' job, not this one's. At 0.45 m
+     * the envelope alone needed ~1 m of clear width once depth noise thickened the walls: a 2 m
+     * corridor left a 0.7 m band, the forward check fired "obstacle ahead" whenever the user drifted
+     * 20 cm off centre, and a standard doorway (0.81-0.91 m clear) could never be routed through.
+     */
+    val inflationRadiusMeters: Float = 0.30f,
     /** Cells within this distance of an obstacle get an extra planning cost (but stay passable). */
     val clearanceCostRadiusMeters: Float = 0.85f,
     /** Weight of the obstacle-proximity penalty in A* cost. */
@@ -202,6 +260,22 @@ data class NavigationConfig(
      * two of you oscillate. Safety stops ignore this and interrupt immediately.
      */
     val commandMinDwellMillis: Long = 1400,
+    /**
+     * How far ahead a turn is ended: the time between "straight" being said and the person
+     * actually stopping their turn.
+     *
+     * Someone turning at 60 degrees a second keeps turning for their whole reaction time after
+     * hearing "straight". Waiting until they face the path means they always overshoot it by that
+     * much, the engine corrects the other way, and the two oscillate. The controller measures the
+     * user's actual turn rate and says "straight" this long before they would reach the path.
+     */
+    val turnLeadMillis: Long = 500,
+    /**
+     * Ending a turn needs this much consistent evidence - far less than [commandStabilityMillis],
+     * because a turn held too long is an overshoot, but enough that one jittery frame cannot
+     * interrupt a turn the user is in the middle of.
+     */
+    val turnEndStabilityMillis: Long = 150,
     /** Distance at which the final target counts as reached. */
     val arrivalRadiusMeters: Float = 1.0f,
     /** Time spent continuously within [arrivalRadiusMeters] before ARRIVED is declared. */
