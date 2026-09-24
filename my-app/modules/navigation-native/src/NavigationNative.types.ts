@@ -178,6 +178,12 @@ type SemanticBase = {
   /** Image-space position, 0..1. The native adapter resolves it to a world position via depth. */
   normalizedX?: number;
   normalizedY?: number;
+  /**
+   * Detection box size, 0..1 of the SENSOR image (like normalizedX/Y). Lets the engine reject a
+   * depth placement that would make the object implausibly large or small for what it is.
+   */
+  normalizedWidth?: number;
+  normalizedHeight?: number;
   /** Supply these directly if the caller already resolved a canonical world position. */
   worldX?: number;
   worldY?: number;

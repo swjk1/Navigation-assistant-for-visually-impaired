@@ -58,6 +58,10 @@ class SemanticObservationRecord : Record {
     @Field var normalizedX: Float? = null
     @Field var normalizedY: Float? = null
 
+    // Detection box size, 0..1 of the sensor image, used to sanity-check where depth places it.
+    @Field var normalizedWidth: Float? = null
+    @Field var normalizedHeight: Float? = null
+
     /**
      * Timestamp of the camera frame the observation came from, in nanoseconds (the value from
      * ARCore's Frame.getTimestamp()). Used to reject observations that are too old to associate
@@ -85,6 +89,8 @@ class SemanticObservationRecord : Record {
                 normalizedY = normalizedY,
                 timestampNanos = timestamp,
                 worldPosition = world,
+                normalizedWidth = normalizedWidth,
+                normalizedHeight = normalizedHeight,
             )
 
             "ROOM_RANGE" -> SemanticObservation.RoomRange(
@@ -102,6 +108,8 @@ class SemanticObservationRecord : Record {
                 normalizedY = normalizedY,
                 timestampNanos = timestamp,
                 worldPosition = world,
+                normalizedWidth = normalizedWidth,
+                normalizedHeight = normalizedHeight,
             )
 
             "DOOR" -> SemanticObservation.Door(
@@ -111,6 +119,8 @@ class SemanticObservationRecord : Record {
                 normalizedY = normalizedY,
                 timestampNanos = timestamp,
                 worldPosition = world,
+                normalizedWidth = normalizedWidth,
+                normalizedHeight = normalizedHeight,
             )
 
             "STAIRS" -> SemanticObservation.Stairs(
@@ -119,6 +129,8 @@ class SemanticObservationRecord : Record {
                 normalizedY = normalizedY,
                 timestampNanos = timestamp,
                 worldPosition = world,
+                normalizedWidth = normalizedWidth,
+                normalizedHeight = normalizedHeight,
             )
 
             "ELEVATOR" -> SemanticObservation.Elevator(
@@ -127,6 +139,8 @@ class SemanticObservationRecord : Record {
                 normalizedY = normalizedY,
                 timestampNanos = timestamp,
                 worldPosition = world,
+                normalizedWidth = normalizedWidth,
+                normalizedHeight = normalizedHeight,
             )
 
             "FLOOR" -> SemanticObservation.Floor(

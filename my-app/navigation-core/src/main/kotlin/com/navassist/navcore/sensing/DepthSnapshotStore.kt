@@ -46,6 +46,12 @@ class DepthSnapshotStore(
         val worldPosition: Vec3?,
         /** Where the camera was when the image was taken, when a matching frame was found. */
         val observerPose: Pose3D?,
+        /**
+         * Metres spanned by the whole image width / height at the resolved depth: multiply by a
+         * detection's normalized box size to get its physical size, as placed.
+         */
+        val metersPerImageWidth: Float? = null,
+        val metersPerImageHeight: Float? = null,
     )
 
     private val lock = Any()
@@ -96,7 +102,14 @@ class DepthSnapshotStore(
         val snapshot = find(timestampNanos) ?: return@synchronized NOT_RESOLVED
         val pose = CanonicalFrame.poseOf(snapshot.transform)
         if (normalizedX == null || normalizedY == null) return@synchronized Resolution(null, pose)
-        Resolution(worldPositionIn(snapshot, normalizedX, normalizedY), pose)
+        val depth = depthAt(snapshot, normalizedX, normalizedY) ?: return@synchronized Resolution(null, pose)
+        val k = snapshot.intrinsics
+        Resolution(
+            worldPosition(snapshot, normalizedX, normalizedY, depth),
+            pose,
+            metersPerImageWidth = depth * snapshot.image.width / k.fx,
+            metersPerImageHeight = depth * snapshot.image.height / k.fy,
+        )
     }
 
     private fun find(timestampNanos: Long?): Snapshot? {
@@ -129,29 +142,43 @@ class DepthSnapshotStore(
         return best
     }
 
-    private fun worldPositionIn(snapshot: Snapshot, normalizedX: Float, normalizedY: Float): Vec3? {
+    /** Depth at an image point, or null when the window around it is not one clear surface. */
+    private fun depthAt(snapshot: Snapshot, normalizedX: Float, normalizedY: Float): Float? {
         val image = snapshot.image
         if (image.width == 0 || image.height == 0) return null
         val u = (normalizedX * image.width).toInt().coerceIn(0, image.width - 1)
         val v = (normalizedY * image.height).toInt().coerceIn(0, image.height - 1)
 
-        // Average a small window: a single depth pixel on a door plate is easily invalid.
-        var sum = 0f
+        // A 3x3 window on the point itself, because a single depth pixel on a door plate is easily
+        // invalid - but it must be mostly valid and mostly ONE surface. Averaging whatever few
+        // pixels had depth in a wider window placed a lift 14 m away (beyond depth range) on the
+        // floor, or on the edges of the opening it was seen through, a few metres ahead - and the
+        // user was told they had arrived there. An observation that cannot be placed still steers
+        // exploration as a directional hint; it just cannot become a destination.
+        val samples = FloatArray(WINDOW * WINDOW)
         var count = 0
-        for (dv in -2..2) {
-            for (du in -2..2) {
+        for (dv in -WINDOW / 2..WINDOW / 2) {
+            for (du in -WINDOW / 2..WINDOW / 2) {
                 val meters = image.metersAt(
                     (u + du).coerceIn(0, image.width - 1),
                     (v + dv).coerceIn(0, image.height - 1),
                 )
-                if (meters >= config.minDepthMeters && meters <= config.maxDepthMeters) {
-                    sum += meters
-                    count++
-                }
+                if (meters >= config.minDepthMeters && meters <= config.maxDepthMeters) samples[count++] = meters
             }
         }
-        if (count == 0) return null
-        val depth = sum / count
+        if (count < MIN_VALID_SAMPLES) return null
+        samples.sort(0, count)
+        val depth = samples[count / 2]
+        val tolerance = maxOf(SURFACE_TOLERANCE_METERS, depth * SURFACE_TOLERANCE_FRACTION)
+        val onSurface = (0 until count).count { kotlin.math.abs(samples[it] - depth) <= tolerance }
+        if (onSurface < MIN_VALID_SAMPLES) return null
+        return depth
+    }
+
+    private fun worldPosition(snapshot: Snapshot, normalizedX: Float, normalizedY: Float, depth: Float): Vec3 {
+        val image = snapshot.image
+        val u = (normalizedX * image.width).toInt().coerceIn(0, image.width - 1)
+        val v = (normalizedY * image.height).toInt().coerceIn(0, image.height - 1)
 
         val k = snapshot.intrinsics
         val out = FloatArray(3)
@@ -174,6 +201,16 @@ class DepthSnapshotStore(
 
         /** Beyond this a timestamp cannot plausibly be in the platform's clock domain. */
         const val CLOCK_DOMAIN_MISMATCH_NANOS = 60_000_000_000L
+
+        /** The depth window around an observation's image point, in depth pixels. */
+        private const val WINDOW = 3
+
+        /** A majority of the window must have depth, and agree on it. */
+        private const val MIN_VALID_SAMPLES = WINDOW * WINDOW / 2 + 1
+
+        /** How close to the median a sample must be to count as the same surface. */
+        private const val SURFACE_TOLERANCE_METERS = 0.1f
+        private const val SURFACE_TOLERANCE_FRACTION = 0.05f
 
         private val NOT_RESOLVED = Resolution(null, null)
     }

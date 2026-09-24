@@ -120,15 +120,25 @@ class NavigationController(private val config: NavigationConfig) {
         } else {
             Ahead.CLEAR
         }
-        val emitted = when (ahead) {
+        // Blocked ahead while the path itself bends away from the obstacle: the user has drifted
+        // inside the "straight enough" tolerance towards a wall. Steering back onto the path is the
+        // answer, not a hazard stop - a STOP gives them nothing to do, and in a doorway or a 1.5 m
+        // corridor it froze them in place, being told about an obstacle that was only beside them.
+        // Only when the path runs straight into it is it an obstacle ahead.
+        val correcting = ahead == Ahead.BLOCKED && kotlin.math.abs(errorDegrees) >= config.driftCorrectionDegrees
+        val emitted = when {
+            correcting -> forceCommand(
+                if (errorDegrees > 0f) NavigationCommand.TURN_RIGHT else NavigationCommand.TURN_LEFT,
+            ).command
             // Fail-safe: emitted immediately, never held back by the stability counter.
-            Ahead.BLOCKED -> forceCommand(NavigationCommand.STOP).command
-            Ahead.UNKNOWN -> forceCommand(NavigationCommand.SCAN).command
-            Ahead.CLEAR -> stabilize(desired)
+            ahead == Ahead.BLOCKED -> forceCommand(NavigationCommand.STOP).command
+            ahead == Ahead.UNKNOWN -> forceCommand(NavigationCommand.SCAN).command
+            else -> stabilize(desired)
         }
 
         turning = emitted == NavigationCommand.TURN_LEFT || emitted == NavigationCommand.TURN_RIGHT
         val stopReason = when {
+            correcting -> null
             ahead == Ahead.BLOCKED -> StopReason.OBSTACLE_AHEAD
             ahead == Ahead.UNKNOWN -> StopReason.UNKNOWN_AHEAD
             emitted == NavigationCommand.STOP -> StopReason.NO_ROUTE

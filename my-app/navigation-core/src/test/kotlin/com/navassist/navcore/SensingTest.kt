@@ -161,6 +161,46 @@ class SensingTest {
     }
 
     @Test
+    fun `a landmark beyond depth range is not placed on whatever nearer pixels have depth`() {
+        val store = DepthSnapshotStore(NavigationConfig())
+        val frame = CanonicalFrame()
+        val pose = landscapeLookingMinusZ()
+        frame.establish(pose)
+        val transform = FloatArray(12)
+        frame.cameraToCanonical(pose, transform)
+
+        // The sign itself is out of range (no return); only the bottom row of the window, where
+        // the floor is, has depth - 2 m, a long way short of the sign.
+        val image = depthImage(0, 1)
+        for (u in 78..82) image.depthMm[62 * 160 + u] = 2000
+        store.record(image, intrinsics, transform)
+        assertNull(store.resolve(80f / 160f, 60f / 120f, 1).worldPosition, "a few floor pixels are not the sign")
+
+        // The same sign within range: the window agrees, and it is placed.
+        store.record(depthImage(4000, 2), intrinsics, transform)
+        assertEquals(4f, assertNotNull(store.resolve(0.5f, 0.5f, 2).worldPosition).z, 1e-2f)
+    }
+
+    @Test
+    fun `a door is not placed where its box would make it a fraction of a door's size`() {
+        val assembler = SensorFrameAssembler(NavigationConfig())
+        assembler.assemble(1_000_000_000, true, landscapeLookingMinusZ(), depthImage(2000, 1_000_000_000), intrinsics)
+
+        fun door(width: Float, height: Float) = com.navassist.navcore.semantic.SemanticObservation.Door(
+            confidence = 0.8f, normalizedX = 0.5f, normalizedY = 0.5f, timestampNanos = 1_000_000_000,
+            normalizedWidth = width, normalizedHeight = height,
+        )
+        // At 2 m the whole image spans 3.2 m x 2.4 m, so a 5% box is ~16 cm - no door is that small:
+        // the depth under it belongs to something nearer (the edge of the opening it was seen through).
+        val sliver = com.navassist.navcore.sensing.SemanticLocator.locate(door(0.05f, 0.05f), assembler)
+        assertNull(sliver.observation.worldPosition)
+        assertNotNull(sliver.observerPose, "still usable as a directional hint")
+
+        val doorSized = com.navassist.navcore.sensing.SemanticLocator.locate(door(0.3f, 0.8f), assembler)
+        assertEquals(2f, assertNotNull(doorSized.observation.worldPosition).z, 1e-2f)
+    }
+
+    @Test
     fun `the floor hint is the lowest sizeable plane a held phone could be above`() {
         val assembler = SensorFrameAssembler(NavigationConfig())
         val frame = assembler.assemble(

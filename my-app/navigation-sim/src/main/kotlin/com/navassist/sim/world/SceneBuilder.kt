@@ -15,9 +15,16 @@ class SceneBuilder(private val name: String) {
     private val boxes = ArrayList<Box>()
     private val signs = ArrayList<Sign>()
 
-    /** A walkable floor slab over the plan rectangle. */
-    fun floor(x0: Float, y0: Float, x1: Float, y1: Float, height: Float = 0f) = apply {
-        boxes += planBox(x0, y0, x1, y1, height - 0.1f, height, isFloor = true, trackablePlane = true, name = "floor")
+    /** A walkable floor slab over the plan rectangle ([Material.DARK] for a black carpet). */
+    fun floor(
+        x0: Float, y0: Float, x1: Float, y1: Float,
+        height: Float = 0f,
+        material: Material = Material.SOLID,
+    ) = apply {
+        boxes += planBox(
+            x0, y0, x1, y1, height - 0.1f, height,
+            material = material, isFloor = true, trackablePlane = material != Material.DARK, name = "floor",
+        )
     }
 
     /**

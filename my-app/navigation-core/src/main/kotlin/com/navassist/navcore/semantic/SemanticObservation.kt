@@ -40,6 +40,9 @@ sealed interface SemanticObservation {
         val normalizedY: Float? = null,
         override val timestampNanos: Long? = null,
         override val worldPosition: Vec3? = null,
+        /** Detection box size, 0..1 of the SENSOR image's width and height, when known. */
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
     /** A wayfinding sign, e.g. "Rooms 300-349 ->". Purely directional evidence. */
@@ -62,6 +65,9 @@ sealed interface SemanticObservation {
         val normalizedY: Float? = null,
         override val timestampNanos: Long? = null,
         override val worldPosition: Vec3? = null,
+        /** Detection box size, 0..1 of the SENSOR image's width and height, when known. */
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
     /**
@@ -80,6 +86,9 @@ sealed interface SemanticObservation {
         val normalizedY: Float? = null,
         override val timestampNanos: Long? = null,
         override val worldPosition: Vec3? = null,
+        /** Detection box size, 0..1 of the SENSOR image's width and height, when known. */
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
     data class Stairs(
@@ -88,6 +97,9 @@ sealed interface SemanticObservation {
         val normalizedY: Float? = null,
         override val timestampNanos: Long? = null,
         override val worldPosition: Vec3? = null,
+        /** Detection box size, 0..1 of the SENSOR image's width and height, when known. */
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
     data class Elevator(
@@ -96,6 +108,9 @@ sealed interface SemanticObservation {
         val normalizedY: Float? = null,
         override val timestampNanos: Long? = null,
         override val worldPosition: Vec3? = null,
+        /** Detection box size, 0..1 of the SENSOR image's width and height, when known. */
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
     /** Which building floor the user is currently on, e.g. read from a lift indicator. */

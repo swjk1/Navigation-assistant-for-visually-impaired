@@ -41,6 +41,11 @@ object Scenarios {
         return if (furthest < y) listOf("only got ${"%.1f".format(furthest)} m north (wanted $y)") else emptyList()
     }
 
+    private fun reachedWest(sim: Simulation, x: Float): List<String> {
+        val furthest = sim.trace.minOfOrNull { it.body.x } ?: 0f
+        return if (furthest > x) listOf("only got to x = ${"%.1f".format(furthest)} (wanted $x or further west)") else emptyList()
+    }
+
     private fun arrivedNear(r: SimResult, x: Float, y: Float, radius: Float): List<String> {
         val failures = ArrayList<String>()
         if (r.outcome != Outcome.ARRIVED) failures += "never announced ARRIVED (${r.outcome}, ${r.finalStatus})"
@@ -159,6 +164,92 @@ object Scenarios {
                 val (x, y) = Buildings.roomPlatePlan(314)
                 noCollisions(r) + arrivedNear(r, x, y, 2.0f)
             },
+        ),
+        Scenario(
+            "l-corridor",
+            "Explore round a blind corner: 11 m north, then the corridor turns 90 degrees west.",
+            Expectation.KNOWN_LIMITATION,
+            { seed -> SimSettings(Buildings.lCorridor(), start, maxSeconds = 120.0, seed = seed) },
+            { r, sim -> noCollisions(r) + reachedWest(sim, -5f) },
+            limitation = "Passes 1 in 5. The corner itself is handled (the drift correction fixed a freeze in the " +
+                "west leg), but the engine often turns back at the corner instead of committing to the new " +
+                "leg: the side opening competes as a frontier with ones behind the user, and the " +
+                "commitment / blacklist bookkeeping (review item 12) lets it lose.",
+        ),
+        Scenario(
+            "narrow-office-corridor",
+            "A 1.5 m office corridor: the safety envelope must still leave room to walk.",
+            Expectation.PASS,
+            { seed -> SimSettings(Buildings.narrowOfficeCorridor(), BodyPose(0.75f, 0f, 0f), maxSeconds = 90.0, seed = seed) },
+            { r, sim -> noCollisions(r) + reachedNorth(sim, 10f) },
+        ),
+        Scenario(
+            "cluttered-corridor",
+            "A bench, a bin, a water dispenser and a planter along the walls of a 2.4 m corridor.",
+            Expectation.PASS,
+            { seed -> SimSettings(Buildings.clutteredCorridor(), BodyPose(1.2f, 0f, 0f), maxSeconds = 120.0, seed = seed) },
+            { r, sim -> noCollisions(r) + reachedNorth(sim, 16f) },
+        ),
+        Scenario(
+            "lobby-exit",
+            "Cross an open lobby with four columns and stop at the exit door on the far wall.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Buildings.lobbyWithPillars(), BodyPose(0f, 0f, 0f), target = NavigationTarget.Exit, maxSeconds = 180.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNear(r, 0f, 11.3f, 2.0f) },
+            limitation = "Passes 3 in 5. One seed times out exploring; one announced ARRIVED 5 m short: the exit " +
+                "sign was seen past a column edge and placed on the column. The size check narrows but " +
+                "cannot close this - a 0.6 m sign on a column 4 m away is plausible. Sampling depth over " +
+                "the whole detection box, not its centre, would.",
+        ),
+        Scenario(
+            "elevator-lobby",
+            "Walk up a corridor into a lift lobby and stop at an elevator door.",
+            Expectation.PASS,
+            { seed ->
+                SimSettings(Buildings.elevatorLobby(), start, target = NavigationTarget.Elevator, maxSeconds = 180.0, seed = seed)
+            },
+            { r, _ ->
+                val nearest = listOf(-0.5f, 2.5f).minOf { hypot(r.finalBody.x - it, r.finalBody.y - 13.3f) }
+                noCollisions(r) + if (r.outcome != Outcome.ARRIVED) {
+                    listOf("never announced ARRIVED (${r.outcome}, ${r.finalStatus})")
+                } else if (nearest > 2f) {
+                    listOf("announced ARRIVED ${"%.1f".format(nearest)} m from either lift")
+                } else {
+                    emptyList()
+                }
+            },
+        ),
+        Scenario(
+            "corridor-ending-at-stairs",
+            "The corridor ends at an open stairwell across its full width. Stopping is right; falling is not.",
+            Expectation.PASS,
+            { seed -> SimSettings(Buildings.corridorEndingAtStairs(), start, maxSeconds = 90.0, seed = seed) },
+            { r, _ -> notFallen(r) + noCollisions(r) },
+        ),
+        Scenario(
+            "dark-carpet",
+            "4 m of black carpet, which returns little depth. Guidance must cope and carry on.",
+            Expectation.KNOWN_LIMITATION,
+            { seed -> SimSettings(Buildings.darkCarpetCorridor(), start, maxSeconds = 90.0, seed = seed) },
+            { r, sim -> noCollisions(r) + reachedNorth(sim, 12f) },
+            limitation = "Passes 4 in 5. Sparse returns on the carpet can leave the floor ahead unknown long " +
+                "enough for the run to end in NO_ROUTE; the user is never walked onto unseen floor.",
+        ),
+        Scenario(
+            "signposted-junction",
+            "At a T, a 'Rooms 300-349 ->' sign points right; room 314 is 6 m down the right branch.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Buildings.signpostedJunction(), start, target = NavigationTarget.Room("314"), maxSeconds = 180.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNear(r, 8.75f, 10.6f, 2.0f) },
+            limitation = "Passes 2-3 in 5. The sign's arrow is now read (it used to be ignored in favour of where " +
+                "the sign sat in the picture), but the plate for 314 is on the side wall: unreadable at a " +
+                "grazing angle from down the corridor, and outside the camera's ~50 degree view when " +
+                "passing it. Failing runs pass within 1.5 m of it and never read it. Guidance should ask " +
+                "for a sideways look when passing doors while hunting a room number.",
         ),
         Scenario(
             "glass-pane",

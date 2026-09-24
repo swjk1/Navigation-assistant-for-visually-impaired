@@ -123,6 +123,7 @@ class PerceptionModel(
         val apparent = intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth
         val sensorX = u / intrinsics.width
         val sensorY = v / intrinsics.height
+        val (boxWidth, boxHeight) = boxSize(sign, m)
         // Portrait capture rotated upright (90 degrees clockwise): upright x = 1 - sensor y.
         val uprightX = 1f - sensorY
         val confidence = 0.55f + 0.4f * random.nextFloat()
@@ -130,14 +131,46 @@ class PerceptionModel(
         return when (sign.kind) {
             SignKind.ROOM_PLATE, SignKind.ROOM_RANGE -> {
                 if (apparent < profile.minReadPixels || random.nextFloat() >= profile.ocrReadRate) return null
-                text(sign.text, sensorX, sensorY, uprightX, timestampNanos)
+                text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
             }
             else -> {
                 if (apparent < profile.minDetectPixels) return null
                 if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return null
-                detected(sign.kind, confidence, sensorX, sensorY, uprightX, timestampNanos)
+                detected(sign.kind, confidence, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
             }
         }
+    }
+
+    /** The sign's bounding box in the SENSOR image, 0..1: its four corners, projected. */
+    private fun boxSize(sign: Sign, m: FloatArray): Pair<Float, Float> {
+        // Along the sign's face: horizontal, perpendicular to its normal; and straight up.
+        val rightX = -sign.normalZ
+        val rightZ = sign.normalX
+        var minU = Float.MAX_VALUE; var maxU = -Float.MAX_VALUE
+        var minV = Float.MAX_VALUE; var maxV = -Float.MAX_VALUE
+        for (sx in listOf(-0.5f, 0.5f)) for (sy in listOf(-0.5f, 0.5f)) {
+            val px = sign.x + rightX * sign.widthMeters * sx - m[12]
+            val py = sign.y + sign.heightMeters * sy - m[13]
+            val pz = sign.z + rightZ * sign.widthMeters * sx - m[14]
+            val cx = px * m[0] + py * m[1] + pz * m[2]
+            val cy = px * m[4] + py * m[5] + pz * m[6]
+            val depth = -(px * m[8] + py * m[9] + pz * m[10])
+            if (depth <= 0.05f) continue
+            val u = intrinsics.cx + intrinsics.fx * cx / depth
+            val v = intrinsics.cy - intrinsics.fy * cy / depth
+            minU = minOf(minU, u); maxU = maxOf(maxU, u)
+            minV = minOf(minV, v); maxV = maxOf(maxV, v)
+        }
+        return (maxU - minU) / intrinsics.width to (maxV - minV) / intrinsics.height
+    }
+
+    private fun SemanticObservation.withBox(width: Float, height: Float): SemanticObservation = when (this) {
+        is SemanticObservation.Room -> copy(normalizedWidth = width, normalizedHeight = height)
+        is SemanticObservation.Exit -> if (normalizedX != null) copy(normalizedWidth = width, normalizedHeight = height) else this
+        is SemanticObservation.Door -> copy(normalizedWidth = width, normalizedHeight = height)
+        is SemanticObservation.Stairs -> copy(normalizedWidth = width, normalizedHeight = height)
+        is SemanticObservation.Elevator -> copy(normalizedWidth = width, normalizedHeight = height)
+        else -> this
     }
 
     /** Mirrors `fromObject` in perceptionToSemantic.ts. */
@@ -173,7 +206,7 @@ class PerceptionModel(
         RANGE.find(read)?.let { match ->
             val min = match.groupValues[1].toInt()
             val max = match.groupValues[2].toInt()
-            if (max >= min) return SemanticObservation.RoomRange(min, max, direction, 0.9f, timestampNanos)
+            if (max >= min) return SemanticObservation.RoomRange(min, max, arrowDirection(read) ?: direction, 0.9f, timestampNanos)
         }
         return when {
             Regex("\\b(exit|way\\s*out)\\b", RegexOption.IGNORE_CASE).containsMatchIn(read) ->
@@ -181,6 +214,14 @@ class PerceptionModel(
             read.any { it.isDigit() } -> SemanticObservation.Room(read, 0.9f, x, y, timestampNanos)
             else -> null
         }
+    }
+
+    /** Mirrors `arrowDirection` in perceptionToSemantic.ts. */
+    private fun arrowDirection(text: String): SemanticDirection? = when {
+        Regex("→|->|⟶|➡|▶|⇒").containsMatchIn(text) -> SemanticDirection.RIGHT
+        Regex("←|<-|⟵|⬅|◀|⇐").containsMatchIn(text) -> SemanticDirection.LEFT
+        Regex("↑|⬆|▲|⇑").containsMatchIn(text) -> SemanticDirection.FORWARD
+        else -> null
     }
 
     /** One character wrong, the way OCR fails on small plates: 314 -> 31A, 3l4, 374. */

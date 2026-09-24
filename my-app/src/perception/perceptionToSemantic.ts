@@ -67,12 +67,18 @@ function uprightCentreOf(box: OCRDetection['box']): Point {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** Centre of a bounding box in the SENSOR image space the engine's depth lookup expects. */
+/**
+ * Centre and size of a bounding box in the SENSOR image space the engine's depth lookup expects.
+ * The size lets the engine reject a depth placement that would make, say, a door 30 cm tall.
+ */
 function centreOf(box: OCRDetection['box'], capture: CaptureContext) {
   const sensor = uprightToSensor(uprightCentreOf(box), capture.rotationDegrees);
+  const quarterTurn = ((((capture.rotationDegrees ?? 0) % 180) + 180) % 180) === 90;
   return {
     normalizedX: sensor.x,
     normalizedY: sensor.y,
+    normalizedWidth: quarterTurn ? box.height : box.width,
+    normalizedHeight: quarterTurn ? box.width : box.height,
     ...timestampOf(capture),
   };
 }
@@ -100,12 +106,22 @@ function rangeFrom(
     type: 'ROOM_RANGE',
     min,
     max,
-    direction,
+    // The sign's own arrow says which way the rooms are. Where the sign happens to sit in the
+    // picture is only a fallback: a "300-349 ->" sign read head-on used to mean FORWARD.
+    direction: arrowDirection(detection.text) ?? direction,
     confidence: detection.confidence,
     // No image position of its own, but the timestamp still tells the engine which way the user
     // was facing when "to the right" was read.
     ...timestampOf(capture),
   };
+}
+
+/** The direction an arrow in sign text points, if it has one. */
+export function arrowDirection(text: string): SemanticDirection | null {
+  if (/→|->|⟶|➡|▶|⇒/.test(text)) return 'RIGHT';
+  if (/←|<-|⟵|⬅|◀|⇐/.test(text)) return 'LEFT';
+  if (/↑|⬆|▲|⇑/.test(text)) return 'FORWARD';
+  return null;
 }
 
 function timestampOf(capture: CaptureContext) {

@@ -276,6 +276,11 @@ data class NavigationConfig(
      * interrupt a turn the user is in the middle of.
      */
     val turnEndStabilityMillis: Long = 150,
+    /**
+     * When going straight would clip an obstacle's safety envelope but the path bends away from
+     * it by at least this much, the user is steered back onto the path instead of stopped.
+     */
+    val driftCorrectionDegrees: Float = 3f,
     /** Distance at which the final target counts as reached. */
     val arrivalRadiusMeters: Float = 1.0f,
     /** Time spent continuously within [arrivalRadiusMeters] before ARRIVED is declared. */

@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  arrowDirection,
   toSemanticObservations,
   uprightToSensor,
 } from '../src/perception/perceptionToSemantic.ts';
@@ -83,6 +84,30 @@ describe('toSemanticObservations', () => {
     const expected = uprightToSensor({ x: 0.85, y: 0.5 }, 90);
     assert.ok(Math.abs(exit.normalizedX - expected.x) < 1e-9);
     assert.ok(Math.abs(exit.normalizedY - expected.y) < 1e-9);
+  });
+
+  it('reports the box size in sensor orientation, swapped for a quarter-turn capture', () => {
+    // A tall, narrow door on the upright (portrait) image is wide and short on the sensor.
+    const [door] = toSemanticObservations(
+      frame({
+        objects: [{ label: 'door', confidence: 0.8, box: box(0.4, 0.2, 0.1, 0.5), clockPosition: "12 o'clock" }],
+      }),
+      { timestampNs: 1, rotationDegrees: 90 }
+    );
+    assert.equal(door.normalizedWidth, 0.5);
+    assert.equal(door.normalizedHeight, 0.1);
+  });
+
+  it("takes a range sign's direction from its arrow, not from where it sits in the picture", () => {
+    // Straight ahead in the image, pointing right.
+    const [range] = toSemanticObservations(
+      frame({ text: [{ text: 'Rooms 300-349 ->', confidence: 0.9, box: box(0.45, 0.2) }] }),
+      { timestampNs: 1, rotationDegrees: 90 }
+    );
+    assert.equal(range.type, 'ROOM_RANGE');
+    assert.equal(range.direction, 'RIGHT');
+    assert.equal(arrowDirection('← 101-120'), 'LEFT');
+    assert.equal(arrowDirection('Rooms 200-250'), null);
   });
 
   it('omits the timestamp rather than inventing one when the capture has none', () => {

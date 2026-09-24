@@ -100,6 +100,98 @@ object Buildings {
         }
     }.build()
 
+    /**
+     * A corridor that turns a blind corner: 11 m north, then 10 m west. Nothing of the second leg
+     * is visible from the start.
+     */
+    fun lCorridor() = SceneBuilder("l-corridor").apply {
+        floor(0f, -1f, 2f, 12f)
+        floor(-12f, 10f, 0f, 12f)
+        wall(0f, -1f, 2f, -1f)
+        wall(2f, -1f, 2f, 12f)
+        wall(0f, -1f, 0f, 10f)
+        wall(-12f, 10f, 0f, 10f)
+        wall(-12f, 12f, 2f, 12f)
+        wall(-12f, 10f, -12f, 12f)
+    }.build()
+
+    /** A typical office corridor, 1.5 m wall to wall: the engine's safety envelope must fit. */
+    fun narrowOfficeCorridor() = corridor(width = 1.5f, length = 22f).build().let { scene ->
+        Scene("narrow-office-corridor", scene.boxes, scene.signs)
+    }
+
+    /**
+     * A 2.4 m corridor with the furniture real corridors have along their walls: a bench, a bin,
+     * a water dispenser, a planter. Each narrows the way; none blocks it.
+     */
+    fun clutteredCorridor() = SceneBuilder("cluttered-corridor").apply {
+        val width = 2.4f
+        floor(0f, -1f, width, 24f)
+        wall(0f, -1f, 0f, 24f); wall(width, -1f, width, 24f); wall(0f, -1f, width, -1f)
+        block(1.9f, 4f, 2.35f, 6f, height = 0.45f, name = "bench")
+        block(0.05f, 8f, 0.45f, 8.4f, height = 0.7f, name = "bin")
+        block(1.95f, 11f, 2.35f, 11.4f, height = 1.1f, name = "water dispenser")
+        block(0.05f, 14f, 0.6f, 14.6f, height = 0.9f, name = "planter")
+    }.build()
+
+    /**
+     * An open 10 x 13 m lobby with four free-standing columns between the entrance and the exit
+     * door on the far wall, which has an exit sign above it.
+     */
+    fun lobbyWithPillars() = SceneBuilder("lobby-with-pillars").apply {
+        floor(-5f, -1f, 5f, 12f)
+        wall(-5f, -1f, 5f, -1f); wall(-5f, -1f, -5f, 12f); wall(5f, -1f, 5f, 12f)
+        wall(-5f, 12f, 5f, 12f, name = "north wall with exit")
+        for (x in listOf(-2f, 2f)) for (y in listOf(3.5f, 7.5f)) {
+            block(x - 0.2f, y - 0.2f, x + 0.2f, y + 0.2f, height = 2.6f, name = "column")
+        }
+        sign(SignKind.DOOR, "", 0f, 11.95f, Facing.SOUTH, height = 1.0f, width = 0.9f, tall = 2.0f)
+        sign(SignKind.EXIT_SIGN, "EXIT", 0f, 11.95f, Facing.SOUTH, height = 2.25f, width = 0.6f, tall = 0.3f)
+    }.build()
+
+    /** A corridor opening into a lift lobby with two elevator doors on the far wall. */
+    fun elevatorLobby() = SceneBuilder("elevator-lobby").apply {
+        floor(0f, -1f, 2f, 8f)
+        floor(-3f, 8f, 5f, 14f)
+        wall(0f, -1f, 2f, -1f); wall(0f, -1f, 0f, 8f); wall(2f, -1f, 2f, 8f)
+        wall(-3f, 8f, 0f, 8f); wall(2f, 8f, 5f, 8f)
+        wall(-3f, 8f, -3f, 14f); wall(5f, 8f, 5f, 14f)
+        wall(-3f, 14f, 5f, 14f, name = "lift wall")
+        for (x in listOf(-0.5f, 2.5f)) {
+            sign(SignKind.ELEVATOR, "", x, 13.95f, Facing.SOUTH, height = 1.1f, width = 1.1f, tall = 2.1f)
+        }
+    }.build()
+
+    /** A corridor that ends at an open stairwell spanning its full width. Stop; never fall. */
+    fun corridorEndingAtStairs() = SceneBuilder("corridor-ending-at-stairs").apply {
+        floor(0f, -1f, 2f, 9f)
+        floor(0f, 9f, 2f, 14f, height = -3f)
+        wall(0f, -1f, 2f, -1f); wall(0f, -1f, 0f, 14f); wall(2f, -1f, 2f, 14f); wall(0f, 14f, 2f, 14f)
+    }.build()
+
+    /** A corridor with a 4 m stretch of black carpet, which returns little depth. */
+    fun darkCarpetCorridor() = SceneBuilder("dark-carpet-corridor").apply {
+        floor(0f, -1f, 2f, 4f)
+        floor(0f, 4f, 2f, 8f, material = Material.DARK)
+        floor(0f, 8f, 2f, 24f)
+        wall(0f, -1f, 0f, 24f); wall(2f, -1f, 2f, 24f); wall(0f, -1f, 2f, -1f)
+    }.build()
+
+    /**
+     * A T-junction with a "Rooms 300-349 ->" sign on the wall ahead, pointing right. Room 314's
+     * plate is 6 m down the right (east) branch; the left branch is a dead end.
+     */
+    fun signpostedJunction() = SceneBuilder("signposted-junction").apply {
+        floor(0f, -1f, 2f, 10f)
+        floor(-8f, 10f, 12f, 12f)
+        wall(0f, -1f, 2f, -1f); wall(0f, -1f, 0f, 10f); wall(2f, -1f, 2f, 10f)
+        wall(-8f, 10f, 0f, 10f); wall(2f, 10f, 12f, 10f)
+        wall(-8f, 12f, 12f, 12f); wall(-8f, 10f, -8f, 12f); wall(12f, 10f, 12f, 12f)
+        sign(SignKind.ROOM_RANGE, "Rooms 300-349 ->", 1f, 11.95f, Facing.SOUTH, height = 1.6f, width = 0.8f, tall = 0.3f)
+        sign(SignKind.DOOR, "", 8f, 10.05f, Facing.NORTH, height = 1.0f, width = 0.9f, tall = 2.0f)
+        sign(SignKind.ROOM_PLATE, "314", 8.75f, 10.05f, Facing.NORTH, height = 1.5f, width = 0.2f, tall = 0.15f)
+    }.build()
+
     /** The plate position for a room in [roomCorridor], in plan coordinates. */
     fun roomPlatePlan(room: Int): Pair<Float, Float> = 2.35f to 3f + (room - 302) / 2 * 3f + 0.75f
 }

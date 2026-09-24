@@ -240,6 +240,10 @@ guidance becomes an unusable stream of alternating slight-left/slight-right.
   0.9 m straight ahead. Blocked means `STOP` / `OBSTACLE_AHEAD`; merely unknown means `SCAN` /
   `UNKNOWN_AHEAD` (look ahead) - standing still would never reveal it. Known obstacles beyond the
   end of the path are ignored (a destination on a wall); unknown space never is (it may be a drop).
+  When straight ahead is blocked but the path itself bends away by 3° or more
+  (`driftCorrectionDegrees`), the user has drifted towards a wall inside the 15° tolerance: they
+  are steered back onto the path, not stopped. A hazard STOP there froze users in doorways and
+  1.5 m corridors, told about an obstacle that was only beside them.
 - **STOP bypasses all smoothing** — a safety stop is never delayed.
 
 ### 3.5 Timing
@@ -582,6 +586,17 @@ device, while the tests - which use one clock - passed.
 sees them (`rotationDegrees` on the capture), so boxes and clock positions mean what the user sees.
 `toSemanticObservations(frame, { timestampNs, rotationDegrees })` rotates box centres back to the
 sensor orientation the depth image uses.
+
+**A placement must make sense.** Depth is read over a 3×3 window on the observation's point, which
+must be mostly valid and one surface; and when the observation carries its box size
+(`normalizedWidth` / `normalizedHeight`), the size that depth implies must be at least half and at
+most three times what such an object usually measures (a door ~2 m, a lift ~2.1 m, an exit sign
+~0.4 m, a room plate ~0.12 m). Otherwise it is not placed — it still biases exploration, but cannot
+become a destination. Without this, a lift 14 m away (beyond depth range, or seen past a wall's
+end) was placed on nearer floor or a wall corner and the user was told "arrived" 7 m short.
+
+Room-range signs take their direction from **their arrow** (`→ -> ← <-` in the OCR text), falling
+back to where the sign sits in the picture only when there is none.
 
 Semantics only ever **bias** frontier choice. The planner decides movement.
 
