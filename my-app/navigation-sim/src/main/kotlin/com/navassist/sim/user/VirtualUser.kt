@@ -151,6 +151,17 @@ class VirtualUser(
         }
     }
 
+    /**
+     * Driven by a person instead of the script (live mode): walk at [forwardMetersPerSecond] and
+     * turn at [turnRadiansPerSecond] (positive = to the right). Collisions still apply.
+     */
+    fun drive(forwardMetersPerSecond: Float, turnRadiansPerSecond: Float, dt: Float) {
+        body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turnRadiansPerSecond * dt))
+        walk(forwardMetersPerSecond * dt)
+        phoneYaw = body.heading
+        phonePitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
+    }
+
     private fun walk(meters: Float) {
         if (meters <= 0f || fell) return
         val nx = body.x + sin(body.heading) * meters

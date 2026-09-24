@@ -2,6 +2,7 @@ package com.navassist.sim
 
 import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.NavigationEngine
+import com.navassist.navcore.geometry.NavigationFrame
 import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.semantic.NavigationTarget
 import com.navassist.navcore.sensing.DepthImage
@@ -105,8 +106,15 @@ class Simulation(val settings: SimSettings) {
 
     val trace = ArrayList<TraceSample>()
 
-    /** Called after every frame, for live viewers and recorders. */
-    var onFrame: ((Simulation, TraceSample, NavigationSnapshot) -> Unit)? = null
+    /** Called after every frame, for live viewers, recorders and tracing. */
+    val listeners = ArrayList<(Simulation, TraceSample, NavigationSnapshot) -> Unit>()
+
+    /** The frame the engine was fed last; its points live in a reused buffer. */
+    var lastFrame: NavigationFrame? = null
+        private set
+
+    /** The depth image the platform is currently handing out, if any has arrived. */
+    val deliveredDepth: DepthImage? get() = if (hasDelivered) delivered else null
 
     private val cameraMatrix = FloatArray(16)
     private val rendered = DepthImage()
@@ -174,6 +182,7 @@ class Simulation(val settings: SimSettings) {
             )
         }
         val snapshot = engine.updateFrame(frame)
+        lastFrame = frame
         lastSnapshot = snapshot
         user.hear(snapshot.command, snapshot.stopReason, seconds)
 
@@ -190,9 +199,12 @@ class Simulation(val settings: SimSettings) {
             user.acting, user.touching != null,
         )
         trace.add(sample)
-        onFrame?.invoke(this, sample, snapshot)
+        for (listener in listeners) listener(this, sample, snapshot)
         return snapshot
     }
+
+    /** Plan position and yaw of the phone where the engine fixed its canonical frame. */
+    fun canonicalOriginPlan(): Triple<Float, Float, Float>? = canonicalOrigin
 
     /** Engine canonical (x, z) -> floor-plan (x, y). Null until the frame is established. */
     fun canonicalToPlan(point: Vec2): Pair<Float, Float>? {

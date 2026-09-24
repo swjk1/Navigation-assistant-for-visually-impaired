@@ -6,6 +6,7 @@
 //
 //   ./gradlew test                                  scenario suite (the assertions)
 //   ./gradlew run --args="--all --seeds 10"         batch report + PNG snapshots of failures
+//   ./gradlew run --args="--live 8765 --scenario find-room-314"   watch live in Foxglove
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -26,6 +27,9 @@ kotlin {
 }
 
 dependencies {
+    // Live streaming to Foxglove (MIT). Small, pure Java, and also runs on Android.
+    implementation("org.java-websocket:Java-WebSocket:1.6.0")
+    implementation("org.slf4j:slf4j-nop:2.0.16")
     testImplementation(kotlin("test"))
 }
 

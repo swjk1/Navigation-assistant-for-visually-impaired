@@ -161,17 +161,22 @@ building-sized 10 cm grid.
 |---|---|---|
 | `gridResolutionMeters` | 0.10 | |
 | `gridSizeMeters` | 12 | 120 × 120 cells |
-| `gridRecenterThresholdMeters` | 2.0 | shifts in whole cells; overlap preserved |
+| `gridRecenterThresholdMeters` | 1.0 | shifts in whole cells; overlap preserved. Depth is only integrated while it stays inside the window with a margin — reaching the border hid the frontier that says "the corridor continues" |
 | `logOddsHit` / `logOddsMiss` | +0.85 / −0.45 | evidence, not a hard enum |
 | `logOddsOccupiedThreshold` | 0.9 | ≥ ⇒ OCCUPIED |
 | `logOddsFreeThreshold` | −0.5 | ≤ ⇒ FREE |
 | `decayPerSecondUnconfirmed` | 0.80 | a stray return that never decided a cell fades in seconds |
-| `inflationRadiusMeters` | 0.45 | the user is not a point |
-| `clearanceCostRadiusMeters` | 0.85 | soft cost keeping paths off walls |
+| `inflationRadiusMeters` | 0.30 | the HARD envelope: body radius plus a margin. Was 0.45, which needed ~1 m of clear width: every doorway was impassable and a 2 m corridor fired "obstacle ahead" at 20 cm of drift (found in the simulator) |
+| `clearanceCostRadiusMeters` | 0.85 | soft cost keeping paths off walls — the "stay central" job, separate from the envelope |
 | `minObstacleHeightMeters` | 0.10 | below ⇒ floor |
 | `maxObstacleHeightMeters` | 2.10 | above ⇒ overhead, ignored |
 | `depthSampleStride` | 3 | every 3rd depth pixel |
-| `maxDepthMeters` | 6.0 | accuracy degrades badly beyond |
+| `maxDepthMeters` | 6.0 | accuracy degrades badly beyond; floor carves free space this far |
+| `maxObstacleRangeMeters` | 4.0 | obstacles only marked this close: long-range noise put phantom walls across corridors |
+| `depthEdgeRejectFraction` | 0.06 | flying pixels at depth edges dropped; they thickened door jambs enough to close a door |
+| `dropOffDepthMeters` | 0.2 | a return this far below the floor marks a drop-off where its ray crossed floor level |
+| `footprintFreeRadiusMeters` / `footprintBehindPhoneMeters` | 0.25 / 0.3 | the body's footprint, centred behind the phone — centred on the phone it reached over a stairwell edge |
+| `blindZoneMeters` | 0.5 | the unseen strip in front of the phone is bridged only where seen floor continues beyond it |
 
 **Free space comes only from floor the sensor actually sees.** A ray that reaches the floor 3 m
 away proves only that nothing along it was taller than the ray itself at each point, so where it
@@ -228,8 +233,13 @@ guidance becomes an unusable stream of alternating slight-left/slight-right.
 - **Lookahead** 1.5 m along the path, not the next 10 cm cell.
 - **Circular** heading smoothing (linear averaging breaks at the ±180° seam).
 - **Two thresholds**: turning starts at 15°, ends below 8°, so the command does not chatter.
+- **Turns end early**: the controller measures the user's turn rate and ends the turn
+  `turnLeadMillis` (500 ms) before they would face the path, so their reaction time does not
+  carry them past it. Ending a turn is never held by the dwell.
 - **Forward safety gate**: `STRAIGHT` is suppressed if any blocked *or unknown* cell lies within
-  0.9 m straight ahead.
+  0.9 m straight ahead. Blocked means `STOP` / `OBSTACLE_AHEAD`; merely unknown means `SCAN` /
+  `UNKNOWN_AHEAD` (look ahead) - standing still would never reveal it. Known obstacles beyond the
+  end of the path are ignored (a destination on a wall); unknown space never is (it may be a drop).
 - **STOP bypasses all smoothing** — a safety stop is never delayed.
 
 ### 3.5 Timing
@@ -242,7 +252,8 @@ that was reported as "it just tells me left, then right, and I make no progress"
 | Parameter | Default | Purpose |
 |---|---|---|
 | `commandStabilityMillis` | 350 | a command must hold this long before being emitted |
-| `commandMinDwellMillis` | 1400 | once a turn is announced it stands this long — a person needs a beat to hear it and begin turning |
+| `commandMinDwellMillis` | 1400 | a turn is not flipped to the OPPOSITE turn within this long. It no longer delays ENDING a turn: with a person turning at 60°/s that overshot the path by ~80°, and the engine oscillated left/right indefinitely (reproduced and fixed in the simulator) |
+| `turnLeadMillis` / `turnEndStabilityMillis` | 500 / 150 | end a turn this far ahead of facing the path; ending needs this much consistent evidence |
 | `minScanMillis` | 10 000 | initial scan before *any* movement instruction |
 | `arrivalStableMillis` | 600 | continuous time inside the arrival radius |
 | plan / frontier / inflate | 200 / 650 / 160 ms | ~5 Hz, ~1.5 Hz, ~6 Hz |
@@ -350,8 +361,9 @@ Two rules dominate the transition table:
 `depthStarvationMillis`, the floor estimate is not yet confident, any blocked **or unknown** cell
 lies within the forward safety distance, or the planner has no route.
 
-Every halt carries a `stopReason`: `OBSTACLE_AHEAD`, `NO_ROUTE`, `TRACKING_LOST`, `NO_DEPTH`,
-`MAP_INCOMPLETE`, `NOT_STARTED`, `PAUSED`. This is not cosmetic — the guidance layer gives HAZARD
+Every halt carries a `stopReason`: `OBSTACLE_AHEAD`, `UNKNOWN_AHEAD`, `NO_ROUTE`,
+`TRACKING_LOST`, `NO_DEPTH`, `MAP_INCOMPLETE`, `NOT_STARTED`, `PAUSED`. Only `OBSTACLE_AHEAD` is a
+hazard; `UNKNOWN_AHEAD` accompanies `SCAN` and means "look ahead / tilt the phone down". This is not cosmetic — the guidance layer gives HAZARD
 priority over direction, and from outside, a `STOP` because something is in the way and a `STOP`
 because tracking died look identical. Guessing would mean a hazard alert for a software fault, or
 silence for a real obstacle.
@@ -692,7 +704,7 @@ comes — and it is the first thing the engine says in every session. It has its
 
 ## 9. Testing
 
-**146 tests**, all against the platform-independent core — no ARCore session, no Android context,
+**153 tests**, all against the platform-independent core — no ARCore session, no Android context,
 no Expo module, no device.
 
 | Suite | Covers |
@@ -712,6 +724,7 @@ no Expo module, no device.
 | `DepthIntegrationTest` | low obstacles survive rays over them, one update per frame, sensor origin, footprint |
 | `FloorEstimatorTest` | plane vs depth fusion, desk rejection, rise confirmation |
 | `MapResetTest` | map reset re-enters the scan, scan credit with intermittent depth, engine clock |
+| `SensingTest` | platform-to-canonical conversion: axes, portrait mounting, depth reuse and lag, pinned captures, floor planes |
 | `NavigationEngineScenarioTest` | full pipeline against a synthetic ray-cast world |
 
 The scenario tests run `synthetic NavigationFrame → occupancy → frontier → A* → NavigationCommand`
@@ -724,6 +737,20 @@ accepted.
 
 ```bash
 cd my-app/navigation-core && ./gradlew test
+```
+
+### Simulator
+
+`my-app/navigation-sim` runs the engine in closed loop against a virtual building: a phone held
+portrait by a scripted person, ARCore-like depth (noise, dropouts, flying pixels, glass, 15 Hz depth
+one frame late), and a perception stand-in with the shipped model's measured recall and OCR errors.
+The depth goes through the core's own `SensorFrameAssembler` — the code the phone runs — so the
+adapter math is exercised too. Scenarios assert safety (no collisions, no falls, no movement without
+tracking) and outcomes (arrival, progress); `KNOWN_LIMITATION` scenarios document what does not work
+yet. Runs record to MCAP and stream live to Foxglove. See `my-app/navigation-sim/README.md`.
+
+```bash
+cd my-app/navigation-sim && ./gradlew test
 ```
 
 ---

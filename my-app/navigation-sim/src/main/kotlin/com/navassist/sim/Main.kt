@@ -11,6 +11,9 @@ Navigation simulator
   --report DIR           where PNG snapshots go (default sim-reports)
   --snapshots all|fail   picture every run, or only failures (default fail)
   --trace                print every change of engine status / instruction
+  --mcap DIR             record every run to DIR/<scenario>-seed<N>.mcap for Foxglove
+  --live PORT            run the first scenario in real time, streaming to Foxglove at
+                         ws://localhost:PORT; publish a Twist on /cmd_vel to drive it yourself
   --list                 list scenarios and exit
 """
 
@@ -20,6 +23,8 @@ fun main(args: Array<String>) {
     var reportDir = File("sim-reports")
     var snapshotAll = false
     var trace = false
+    var mcapDir: File? = null
+    var livePort: Int? = null
     var i = 0
     while (i < args.size) {
         when (args[i]) {
@@ -29,6 +34,8 @@ fun main(args: Array<String>) {
             "--report" -> reportDir = File(args[++i])
             "--snapshots" -> snapshotAll = args[++i] == "all"
             "--trace" -> trace = true
+            "--mcap" -> mcapDir = File(args[++i])
+            "--live" -> livePort = args[++i].toInt()
             "--list" -> {
                 Scenarios.all.forEach { println("${it.name.padEnd(18)} ${it.expectation.name.padEnd(17)} ${it.description}") }
                 return
@@ -39,10 +46,19 @@ fun main(args: Array<String>) {
         i++
     }
     val scenarios = if (names.isEmpty()) Scenarios.all else names.map { Scenarios.named(it) }
+    livePort?.let { port ->
+        LiveRunner.run(scenarios.first(), seed = 1, port = port)
+        return
+    }
 
     var unexpected = 0
     for (scenario in scenarios) {
-        val runs = (1..seeds).map { Runner.run(scenario, it.toLong(), if (trace) ::printTransition else null) }
+        val runs = (1..seeds).map { seed ->
+            val recording = mcapDir?.let { Runner.recordingFile(it, scenario, seed.toLong()) }
+            Runner.run(scenario, seed.toLong(), if (trace) ::printTransition else null, recording).also {
+                if (recording != null) println("   recording: ${recording.path}")
+            }
+        }
         val passed = runs.count { it.passed }
         val verdict = when {
             scenario.expectation == Expectation.KNOWN_LIMITATION -> "known limitation"

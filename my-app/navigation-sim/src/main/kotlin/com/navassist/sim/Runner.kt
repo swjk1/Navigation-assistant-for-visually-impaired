@@ -1,5 +1,9 @@
 package com.navassist.sim
 
+import com.navassist.navcore.state.NavigationSnapshot
+import com.navassist.sim.foxglove.FoxglovePublisher
+import com.navassist.sim.foxglove.McapSink
+import com.navassist.sim.foxglove.McapWriter
 import com.navassist.sim.report.TopDownRenderer
 import java.io.File
 
@@ -19,13 +23,28 @@ object Runner {
     fun run(
         scenario: Scenario,
         seed: Long,
-        onFrame: ((Simulation, TraceSample, com.navassist.navcore.state.NavigationSnapshot) -> Unit)? = null,
+        onFrame: ((Simulation, TraceSample, NavigationSnapshot) -> Unit)? = null,
+        recordTo: File? = null,
     ): ScenarioRun {
         val simulation = Simulation(scenario.settings(seed))
-        simulation.onFrame = onFrame
-        val result = simulation.run()
+        onFrame?.let { simulation.listeners += it }
+        val recording = recordTo?.let { file ->
+            McapSink(McapWriter.open(file)).also { sink ->
+                val publisher = FoxglovePublisher(sink)
+                simulation.listeners += publisher::onFrame
+            }
+        }
+        val result = try {
+            simulation.run()
+        } finally {
+            recording?.close()
+        }
         return ScenarioRun(scenario, seed, result, scenario.check(result, simulation), simulation)
     }
+
+    /** Where a recording of this scenario and seed goes. */
+    fun recordingFile(directory: File, scenario: Scenario, seed: Long) =
+        File(directory, "${scenario.name}-seed$seed.mcap")
 
     /** Writes the top-down picture of a run and returns where it went. */
     fun snapshot(run: ScenarioRun, directory: File): File {
