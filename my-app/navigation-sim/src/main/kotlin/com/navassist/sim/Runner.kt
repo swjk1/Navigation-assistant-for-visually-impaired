@@ -1,0 +1,38 @@
+package com.navassist.sim
+
+import com.navassist.sim.report.TopDownRenderer
+import java.io.File
+
+/** One scenario run with one seed, and whether it met its criteria. */
+class ScenarioRun(
+    val scenario: Scenario,
+    val seed: Long,
+    val result: SimResult,
+    val failures: List<String>,
+    val simulation: Simulation,
+) {
+    val passed: Boolean get() = failures.isEmpty()
+}
+
+object Runner {
+
+    fun run(
+        scenario: Scenario,
+        seed: Long,
+        onFrame: ((Simulation, TraceSample, com.navassist.navcore.state.NavigationSnapshot) -> Unit)? = null,
+    ): ScenarioRun {
+        val simulation = Simulation(scenario.settings(seed))
+        simulation.onFrame = onFrame
+        val result = simulation.run()
+        return ScenarioRun(scenario, seed, result, scenario.check(result, simulation), simulation)
+    }
+
+    /** Writes the top-down picture of a run and returns where it went. */
+    fun snapshot(run: ScenarioRun, directory: File): File {
+        val status = if (run.passed) "pass" else "FAIL"
+        val file = File(directory, "${run.scenario.name}-seed${run.seed}-$status.png")
+        val title = "${run.scenario.name}  seed ${run.seed}  ${if (run.passed) "PASS" else "FAIL: " + run.failures.joinToString("; ")}"
+        TopDownRenderer.render(run.simulation, run.result, title, file)
+        return file
+    }
+}

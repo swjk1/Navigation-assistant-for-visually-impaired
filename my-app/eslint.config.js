@@ -18,8 +18,9 @@ module.exports = [
       '.expo/**',
       'dist/**',
       'web-build/**',
-      // The navigation core is Kotlin.
+      // The navigation core and its simulator are Kotlin (their build dirs hold Gradle's HTML reports).
       'navigation-core/**',
+      'navigation-sim/**',
     ],
   },
   {
