@@ -12,6 +12,7 @@ Navigation simulator
   --snapshots all|fail   picture every run, or only failures (default fail)
   --trace                print every change of engine status / instruction
   --mcap DIR             record every run to DIR/<scenario>-seed<N>.mcap for Foxglove
+  --webots DIR           export every run as a Webots project, DIR/<scenario>-seed<N>/worlds/scene.wbt
   --live PORT            run the first scenario in real time, streaming to Foxglove at
                          ws://localhost:PORT; publish a Twist on /cmd_vel to drive it yourself
   --list                 list scenarios and exit
@@ -25,6 +26,7 @@ fun main(args: Array<String>) {
     var trace = false
     var mcapDir: File? = null
     var livePort: Int? = null
+    var webotsDir: File? = null
     var i = 0
     while (i < args.size) {
         when (args[i]) {
@@ -36,6 +38,7 @@ fun main(args: Array<String>) {
             "--trace" -> trace = true
             "--mcap" -> mcapDir = File(args[++i])
             "--live" -> livePort = args[++i].toInt()
+            "--webots" -> webotsDir = File(args[++i])
             "--list" -> {
                 Scenarios.all.forEach { println("${it.name.padEnd(18)} ${it.expectation.name.padEnd(17)} ${it.description}") }
                 return
@@ -55,8 +58,10 @@ fun main(args: Array<String>) {
     for (scenario in scenarios) {
         val runs = (1..seeds).map { seed ->
             val recording = mcapDir?.let { Runner.recordingFile(it, scenario, seed.toLong()) }
-            Runner.run(scenario, seed.toLong(), if (trace) ::printTransition else null, recording).also {
+            val project = webotsDir?.let { File(it, "${scenario.name}-seed$seed") }
+            Runner.run(scenario, seed.toLong(), if (trace) ::printTransition else null, recording, project).also {
                 if (recording != null) println("   recording: ${recording.path}")
+                if (project != null) println("   webots: ${File(project, "worlds/scene.wbt").path}")
             }
         }
         val passed = runs.count { it.passed }

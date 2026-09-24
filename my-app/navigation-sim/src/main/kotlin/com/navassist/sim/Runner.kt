@@ -5,6 +5,7 @@ import com.navassist.sim.foxglove.FoxglovePublisher
 import com.navassist.sim.foxglove.McapSink
 import com.navassist.sim.foxglove.McapWriter
 import com.navassist.sim.report.TopDownRenderer
+import com.navassist.sim.webots.WebotsExporter
 import java.io.File
 
 /** One scenario run with one seed, and whether it met its criteria. */
@@ -25,6 +26,7 @@ object Runner {
         seed: Long,
         onFrame: ((Simulation, TraceSample, NavigationSnapshot) -> Unit)? = null,
         recordTo: File? = null,
+        webotsTo: File? = null,
     ): ScenarioRun {
         val simulation = Simulation(scenario.settings(seed))
         onFrame?.let { simulation.listeners += it }
@@ -34,12 +36,15 @@ object Runner {
                 simulation.listeners += publisher::onFrame
             }
         }
+        val webots = webotsTo?.let { WebotsExporter.Recorder().also { r -> simulation.listeners += r::onFrame } }
         val result = try {
             simulation.run()
         } finally {
             recording?.close()
         }
-        return ScenarioRun(scenario, seed, result, scenario.check(result, simulation), simulation)
+        val run = ScenarioRun(scenario, seed, result, scenario.check(result, simulation), simulation)
+        if (webots != null) WebotsExporter.write(webotsTo, run, webots)
+        return run
     }
 
     /** Where a recording of this scenario and seed goes. */

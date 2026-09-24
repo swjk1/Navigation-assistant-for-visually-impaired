@@ -59,6 +59,24 @@ A useful layout:
 placed by `/tf` where the engine fixed its origin — so where the grid disagrees with the building,
 the engine is wrong about the world.
 
+## Watching it in Webots
+
+```bash
+./gradlew run --args="--scenario find-room-314 --webots webots-out"
+webots webots-out/find-room-314-seed1/worlds/scene.wbt       # Windows: D:\Webots\msys64\mingw64in\webots.exe
+```
+
+Each run becomes a small Webots project: the building as solid geometry (walls grey, low obstacles
+orange, glass translucent, signs as coloured plates), the user as a blue figure with a cone showing
+where the phone points, a trail of discs coloured by instruction (green straight, blue turning,
+yellow scan, red stop), and the engine's occupancy map drawn on the floor as it grew (green
+believed free, red believed occupied). The top-left label is the time, engine status and the
+instruction being spoken.
+
+Webots is only the viewer: everything ran in the simulator, and a supervisor controller replays the
+recording. Use Webots' play, fast-forward and pause buttons; reset the world to watch again. The
+controller also writes `controllers/sim_replay/replay.log`.
+
 ## What is modelled, and what is not
 
 | Modelled | Not modelled |
