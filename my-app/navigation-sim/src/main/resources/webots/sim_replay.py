@@ -31,8 +31,7 @@ def log(message):
     """Webots does not always surface controller output, so progress also goes to replay.log."""
     print(message)
     with open(LOG, "a", encoding="utf-8") as f:
-        f.write(message + "
-")
+        f.write(message + "\n")
 
 
 def axis_angle(yaw, pitch):
@@ -142,7 +141,7 @@ def main():
             map_node = root.getMFNode(-1)
             gi += 1
 
-        if t >= next_report:
+        if t >= next_report and not finished:
             next_report += 10.0
             log(f"t={t:.0f} s  {status} {said}  crumbs={crumbs} map snapshots shown={gi}")
 
