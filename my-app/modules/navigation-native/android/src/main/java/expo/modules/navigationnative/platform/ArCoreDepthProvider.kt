@@ -7,10 +7,12 @@ import com.google.ar.core.Frame
 import com.google.ar.core.exceptions.NotYetAvailableException
 import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.geometry.DepthPointCloud
+import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.geometry.Vec3
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
+import kotlin.math.atan2
 
 /**
  * ARCore depth image -> canonical [DepthPointCloud].
@@ -25,9 +27,18 @@ import kotlin.math.abs
  *    coordinates.
  *  - The depth image's y axis points DOWN while ARCore's camera y axis points UP, and the camera
  *    looks along its own -Z. Both signs are flipped when unprojecting.
+ *  - Depth usually updates more slowly than the camera, and [Frame.acquireDepthImage16Bits]
+ *    hands back the latest depth image it has - often the same one as last frame, captured at an
+ *    earlier camera pose. Each depth image is therefore integrated ONCE, keyed by its own
+ *    timestamp, and unprojected with the camera pose recorded at that timestamp. Re-integrating
+ *    it would count one observation many times; unprojecting it with today's pose smears every
+ *    wall sideways while the user turns.
  *  - [Frame.acquireDepthImage16Bits] throws [NotYetAvailableException] routinely, especially in
  *    the first second of a session. That is normal, not an error.
  *  - Images are ALWAYS closed, via `use {}`.
+ *
+ * Threading: [acquire], [pin] and [reset] run on the GL thread; [resolve] runs on whichever thread
+ * delivers semantic observations. Only the snapshot buffers are shared, under [snapshotLock].
  */
 class ArCoreDepthProvider(private val config: NavigationConfig) {
 
@@ -37,41 +48,110 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
     private val cameraMatrix = FloatArray(16)
     private val point = FloatArray(3)
 
-    /**
-     * Copy of the most recent depth image, kept for semantic observation association.
-     * Written on the GL thread, read from whichever thread delivers semantic observations, hence
-     * the explicit lock.
-     */
-    private val snapshotLock = Any()
-    private var snapshotDepth: ShortArray = ShortArray(0)
-    private var snapshotWidth = 0
-    private var snapshotHeight = 0
-    private var snapshotTimestampNanos = 0L
-    private val snapshotTransform = FloatArray(12)
-    private var snapshotFx = 0f
-    private var snapshotFy = 0f
-    private var snapshotCx = 0f
-    private var snapshotCy = 0f
+    // ---------------------------------------------------------------- camera pose history (GL)
+
+    private val poseTimestamps = LongArray(POSE_HISTORY)
+    private val poseMatrices = Array(POSE_HISTORY) { FloatArray(16) }
+    private var poseNext = 0
+    private var poseCount = 0
+
+    private var lastDepthImageTimestampNanos = 0L
+
+    /** Where the sensor was for the most recently integrated depth image, canonical frame. */
+    var lastSensorPosition: Vec3? = null
+        private set
 
     var lastPointCount: Int = 0
         private set
 
+    // ---------------------------------------------------------------- depth snapshots (shared)
+
+    /**
+     * A copy of one depth image plus the intrinsics and transform needed to unproject it. A few
+     * tens of kilobytes, unlike retaining the ARCore Image itself.
+     */
+    private class DepthSnapshot {
+        var depth = ShortArray(0)
+        var width = 0
+        var height = 0
+        var timestampNanos = 0L
+        var fx = 0f
+        var fy = 0f
+        var cx = 0f
+        var cy = 0f
+        val transform = FloatArray(12)
+
+        fun copyFrom(other: DepthSnapshot) {
+            if (depth.size != other.depth.size) depth = ShortArray(other.depth.size)
+            System.arraycopy(other.depth, 0, depth, 0, other.depth.size)
+            width = other.width
+            height = other.height
+            timestampNanos = other.timestampNanos
+            fx = other.fx
+            fy = other.fy
+            cx = other.cx
+            cy = other.cy
+            System.arraycopy(other.transform, 0, transform, 0, transform.size)
+        }
+    }
+
+    private val snapshotLock = Any()
+
+    /** The last few depth images, newest at `recentNext - 1`. */
+    private val recent = Array(RECENT_SNAPSHOTS) { DepthSnapshot() }
+    private var recentNext = 0
+    private var recentCount = 0
+
+    /**
+     * Depth images kept for an RGB capture that is still being analysed. Perception takes
+     * seconds (YOLO, OCR, sometimes a VLM round trip); by the time its observation arrives, the
+     * recent ring has long moved on and the camera is looking somewhere else. See [pin].
+     */
+    private val pinned = Array(PINNED_SNAPSHOTS) { DepthSnapshot() }
+    private var pinnedNext = 0
+    private var pinnedCount = 0
+
+    /** What a semantic observation resolves to. */
+    data class Resolution(
+        /** Canonical world position of the image point, when it had usable depth. */
+        val worldPosition: Vec3?,
+        /** Where the camera was when the image was taken, when a matching frame was found. */
+        val observerPose: Pose3D?,
+    )
+
     fun reset() {
         cloud.clear()
         lastPointCount = 0
-        snapshotTimestampNanos = 0L
+        poseNext = 0
+        poseCount = 0
+        lastDepthImageTimestampNanos = 0L
+        lastSensorPosition = null
+        // Snapshots carry transforms into the canonical frame that is being discarded.
+        synchronized(snapshotLock) {
+            recentCount = 0
+            recentNext = 0
+            pinnedCount = 0
+            pinnedNext = 0
+        }
     }
 
     /**
-     * @return the populated point cloud, or null when depth was not available for this frame
-     *         (which is normal and must not be treated as an error).
+     * @return the populated point cloud, or null when there is no NEW depth for this frame - not
+     *         available yet, or the same image already integrated. Neither is an error.
      */
     fun acquire(frame: Frame, camera: Camera, poseProvider: ArCorePoseProvider): DepthPointCloud? {
+        recordPose(frame.timestamp, camera)
         return try {
             frame.acquireDepthImage16Bits().use { image ->
-                camera.pose.toMatrix(cameraMatrix, 0)
+                val depthTimestamp = image.timestamp
+                if (depthTimestamp == lastDepthImageTimestampNanos) return null
+                lastDepthImageTimestampNanos = depthTimestamp
+
+                if (!poseAt(depthTimestamp, cameraMatrix)) camera.pose.toMatrix(cameraMatrix, 0)
                 poseProvider.fillCanonicalFromCamera(cameraMatrix, transform)
-                unproject(image, camera, frame.timestamp)
+                // The camera origin in canonical coordinates is the transform's translation.
+                lastSensorPosition = Vec3(transform[3], transform[7], transform[11])
+                unproject(image, camera, depthTimestamp)
                 lastPointCount = cloud.count
                 cloud
             }
@@ -83,6 +163,29 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
             // Session in a state where depth cannot be acquired (e.g. paused mid-frame).
             null
         }
+    }
+
+    private fun recordPose(timestampNanos: Long, camera: Camera) {
+        camera.pose.toMatrix(poseMatrices[poseNext], 0)
+        poseTimestamps[poseNext] = timestampNanos
+        poseNext = (poseNext + 1) % POSE_HISTORY
+        if (poseCount < POSE_HISTORY) poseCount++
+    }
+
+    /** Copies the camera matrix recorded closest to [timestampNanos] into [out]. */
+    private fun poseAt(timestampNanos: Long, out: FloatArray): Boolean {
+        var best = -1
+        var bestDelta = Long.MAX_VALUE
+        for (i in 0 until poseCount) {
+            val delta = abs(poseTimestamps[i] - timestampNanos)
+            if (delta < bestDelta) {
+                bestDelta = delta
+                best = i
+            }
+        }
+        if (best < 0 || bestDelta > POSE_MATCH_TOLERANCE_NANOS) return false
+        System.arraycopy(poseMatrices[best], 0, out, 0, 16)
+        return true
     }
 
     private fun unproject(image: Image, camera: Camera, timestampNanos: Long) {
@@ -136,12 +239,6 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
         }
     }
 
-    /**
-     * Keeps a small copy of the depth image so that a semantic observation arriving a few frames
-     * later (OCR is not instantaneous) can still be turned into a world position. This is the
-     * "recent frame buffer" the perception hand-off needs; it is a few tens of kilobytes, unlike
-     * retaining the ARCore Image itself.
-     */
     private fun captureSnapshot(
         width: Int,
         height: Int,
@@ -154,71 +251,114 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
         cx: Float,
         cy: Float,
     ) = synchronized(snapshotLock) {
-        if (snapshotDepth.size != width * height) snapshotDepth = ShortArray(width * height)
+        val slot = recent[recentNext]
+        if (slot.depth.size != width * height) slot.depth = ShortArray(width * height)
         var index = 0
         for (v in 0 until height) {
             val rowBase = v * rowStride
             for (u in 0 until width) {
-                snapshotDepth[index++] = buffer.getShort(rowBase + u * pixelStride)
+                slot.depth[index++] = buffer.getShort(rowBase + u * pixelStride)
             }
         }
-        snapshotWidth = width
-        snapshotHeight = height
-        snapshotTimestampNanos = timestampNanos
-        snapshotFx = fx
-        snapshotFy = fy
-        snapshotCx = cx
-        snapshotCy = cy
-        System.arraycopy(transform, 0, snapshotTransform, 0, transform.size)
+        slot.width = width
+        slot.height = height
+        slot.timestampNanos = timestampNanos
+        slot.fx = fx
+        slot.fy = fy
+        slot.cx = cx
+        slot.cy = cy
+        System.arraycopy(transform, 0, slot.transform, 0, transform.size)
+        recentNext = (recentNext + 1) % RECENT_SNAPSHOTS
+        if (recentCount < RECENT_SNAPSHOTS) recentCount++
     }
 
     /**
-     * Turns a normalized image coordinate reported by the perception layer into a canonical world
-     * position, using the most recent depth snapshot.
+     * Keeps the depth image nearest [timestampNanos] until observations derived from that
+     * camera frame have had time to arrive. Call on the GL thread right after the frame was
+     * submitted, when capturing its RGB image for perception.
+     */
+    fun pin(timestampNanos: Long) = synchronized(snapshotLock) {
+        val source = nearestIn(recent, recentCount, timestampNanos) ?: return@synchronized
+        if (abs(source.timestampNanos - timestampNanos) > SNAPSHOT_MATCH_TOLERANCE_NANOS) return@synchronized
+        pinned[pinnedNext].copyFrom(source)
+        pinnedNext = (pinnedNext + 1) % PINNED_SNAPSHOTS
+        if (pinnedCount < PINNED_SNAPSHOTS) pinnedCount++
+    }
+
+    /**
+     * Resolves a semantic observation against the depth image of the camera frame it came from.
+     *
+     * With [observationTimestampNanos] the matching snapshot must be found (pinned at capture, or
+     * still in the recent ring); resolving against any other frame would place the landmark
+     * wherever the camera happens to point NOW, which after a second of turning is a different
+     * wall. Without a timestamp the newest depth image is used, which is only right when the
+     * observation is effectively instantaneous.
      *
      * MVP simplification: the normalized coordinate is assumed to address the same field of view
-     * as the depth image. Observations older than [maxAgeNanos] are rejected outright rather than
-     * silently associated with the wrong part of the corridor.
+     * as the depth image, i.e. the camera SENSOR image, not the rotated display image.
      */
-    fun resolveWorldPosition(
-        normalizedX: Float,
-        normalizedY: Float,
+    fun resolve(
+        normalizedX: Float?,
+        normalizedY: Float?,
         observationTimestampNanos: Long?,
-        maxAgeNanos: Long = 500_000_000L,
-    ): Vec3? = synchronized(snapshotLock) {
-        if (snapshotWidth == 0 || snapshotHeight == 0) return null
-        if (observationTimestampNanos != null) {
-            val age = abs(snapshotTimestampNanos - observationTimestampNanos)
-            if (age > CLOCK_DOMAIN_MISMATCH_NANOS) {
-                // The timestamp is not in ARCore's clock domain at all - almost always a wall
-                // clock value (Date.now(), milliseconds since epoch) where the ARCore frame
-                // timestamp (nanoseconds since boot) was expected.
-                //
-                // Rejecting it would silently drop EVERY observation the perception layer ever
-                // sends, and the engine would simply never find its destination with no error
-                // anywhere. Falling back to the latest depth frame - exactly what omitting the
-                // timestamp does - is both safer and easier to notice in the log.
-                Log.w(
-                    TAG,
-                    "Semantic observation timestamp is not an ARCore frame timestamp " +
-                        "(off by ${age / 1_000_000} ms); using the most recent depth frame instead. " +
-                        "Pass the value from ARCore Frame.getTimestamp(), or omit it.",
-                )
-            } else if (age > maxAgeNanos) {
-                return null
+    ): Resolution = synchronized(snapshotLock) {
+        val snapshot = findSnapshot(observationTimestampNanos) ?: return@synchronized NOT_RESOLVED
+        val pose = observerPoseOf(snapshot)
+        if (normalizedX == null || normalizedY == null) return@synchronized Resolution(null, pose)
+        Resolution(worldPositionIn(snapshot, normalizedX, normalizedY), pose)
+    }
+
+    private fun findSnapshot(timestampNanos: Long?): DepthSnapshot? {
+        if (recentCount == 0 && pinnedCount == 0) return null
+        val latest = if (recentCount > 0) recent[(recentNext - 1 + RECENT_SNAPSHOTS) % RECENT_SNAPSHOTS] else null
+        if (timestampNanos == null) return latest
+        if (latest != null && abs(latest.timestampNanos - timestampNanos) > CLOCK_DOMAIN_MISMATCH_NANOS) {
+            // Not in ARCore's clock domain at all - almost always a wall clock (Date.now()) where
+            // Frame.getTimestamp() was expected. Dropping would silently discard every observation
+            // the perception layer ever sends; the latest frame is the least-bad answer and the
+            // log makes the mistake visible.
+            Log.w(
+                TAG,
+                "Semantic observation timestamp is not an ARCore frame timestamp " +
+                    "(off by ${abs(latest.timestampNanos - timestampNanos) / 1_000_000} ms); using the " +
+                    "most recent depth frame instead. Pass the capture's timestampNs, or omit it.",
+            )
+            return latest
+        }
+        val fromRecent = nearestIn(recent, recentCount, timestampNanos)
+        val fromPinned = nearestIn(pinned, pinnedCount, timestampNanos)
+        val best = listOfNotNull(fromRecent, fromPinned).minByOrNull { abs(it.timestampNanos - timestampNanos) }
+        return best?.takeIf { abs(it.timestampNanos - timestampNanos) <= SNAPSHOT_MATCH_TOLERANCE_NANOS }
+    }
+
+    private fun nearestIn(slots: Array<DepthSnapshot>, count: Int, timestampNanos: Long): DepthSnapshot? {
+        var best: DepthSnapshot? = null
+        var bestDelta = Long.MAX_VALUE
+        for (i in 0 until count) {
+            val delta = abs(slots[i].timestampNanos - timestampNanos)
+            if (delta < bestDelta) {
+                bestDelta = delta
+                best = slots[i]
             }
         }
-        val u = (normalizedX * snapshotWidth).toInt().coerceIn(0, snapshotWidth - 1)
-        val v = (normalizedY * snapshotHeight).toInt().coerceIn(0, snapshotHeight - 1)
+        return best
+    }
+
+    private fun worldPositionIn(snapshot: DepthSnapshot, normalizedX: Float, normalizedY: Float): Vec3? {
+        val width = snapshot.width
+        val height = snapshot.height
+        if (width == 0 || height == 0) return null
+        val u = (normalizedX * width).toInt().coerceIn(0, width - 1)
+        val v = (normalizedY * height).toInt().coerceIn(0, height - 1)
 
         // Average a small window: a single depth pixel on a door plate is easily invalid.
         var sum = 0f
         var count = 0
         for (dv in -2..2) {
             for (du in -2..2) {
-                val su = (u + du).coerceIn(0, snapshotWidth - 1)
-                val sv = (v + dv).coerceIn(0, snapshotHeight - 1)
-                val raw = snapshotDepth[sv * snapshotWidth + su].toInt() and 0xFFFF
+                val su = (u + du).coerceIn(0, width - 1)
+                val sv = (v + dv).coerceIn(0, height - 1)
+                val raw = snapshot.depth[sv * width + su].toInt() and 0xFFFF
                 val meters = raw * 0.001f
                 if (meters >= config.minDepthMeters && meters <= config.maxDepthMeters) {
                     sum += meters
@@ -229,21 +369,52 @@ class ArCoreDepthProvider(private val config: NavigationConfig) {
         if (count == 0) return null
         val depth = sum / count
 
-        val camX = (u - snapshotCx) * depth / snapshotFx
-        val camY = -(v - snapshotCy) * depth / snapshotFy
+        val camX = (u - snapshot.cx) * depth / snapshot.fx
+        val camY = -(v - snapshot.cy) * depth / snapshot.fy
         val camZ = -depth
         val out = FloatArray(3)
-        ArCorePoseProvider.transform(snapshotTransform, camX, camY, camZ, out)
+        ArCorePoseProvider.transform(snapshot.transform, camX, camY, camZ, out)
         return Vec3(out[0], out[1], out[2])
+    }
+
+    /** The camera pose the snapshot was taken from, read straight off its canonical transform. */
+    private fun observerPoseOf(snapshot: DepthSnapshot): Pose3D {
+        val t = snapshot.transform
+        // The camera looks along its own -Z; the transform's third column is +Z in canonical.
+        var hx = -t[2]
+        var hz = -t[10]
+        if (hx * hx + hz * hz < 1e-4f) {
+            // Steeply pitched phone: use the screen-up direction, as ArCorePoseProvider does.
+            hx = t[1]
+            hz = t[9]
+        }
+        return Pose3D(t[3], t[7], t[11], atan2(hx, hz))
     }
 
     private companion object {
         const val TAG = "ArCoreDepthProvider"
+
+        /** ~0.5 s of camera poses at 30 fps: comfortably longer than depth lags behind. */
+        const val POSE_HISTORY = 16
+
+        /** A recorded pose further than this from the depth timestamp is not "its" pose. */
+        const val POSE_MATCH_TOLERANCE_NANOS = 20_000_000L
+
+        const val RECENT_SNAPSHOTS = 4
+        const val PINNED_SNAPSHOTS = 4
+
+        /**
+         * A depth snapshot counts as the observation's frame within this window: depth images
+         * arrive every one or two camera frames, so the nearest one is within ~70 ms.
+         */
+        const val SNAPSHOT_MATCH_TOLERANCE_NANOS = 150_000_000L
 
         /**
          * Beyond this the supplied timestamp cannot plausibly be in ARCore's clock domain, so it
          * is treated as absent rather than used to reject the observation.
          */
         const val CLOCK_DOMAIN_MISMATCH_NANOS = 60_000_000_000L
+
+        val NOT_RESOLVED = Resolution(null, null)
     }
 }

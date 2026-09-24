@@ -4,11 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.util.Base64
 import com.navassist.navcore.NavigationEngine
 import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.mapping.CellState
-import java.io.ByteArrayOutputStream
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -19,8 +17,9 @@ import kotlin.math.sin
  * kind of traffic the architecture forbids. A picture of it is a few kilobytes, is produced only
  * when debug mode is on, and is pulled on demand rather than pushed with every snapshot.
  *
- * Rendering happens on the engine thread (see NavigationRuntime.renderMap) because it reads the
- * live grid, path and frontier state while the engine may be mid-update.
+ * Drawing happens on the engine thread (see NavigationRuntime.renderMap) because it reads the
+ * live grid, path and frontier state while the engine may be mid-update. Encoding does not; see
+ * [PendingImage].
  */
 object OccupancyMapRenderer {
 
@@ -43,7 +42,7 @@ object OccupancyMapRenderer {
         val sizeMeters: Float,
     )
 
-    fun render(engine: NavigationEngine): RenderedMap {
+    fun render(engine: NavigationEngine): PendingImage<RenderedMap> {
         val grid = engine.occupancyGrid()
         val cells = grid.cells
         val size = cells * CELL_PIXELS
@@ -112,16 +111,16 @@ object OccupancyMapRenderer {
             paint,
         )
 
-        val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        bitmap.recycle()
-
-        return RenderedMap(
-            base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP),
-            width = size,
-            height = size,
-            resolutionMeters = grid.resolution,
-            sizeMeters = grid.sizeMeters,
-        )
+        val resolution = grid.resolution
+        val sizeMeters = grid.sizeMeters
+        return PendingImage(bitmap) { base64 ->
+            RenderedMap(
+                base64 = base64,
+                width = size,
+                height = size,
+                resolutionMeters = resolution,
+                sizeMeters = sizeMeters,
+            )
+        }
     }
 }

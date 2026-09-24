@@ -1,8 +1,10 @@
 package com.navassist.navcore.exploration
 
 import com.navassist.navcore.NavigationConfig
+import com.navassist.navcore.geometry.GridCoordinate
 import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.geometry.Vec2
+import com.navassist.navcore.mapping.CellState
 import com.navassist.navcore.mapping.InflatedGrid
 import com.navassist.navcore.mapping.OccupancyGrid
 import com.navassist.navcore.semantic.NavigationTarget
@@ -94,7 +96,12 @@ class ExplorationManager(
             val reached = distance <= config.frontierReachedMeters
             val blocked = inflated.isBlocked(cell)
             val stalled = nowMillis - lastProgressMillis >= config.frontierNoProgressMillis
-            if (!reached && !blocked && !stalled) {
+            // Commitment survives frontier churn - clusters splitting, merging or fragmenting below
+            // the size filter - but not the frontier being fully seen: a sweep routinely fills in
+            // a waypoint picked a second earlier, and holding it would send the user back to look
+            // at space the map already knows.
+            val explored = !hasFrontierCellNear(grid, grid.worldToGrid(previous.centroid))
+            if (!reached && !blocked && !stalled && !explored) {
                 selected = previous.copy(centroidCell = cell, distanceMeters = distance)
                 return ExplorationResult(scored, selected, exhausted = false)
             }
@@ -156,6 +163,35 @@ class ExplorationManager(
             clearSelection()
         }
     }
+
+    /**
+     * True while any FREE cell bordering UNKNOWN space lies near [cell], regardless of whether
+     * the detector still reports it as part of a cluster. Unknown space behind a wall borders an
+     * obstacle, not free space, so it does not count - it is not reachable from here.
+     */
+    private fun hasFrontierCellNear(grid: OccupancyGrid, cell: GridCoordinate): Boolean {
+        val radiusCells = config.frontierCommitUnknownRadiusMeters / grid.resolution
+        val reach = kotlin.math.ceil(radiusCells).toInt()
+        val radiusSq = radiusCells * radiusCells
+        for (dz in -reach..reach) {
+            for (dx in -reach..reach) {
+                if (dx * dx + dz * dz > radiusSq) continue
+                val gx = cell.gx + dx
+                val gz = cell.gz + dz
+                if (grid.stateAt(gx, gz) != CellState.FREE) continue
+                if (isUnknownInWindow(grid, gx + 1, gz) || isUnknownInWindow(grid, gx - 1, gz) ||
+                    isUnknownInWindow(grid, gx, gz + 1) || isUnknownInWindow(grid, gx, gz - 1)
+                ) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /** Outside the window reads UNKNOWN but is not unexplored space; see FrontierDetector. */
+    private fun isUnknownInWindow(grid: OccupancyGrid, gx: Int, gz: Int): Boolean =
+        grid.inBounds(gx, gz) && grid.stateAt(gx, gz) == CellState.UNKNOWN
 
     private fun isBlacklisted(position: Vec2): Boolean = blacklist.any {
         it.failures >= config.frontierFailuresBeforeBlacklist &&

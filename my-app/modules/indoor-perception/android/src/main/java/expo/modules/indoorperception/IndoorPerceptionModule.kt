@@ -134,6 +134,7 @@ class IndoorPerceptionModule : Module() {
                 "width" to captured.width,
                 "height" to captured.height,
                 "timestampNs" to captured.timestampNanos.toDouble(),
+                "rotationDegrees" to captured.rotationDegrees,
                 "mimeType" to "image/jpeg",
               ),
             )

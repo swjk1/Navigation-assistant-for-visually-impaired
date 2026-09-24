@@ -466,6 +466,13 @@ class NavigationEngineScenarioTest {
             )
         }
         val after = engine.snapshot.debug?.scanProgress ?: 0f
-        assertEquals(before, after, "a dead depth sensor must not be mistaken for scanning")
+        // Depth updates more slowly than the camera, so the latest depth image stays "live" for a
+        // short grace period. Beyond that, a dead sensor must not be mistaken for scanning.
+        val config = NavigationConfig()
+        val grace = config.scanDepthFreshMillis.toFloat() / config.minScanMillis
+        assertTrue(
+            after - before <= grace + 1e-3f,
+            "a dead depth sensor must not be mistaken for scanning: $before -> $after",
+        )
     }
 }

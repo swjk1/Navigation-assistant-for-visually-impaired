@@ -6,6 +6,7 @@ import com.navassist.navcore.geometry.GridCoordinate
 import com.navassist.navcore.geometry.NavigationFrame
 import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.geometry.Vec2
+import com.navassist.navcore.mapping.CellState
 import com.navassist.navcore.mapping.FloorEstimator
 import com.navassist.navcore.mapping.InflatedGrid
 import com.navassist.navcore.mapping.ObstacleInflator
@@ -114,6 +115,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     val status: NavigationStatus get() = stateMachine.status
 
+    /**
+     * The engine's own clock: the platform timestamp of the latest frame, in milliseconds.
+     *
+     * Everything time-based in here (hint ageing, sighting expiry, route clocks) runs on this
+     * clock. Callers that timestamp input for the engine - semantic observations above all - must
+     * use it rather than a wall clock, or ageing compares two unrelated clocks and never fires.
+     */
+    var clockMillis: Long = 0
+        private set
+
     // ================================================================= public API
 
     fun start(target: NavigationTarget = NavigationTarget.Explore) {
@@ -167,6 +178,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         backtrackTargetNodeId = null
         clearTargetRouteFailures()
         originInitialized = false
+        lastFrameTimestampNanos = 0
         lastDepthTimestampNanos = 0
         lastTrackingGoodMillis = 0
         lastDepthPointCount = 0
@@ -175,25 +187,40 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         target = NavigationTarget.Explore
     }
 
-    /** Clears the learned map but keeps the session and destination. */
+    /**
+     * Clears the learned map but keeps the session, the destination and the coordinate frame.
+     *
+     * Semantic memory survives on purpose: sightings are resolved from depth, not from the map,
+     * and stay valid as long as the canonical frame does - which is why the platform adapter
+     * must NOT re-anchor its pose conversion on a map reset.
+     */
     fun resetMap() {
         grid.clear()
         inflated = null
         floorEstimator.reset()
         exploration.reset()
         topology.reset()
+        controller.reset()
         currentPath = emptyList()
         currentGoal = null
         lastNodeId = null
         lastNodePosition = null
         backtrackTargetNodeId = null
         clearTargetRouteFailures()
+        lastFrontierMillis = 0
         // Clearing the map means the engine knows nothing again, so it must re-earn the right to
-        // give instructions rather than coasting on the previous scan.
+        // give instructions rather than coasting on the previous scan. The scan gate only runs in
+        // LOCALIZING, so zeroing the budget alone is not enough: the state machine goes back too.
         scanElapsedMillis = 0
+        stateMachine.on(NavigationEvent.MapReset)
         originInitialized = false
     }
 
+    /**
+     * @param nowMillis on the engine's clock - pass [clockMillis], never a wall clock.
+     * @param observerPose where the user stood when the image was captured, which may be seconds
+     *        before the observation arrives. Directional hints are resolved against it.
+     */
     fun submitSemanticObservations(
         observations: List<SemanticObservation>,
         nowMillis: Long,
@@ -239,6 +266,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     fun updateFrame(frame: NavigationFrame): NavigationSnapshot {
         val nowMillis = frame.timestampNanos / 1_000_000
+        clockMillis = nowMillis
         lastPose = frame.pose
 
         if (!started || stateMachine.status == NavigationStatus.IDLE) {
@@ -285,6 +313,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastFrameTimestampNanos = frame.timestampNanos
         grid.applyDecay(deltaSeconds)
 
+        // One frame is one observation: everything below is collected, then committed once.
+        markFootprint(frame.pose.position2D)
         if (frame.depthAvailable && frame.points.count > 0) {
             lastDepthTimestampNanos = frame.timestampNanos
             lastDepthPointCount = frame.points.count
@@ -293,11 +323,13 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 frame.pose.y,
                 frame.floorHint,
                 frame.floorHintConfidence,
+                nowMillis,
             )
             if (floor.confidence >= config.floorMinConfidence) {
                 integrateDepth(frame, floor.floorY)
             }
         }
+        grid.commitObservation()
 
         val depthStale = lastDepthTimestampNanos == 0L ||
             (frame.timestampNanos - lastDepthTimestampNanos) / 1_000_000 > config.depthStarvationMillis
@@ -307,8 +339,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val floorReady = floorEstimator.estimate.confidence >= config.floorMinConfidence
 
         if (stateMachine.status == NavigationStatus.LOCALIZING) {
-            // Only frames that actually contributed to the map count towards the scan budget.
-            if (frame.depthAvailable) {
+            // Only time with live depth counts towards the scan budget. "Live" rather than "this
+            // frame carried depth": depth updates more slowly than the camera, and the adapter
+            // does not resend a depth image it already delivered.
+            val depthFresh = lastDepthTimestampNanos != 0L &&
+                (frame.timestampNanos - lastDepthTimestampNanos) / 1_000_000 <= config.scanDepthFreshMillis
+            if (depthFresh) {
                 scanElapsedMillis += (deltaSeconds * 1000f).toLong()
             }
             if (floorReady &&
@@ -398,15 +434,27 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     // ================================================================= mapping helpers
 
     /**
-     * Classifies every depth sample against the floor estimate and folds it into the grid.
+     * Classifies every depth sample against the floor estimate and records it in the pending
+     * grid observation (committed once per frame by the caller).
      *
-     * Ray integration is essential: marking only the endpoint would give a map full of obstacle
-     * dots surrounded by UNKNOWN, which is indistinguishable from a wall everywhere, and frontier
-     * detection (a FREE cell next to an UNKNOWN cell) could never fire.
+     * FREE space comes only from floor returns, and only from the stretch of each floor ray that
+     * is provably below obstacle height. A ray that reaches the floor 3 m away proves that nothing
+     * along it was taller than the ray itself at each point - so where the ray passes 60 cm above
+     * the floor, a 40 cm box could be sitting underneath it. Flattening every ray to 2D and
+     * clearing the whole line (what this used to do) erased exactly those low obstacles: a box in
+     * front of a wall lost every frame to the rays aimed at the wall above it.
+     *
+     * Obstacle returns mark only their own cell. They clear nothing, for the same reason.
+     *
+     * The carved stretch grows with range (it is range * minHeight / sensorHeight), which matches
+     * how the spacing between floor samples grows with range, so coverage stays continuous.
      */
     private fun integrateDepth(frame: NavigationFrame, floorY: Float) {
         val points = frame.points
-        val origin = frame.pose.position2D
+        val sensor = frame.sensorPosition ?: frame.pose.position3D
+        val originX = sensor.x
+        val originZ = sensor.z
+        val sensorHeight = sensor.y - floorY
         val minHeight = config.minObstacleHeightMeters
         val maxHeight = config.maxObstacleHeightMeters
         val maxRangeSq = config.maxDepthMeters * config.maxDepthMeters
@@ -419,8 +467,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             val pz = points.z(i)
             if (px.isNaN() || py.isNaN() || pz.isNaN()) continue
 
-            val dx = px - origin.x
-            val dz = pz - origin.z
+            val dx = px - originX
+            val dz = pz - originZ
             val rangeSq = dx * dx + dz * dz
             if (rangeSq > maxRangeSq || rangeSq < minRangeSq) continue
 
@@ -431,10 +479,44 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 // Below the floor we think we have: the estimate is wrong, so this point says
                 // nothing trustworthy about what is walkable. Dropping it is the safe failure.
                 height < -config.floorBandBelowMeters -> continue
-                // Floor / low ground: the ray crossed free space and ends on walkable ground.
-                height < minHeight -> grid.integrateRay(origin, Vec2(px, pz), endpointOccupied = false)
+                // Floor / low ground: carve the low end of the ray.
+                height < minHeight -> {
+                    // Fraction along the ray from which it stays below obstacle height.
+                    val t = if (sensorHeight <= minHeight) {
+                        0f
+                    } else {
+                        ((sensorHeight - minHeight) / (sensorHeight - height)).coerceIn(0f, 1f)
+                    }
+                    grid.observeFreeLine(Vec2(originX + dx * t, originZ + dz * t), Vec2(px, pz))
+                }
                 // Body-height obstacle.
-                else -> grid.integrateRay(origin, Vec2(px, pz), endpointOccupied = true)
+                else -> {
+                    val cell = grid.worldToGrid(Vec2(px, pz))
+                    grid.observeOccupied(cell.gx, cell.gz)
+                }
+            }
+        }
+    }
+
+    /**
+     * The user is standing here, so it is walkable - the one piece of free space no depth sensor
+     * held at chest height can see. Occupied cells are skipped: a wall beside the user is out of
+     * view, and nothing would ever restore it if the footprint wore it away.
+     */
+    private fun markFootprint(position: Vec2) {
+        val radius = config.footprintFreeRadiusMeters
+        if (radius <= 0f) return
+        val center = grid.worldToGrid(position)
+        val radiusCells = radius / grid.resolution
+        val reach = kotlin.math.ceil(radiusCells).toInt()
+        val radiusSq = radiusCells * radiusCells
+        for (dz in -reach..reach) {
+            for (dx in -reach..reach) {
+                if (dx * dx + dz * dz > radiusSq) continue
+                val gx = center.gx + dx
+                val gz = center.gz + dz
+                if (grid.stateAt(gx, gz) == CellState.OCCUPIED) continue
+                grid.observeFree(gx, gz)
             }
         }
     }

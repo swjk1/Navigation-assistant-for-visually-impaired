@@ -10,7 +10,11 @@ import {
   stopNavigation,
   subscribeNavigationCommands,
 } from '@/guidance/navigationCommandSource';
-import { perceptionHazard, toSemanticObservations } from '@/perception/perceptionToSemantic';
+import {
+  perceptionHazard,
+  toSemanticObservations,
+  type CaptureContext,
+} from '@/perception/perceptionToSemantic';
 import type { NavigationCommand } from '@/types/NavigationCommand';
 import type { PerceptionFrame } from '@/types/perception';
 
@@ -18,6 +22,7 @@ import { analyzeAndStore, getLatestPerceptionFrame } from '@/index.js';
 import IndoorPerception, { PerceptionArView } from 'indoor-perception';
 import {
   NavigationNative,
+  type NavigationDepthImage,
   type NavigationSnapshot,
   type NavigationTarget,
 } from 'navigation-native';
@@ -59,7 +64,14 @@ export default function NavigateScreen() {
   const [spoken, setSpoken] = useState<string>('—');
   const [error, setError] = useState<string | null>(null);
   const [perceptionNote, setPerceptionNote] = useState('idle');
-  const [mapUri, setMapUri] = useState<string | null>(null);
+  const [viewUri, setViewUri] = useState<string | null>(null);
+  /**
+   * Which picture the map card is showing. They are two ends of the same pipeline: OCCUPANCY is
+   * what the engine believes after accumulating evidence, DEPTH is what the sensor reported on
+   * the latest frame alone. Only one is polled at a time - each costs a native render.
+   */
+  const [mapView, setMapView] = useState<'occupancy' | 'depth'>('occupancy');
+  const [depth, setDepth] = useState<NavigationDepthImage | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const lastCommand = useRef<NavigationCommand | null>(null);
   const perceptionBusy = useRef(false);
@@ -115,11 +127,12 @@ export default function NavigateScreen() {
   const stop = useCallback(async () => {
     await stopNavigation();
     setRunning(false);
-    setMapUri(null);
+    setViewUri(null);
+    setDepth(null);
   }, []);
 
-  const onPerceptionFrame = useCallback((frame: PerceptionFrame) => {
-    const observations = toSemanticObservations(frame);
+  const onPerceptionFrame = useCallback((frame: PerceptionFrame, capture: CaptureContext) => {
+    const observations = toSemanticObservations(frame, capture);
     if (observations.length > 0) {
       void NavigationNative.submitSemanticObservations(observations);
     }
@@ -144,26 +157,40 @@ export default function NavigateScreen() {
     let cancelled = false;
     let busy = false;
 
-    const timer = setInterval(() => {
+    const poll = () => {
       if (busy) return;
       busy = true;
-      void NavigationNative.getMapImage()
-        .then((map) => {
-          if (!cancelled) setMapUri(`data:image/png;base64,${map.base64}`);
-        })
+      const pending =
+        mapView === 'depth'
+          ? NavigationNative.getDepthImage().then((image) => {
+              if (cancelled) return;
+              setDepth(image);
+              setViewUri(`data:image/png;base64,${image.base64}`);
+            })
+          : NavigationNative.getMapImage().then((image) => {
+              if (cancelled) return;
+              setViewUri(`data:image/png;base64,${image.base64}`);
+            });
+
+      void pending
         .catch(() => {
           /* transient - the engine may be mid-reset */
         })
         .finally(() => {
           busy = false;
         });
-    }, MAP_INTERVAL_MS);
+    };
+
+    // Immediately, not only after the first interval: switching views should not leave the card
+    // blank for most of a second.
+    poll();
+    const timer = setInterval(poll, MAP_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [supported, running]);
+  }, [supported, running, mapView]);
 
   /**
    * Drives the perception pipeline off the SAME ARCore session navigation is using.
@@ -186,7 +213,12 @@ export default function NavigateScreen() {
           await analyzeAndStore(captured.base64);
           const frame = getLatestPerceptionFrame() as PerceptionFrame | null;
           if (frame && !cancelled) {
-            onPerceptionFrame(frame);
+            // The capture's own timestamp and rotation, so the engine places what was seen
+            // using the depth of THIS frame - not of wherever the camera points by now.
+            onPerceptionFrame(frame, {
+              timestampNs: captured.timestampNs,
+              rotationDegrees: captured.rotationDegrees,
+            });
             setPerceptionNote(
               `${frame.objects.length} objects, ${frame.text.length} signs`
             );
@@ -237,28 +269,90 @@ export default function NavigateScreen() {
           </Text>
         ) : null}
 
-        {mapUri ? (
+        {running ? (
           <View style={styles.mapBlock}>
-            <Image
-              source={{ uri: mapUri }}
-              style={styles.map}
-              accessibilityLabel="Live occupancy map: green is clear space, red is an obstacle, and white marks your position."
-              // Nearest-neighbour-ish: the map is deliberately blocky, one square per 10 cm cell.
-              resizeMode="contain"
-              fadeDuration={0}
-            />
-            <View style={styles.legend}>
-              <Legend color="#408460" label="free" />
-              <Legend color="#D65A4A" label="obstacle" />
-              <Legend color="#18181E" label="unknown" />
-              <Legend color="#F0C85A" label="frontier" />
-              <Legend color="#5AA0F0" label="path" />
+            <View style={styles.viewToggle}>
+              <ViewTab
+                label="Occupancy"
+                active={mapView === 'occupancy'}
+                onPress={() => {
+                  setMapView('occupancy');
+                  setViewUri(null);
+                }}
+              />
+              <ViewTab
+                label="Depth returns"
+                active={mapView === 'depth'}
+                onPress={() => {
+                  setMapView('depth');
+                  setViewUri(null);
+                }}
+              />
             </View>
-            <Text style={styles.mutedSmall}>
-              {snapshot?.debug
-                ? `${(snapshot.debug.freeCells * 0.01).toFixed(1)} m² mapped · 12 m window`
-                : ''}
-            </Text>
+
+            {viewUri ? (
+              <Image
+                source={{ uri: viewUri }}
+                style={styles.map}
+                accessibilityLabel={
+                  mapView === 'depth'
+                    ? 'Raw depth returns from the latest frame, seen from above. Green is floor, red is an obstacle, purple passed overhead, and white marks your position.'
+                    : 'Live occupancy map: green is clear space, red is an obstacle, and white marks your position.'
+                }
+                // Nearest-neighbour-ish: both views are deliberately blocky, one square per 10 cm cell.
+                resizeMode="contain"
+                fadeDuration={0}
+              />
+            ) : (
+              <View style={styles.map} />
+            )}
+
+            {mapView === 'depth' ? (
+              <>
+                <View style={styles.legend}>
+                  <Legend color="#408460" label="floor" />
+                  <Legend color="#D65A4A" label="obstacle" />
+                  <Legend color="#766CAC" label="overhead" />
+                  <Legend color="#C88440" label="below floor" />
+                  <Legend color="#484854" label="out of range" />
+                </View>
+                {depth ? (
+                  <>
+                    <Text style={styles.mutedSmall}>
+                      {depth.totalReturns} returns - {depth.floorReturns} floor -{' '}
+                      {depth.obstacleReturns} obstacle - {depth.overheadReturns} overhead -{' '}
+                      {depth.belowFloorReturns} below - {depth.outOfRangeReturns} out of range
+                    </Text>
+                    <Text style={styles.mutedSmall}>
+                      floor {depth.floorY.toFixed(2)} m at{' '}
+                      {Math.round(depth.floorConfidence * 100)}% confidence - frame{' '}
+                      {depth.ageMillis} ms old
+                    </Text>
+                    {depth.hasFrame && depth.totalReturns === 0 ? (
+                      <Text style={styles.warn}>The sensor returned no points on this frame.</Text>
+                    ) : null}
+                    {!depth.hasFrame ? (
+                      <Text style={styles.warn}>No depth frame has arrived yet.</Text>
+                    ) : null}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <View style={styles.legend}>
+                  <Legend color="#408460" label="free" />
+                  <Legend color="#D65A4A" label="obstacle" />
+                  <Legend color="#18181E" label="unknown" />
+                  <Legend color="#F0C85A" label="frontier" />
+                  <Legend color="#5AA0F0" label="path" />
+                </View>
+                <Text style={styles.mutedSmall}>
+                  {snapshot?.debug
+                    ? `${(snapshot.debug.freeCells * 0.01).toFixed(1)} m² mapped · 12 m window`
+                    : ''}
+                </Text>
+              </>
+            )}
           </View>
         ) : null}
         <Text style={styles.mutedSmall}>perception: {perceptionNote}</Text>
@@ -308,6 +402,31 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
+function ViewTab({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        styles.viewTab,
+        active && styles.viewTabActive,
+        pressed && styles.buttonPressed,
+      ]}
+    >
+      <Text style={[styles.viewTabText, active && styles.viewTabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function Button({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -343,6 +462,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#18181E',
   },
+  viewToggle: { flexDirection: 'row', gap: 6 },
+  viewTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#2A2A38',
+  },
+  viewTabActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
+  viewTabText: { color: '#8A8A99', fontSize: 13, fontWeight: '600' },
+  viewTabTextActive: { color: '#FFFFFF' },
+  warn: { color: '#F0C85A', fontSize: 12 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendSwatch: { width: 10, height: 10, borderRadius: 2 },

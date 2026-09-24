@@ -39,6 +39,13 @@ export type CapturedArFrame = {
   width: number;
   height: number;
   timestampNs: number;
+  /**
+   * Clockwise rotation applied to the camera SENSOR image to make it upright on screen. The
+   * image above is upright, so every model sees text and signs the right way up. Depth is still
+   * indexed in sensor orientation: rotate image coordinates back by this before handing them to
+   * navigation (see `toSemanticObservations`).
+   */
+  rotationDegrees: 0 | 90 | 180 | 270;
   mimeType: 'image/jpeg';
 };
 

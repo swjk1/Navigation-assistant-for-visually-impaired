@@ -26,4 +26,11 @@ data class NavigationFrame(
     val floorHint: Float? = null,
     /** Confidence of [floorHint] in 0..1. */
     val floorHintConfidence: Float = 0f,
+    /**
+     * Where the depth sensor was when [points] were captured, in canonical world coordinates.
+     *
+     * Depth usually lags the camera pose by a frame or more; the rays that carve free space must
+     * start where the sensor actually was, not where the phone is now. Null means "at [pose]".
+     */
+    val sensorPosition: Vec3? = null,
 )

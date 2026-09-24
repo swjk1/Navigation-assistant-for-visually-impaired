@@ -79,4 +79,15 @@ object NavigationSensorBridge {
      */
     fun submitFrame(session: Session, frame: Frame) =
         NavigationRuntime.onExternalArFrame(session, frame)
+
+    /**
+     * Call on the same thread, right after [submitFrame], whenever that frame's RGB image is
+     * captured for perception - with the frame's own `Frame.getTimestamp()`.
+     *
+     * Perception answers seconds later. Without this, the image coordinates it reports would be
+     * resolved against whatever the camera sees by then, which after a second of turning is a
+     * different wall. Pass the same timestamp as `timestampNs` on the resulting observations.
+     */
+    fun onFrameCaptured(timestampNanos: Long) =
+        NavigationRuntime.onFrameCaptured(timestampNanos)
 }

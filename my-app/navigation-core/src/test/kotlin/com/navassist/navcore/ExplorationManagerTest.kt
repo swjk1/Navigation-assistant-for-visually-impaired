@@ -40,11 +40,29 @@ class ExplorationManagerTest {
     @Test fun `temporary disappearance of frontiers does not end a committed branch`() {
         patch(-3f, 2f)
         val initial = assertNotNull(update(1000).selected)
-        for (z in 0 until grid.cells) for (x in 0 until grid.cells) grid.setState(x, z, CellState.FREE)
+        // Frontier detection comes back empty - a sweep of returns rims the patch, leaving only
+        // one-cell openings, which the size filter rejects as speckle - while the openings are
+        // still there. Nothing has been seen that makes the branch pointless, so it must hold.
+        val center = grid.worldToGrid(Vec2(-3f, 2f))
+        for (dz in -5..5) for (dx in -5..5) {
+            val onRing = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dz)) == 5
+            val opening = dz == 0 && (dx == 5 || dx == -5)
+            if (onRing && !opening) grid.setState(center.gx + dx, center.gz + dz, CellState.OCCUPIED)
+        }
         val next = update(2000)
         assertTrue(next.frontiers.isEmpty())
         assertEquals(initial.centroid, assertNotNull(next.selected).centroid)
         assertFalse(next.exhausted)
+    }
+
+    @Test fun `a waypoint whose surroundings have been mapped is released`() {
+        patch(-3f, 2f)
+        assertNotNull(update(1000).selected)
+        // A sweep fills in everything around the waypoint before the user gets there.
+        for (z in 0 until grid.cells) for (x in 0 until grid.cells) grid.setState(x, z, CellState.FREE)
+        val next = update(2000)
+        assertNull(next.selected, "there is nothing left to see at the old waypoint")
+        assertTrue(next.exhausted)
     }
 
     @Test fun `blocked waypoint is abandoned immediately`() {

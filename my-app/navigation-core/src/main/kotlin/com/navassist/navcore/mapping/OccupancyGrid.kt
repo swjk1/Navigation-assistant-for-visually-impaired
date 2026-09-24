@@ -36,6 +36,7 @@ class OccupancyGrid(
     private val occupiedThreshold: Float = 0.9f,
     private val freeThreshold: Float = -0.5f,
     private val decayPerSecondUnconfirmed: Float = 0.8f,
+    private val missOnOccupiedScale: Float = 1f,
 ) {
     constructor(config: NavigationConfig, originX: Float = 0f, originZ: Float = 0f) : this(
         cells = config.gridCells,
@@ -49,6 +50,7 @@ class OccupancyGrid(
         occupiedThreshold = config.logOddsOccupiedThreshold,
         freeThreshold = config.logOddsFreeThreshold,
         decayPerSecondUnconfirmed = config.decayPerSecondUnconfirmed,
+        missOnOccupiedScale = config.logOddsMissOnOccupiedScale,
     )
 
     var originX: Float = originX
@@ -59,6 +61,14 @@ class OccupancyGrid(
 
     /** Flat log-odds evidence buffer, reused for the lifetime of the grid (no per-frame alloc). */
     private val logOdds = FloatArray(cells * cells)
+
+    /**
+     * Per-observation scratch: what this sensor frame said about each cell it touched.
+     * See [observeFree], [observeOccupied] and [commitObservation].
+     */
+    private val observationMark = ByteArray(cells * cells)
+    private val observationTouched = IntArray(cells * cells)
+    private var observationTouchedCount = 0
 
     val sizeMeters: Float get() = cells * resolution
 
@@ -179,16 +189,81 @@ class OccupancyGrid(
 
     fun clear() {
         logOdds.fill(0f)
+        discardObservation()
+    }
+
+    // ------------------------------------------------------------------ batched observations
+
+    /**
+     * Records that the current sensor frame saw this cell clear. Nothing changes until
+     * [commitObservation].
+     *
+     * Evidence is batched per frame because one depth frame is ONE observation, however many of
+     * its rays cross a cell. Applying evidence per ray let a single frame push cells straight to
+     * the log-odds limits: two stray returns in one cell made it permanently OCCUPIED, and the
+     * hit/miss balance meant nothing when a cell took fifty misses and three hits in one frame.
+     */
+    fun observeFree(gx: Int, gz: Int) {
+        if (!inBounds(gx, gz)) return
+        val i = index(gx, gz)
+        if (observationMark[i] == MARK_NONE) {
+            observationMark[i] = MARK_FREE
+            observationTouched[observationTouchedCount++] = i
+        }
+    }
+
+    /** Records that the current sensor frame saw something solid here. Beats [observeFree]. */
+    fun observeOccupied(gx: Int, gz: Int) {
+        if (!inBounds(gx, gz)) return
+        val i = index(gx, gz)
+        if (observationMark[i] == MARK_NONE) observationTouched[observationTouchedCount++] = i
+        observationMark[i] = MARK_OCCUPIED
+    }
+
+    /** [observeFree] for every cell on the line from [from] to [to], both ends included. */
+    fun observeFreeLine(from: Vec2, to: Vec2) {
+        val start = worldToGrid(from)
+        val end = worldToGrid(to)
+        traceLine(start.gx, start.gz, end.gx, end.gz) { gx, gz, _ -> observeFree(gx, gz) }
+    }
+
+    /**
+     * Applies the pending observation: ONE hit or ONE miss per touched cell, with a hit winning
+     * when the frame saw both (a thin obstacle and the floor right in front of it share a cell).
+     * A miss against a cell that is already OCCUPIED is scaled down; see
+     * NavigationConfig.logOddsMissOnOccupiedScale.
+     */
+    fun commitObservation() {
+        for (k in 0 until observationTouchedCount) {
+            val i = observationTouched[k]
+            val delta = when {
+                observationMark[i] == MARK_OCCUPIED -> logOddsHit
+                logOdds[i] >= occupiedThreshold -> logOddsMiss * missOnOccupiedScale
+                else -> logOddsMiss
+            }
+            var value = logOdds[i] + delta
+            if (value > logOddsMax) value = logOddsMax
+            if (value < logOddsMin) value = logOddsMin
+            logOdds[i] = value
+            observationMark[i] = MARK_NONE
+        }
+        observationTouchedCount = 0
+    }
+
+    private fun discardObservation() {
+        for (k in 0 until observationTouchedCount) observationMark[observationTouched[k]] = MARK_NONE
+        observationTouchedCount = 0
     }
 
     // ------------------------------------------------------------------ ray integration
 
     /**
-     * Integrates one depth observation: every cell between the sensor and the measured point gets
+     * Integrates one ray IMMEDIATELY: every cell between the sensor and the measured point gets
      * FREE evidence, and the endpoint gets OCCUPIED evidence when [endpointOccupied] is true.
      *
-     * Without this, the map would contain obstacle dots and no observed free space at all, and
-     * frontier detection (which needs a FREE/UNKNOWN boundary) could never work.
+     * The engine does not use this for depth any more - it carves free space only where a ray is
+     * provably below obstacle height and batches evidence per frame (see
+     * NavigationEngine.integrateDepth). It remains for tests and synthetic bootstrapping.
      *
      * Cells outside the grid are skipped rather than clamped, so a ray that leaves the local
      * window does not smear evidence along the border.
@@ -218,9 +293,9 @@ class OccupancyGrid(
      * last few seconds of scans.
      *
      * Confirmed map data therefore changes in exactly two ways: counter-evidence from looking at
-     * the place again (a departed obstacle is cleared by rays passing through it - see
-     * [integrateRay]), and scrolling out of the rolling window (see [recenter]). Memory beyond
-     * the window stays the topological map's job.
+     * the place again (a departed obstacle is cleared by seeing the floor where it stood), and
+     * scrolling out of the rolling window (see [recenter]). Memory beyond the window stays the
+     * topological map's job.
      */
     fun applyDecay(deltaSeconds: Float) {
         if (deltaSeconds <= 0f) return
@@ -252,6 +327,8 @@ class OccupancyGrid(
         val shiftZ = kotlin.math.round((desiredOriginZ - originZ) / resolution).toInt()
         if (shiftX == 0 && shiftZ == 0) return false
 
+        // Pending observations are in the old cell indices; they cannot survive a shift.
+        discardObservation()
         if (abs(shiftX) >= cells || abs(shiftZ) >= cells) {
             // Teleport (or tracking reset): nothing overlaps, start clean.
             logOdds.fill(0f)
@@ -278,6 +355,10 @@ class OccupancyGrid(
     }
 
     companion object {
+        private const val MARK_NONE: Byte = 0
+        private const val MARK_FREE: Byte = 1
+        private const val MARK_OCCUPIED: Byte = 2
+
         /**
          * Integer Bresenham line walk. [visit] receives every cell on the line; the final cell is
          * flagged as the endpoint so callers can treat it as the measured obstacle.

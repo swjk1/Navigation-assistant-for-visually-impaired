@@ -310,9 +310,11 @@ building-sized 10 cm grid.
 | `depthSampleStride` | 3 | every 3rd depth pixel |
 | `maxDepthMeters` | 6.0 | depth accuracy degrades badly beyond this |
 
-Every observation is **ray-integrated**: cells between the sensor and the measured point gain FREE
-evidence, the endpoint gains OCCUPIED evidence. Without this the map would be obstacle dots in a
-sea of UNKNOWN, and frontier detection (a FREE cell beside an UNKNOWN cell) could never fire.
+FREE evidence comes only from **visible floor**: the stretch of each floor ray that is below
+obstacle height, plus the user's own footprint. Obstacle returns mark only their own cell, and
+each frame updates each cell once, with an obstacle beating floor seen in the same cell. Clearing
+the whole line from sensor to return - what this used to do - erased low obstacles standing in
+front of anything taller. See TECHNICAL.md §3.3.
 
 **UNKNOWN is never traversable.** The single exception is a cell within
 `allowUnknownNearGoalCells` (3) of an *exploration* goal, so a frontier goal sitting exactly on
@@ -466,13 +468,13 @@ yet, so no adapter is committed here; this is the mapping it will need.
 
 Two things to settle before wiring it up:
 
-1. **`timestampNs` must be ARCore's frame timestamp**, from `Frame.getTimestamp()` — nanoseconds
-   since boot, *not* `Date.now()`. `PerceptionFrame.timestamp` is a wall clock in milliseconds.
-   Passing it would put every observation billions of nanoseconds out of range. **If you do not
-   have the ARCore value, omit the field**; the most recent depth frame is then used, which is
-   the right default. The adapter now detects an out-of-domain timestamp, logs it, and falls back
-   rather than silently dropping every observation — but the log is the only signal, so get it
-   right at the source.
+1. **`timestampNs` must be the capture's**, `captureFrame().timestampNs` — ARCore's
+   `Frame.getTimestamp()`, nanoseconds since boot, *not* `Date.now()`. The session owner pins
+   that frame's depth at capture (`NavigationSensorBridge.onFrameCaptured`), so an observation
+   arriving seconds later still resolves against what the camera saw. Omitting it falls back to
+   the newest depth frame, which is wrong whenever the user has turned since. Image coordinates
+   are in the camera SENSOR orientation; `toSemanticObservations` rotates upright boxes back
+   using the capture's `rotationDegrees`.
 
 2. **`immediateHazard` has no input here and reaches the guidance layer separately.** Person 3's
    `hazard.detected` will therefore have two independent producers: geometric blockage from this

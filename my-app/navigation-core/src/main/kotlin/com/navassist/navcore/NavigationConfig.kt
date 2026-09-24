@@ -27,6 +27,16 @@ data class NavigationConfig(
     val logOddsOccupiedThreshold: Float = 0.9f,
     /** Below this the cell is reported FREE. */
     val logOddsFreeThreshold: Float = -0.5f,
+    /**
+     * Floor evidence against a cell that is already OCCUPIED counts at this fraction.
+     *
+     * A 10 cm cell at the foot of a wall holds both the wall and a strip of floor in front of it,
+     * and at shallow viewing angles most frames see only that floor strip while wall returns are
+     * sparse. At full strength the floor wins and walls erode from their far ends into holes the
+     * planner will happily aim at. An obstacle return is the more specific evidence; the floor
+     * still clears a moved obstacle, just after a few more looks.
+     */
+    val logOddsMissOnOccupiedScale: Float = 0.33f,
 
     // ---------------------------------------------------------------- temporal decay
     /**
@@ -48,6 +58,15 @@ data class NavigationConfig(
     val minDepthMeters: Float = 0.3f,
     /** Upper bound on points fed into the engine per frame. */
     val maxPointsPerFrame: Int = 6000,
+    /**
+     * Radius around the user's own position that is marked FREE on every tracked frame.
+     *
+     * Free space otherwise only comes from floor the sensor actually sees, and the floor under
+     * and immediately around a person holding a phone upright is never in view. They are
+     * standing on it, though, which is better evidence than any depth return. Cells already
+     * OCCUPIED are left alone, so a wall beside the user is never walked out of the map.
+     */
+    val footprintFreeRadiusMeters: Float = 0.3f,
 
     // ---------------------------------------------------------------- floor + obstacle extraction
     /** Points below this height above the floor count as floor, not obstacle. */
@@ -71,6 +90,21 @@ data class NavigationConfig(
     val floorMinConfidence: Float = 0.45f,
     /** Temporal smoothing factor for the floor height estimate. */
     val floorSmoothingAlpha: Float = 0.25f,
+    /**
+     * A held phone sits between these heights above the floor. Depth-based floor candidates
+     * outside the band are rejected, which is what keeps a desk at 0.75 m from being taken for
+     * the floor when the phone is at 1.3 m.
+     */
+    val floorMinDropMeters: Float = 0.7f,
+    val floorMaxDropMeters: Float = 2.6f,
+    /**
+     * Once the floor is established, a candidate this much HIGHER than the current estimate is
+     * ignored unless it persists for [floorRiseConfirmMillis]. Floors do not jump up by a table
+     * height; the usual cause is the camera seeing only a table. A sustained rise (a ramp, a
+     * raised landing) is still accepted.
+     */
+    val floorMaxRiseMeters: Float = 0.25f,
+    val floorRiseConfirmMillis: Long = 2000,
 
     // ---------------------------------------------------------------- obstacle inflation
     /** The user is not a point. Obstacles are inflated by this radius before planning. */
@@ -114,6 +148,12 @@ data class NavigationConfig(
     val frontierNoProgressMillis: Long = 20_000,
     /** Approach needed to renew the exploration progress timeout. */
     val frontierProgressMeters: Float = 0.3f,
+    /**
+     * A committed exploration waypoint is released once no frontier cell (FREE next to UNKNOWN)
+     * remains within this distance of it: whatever it was chosen to reveal has been seen, even
+     * from afar.
+     */
+    val frontierCommitUnknownRadiusMeters: Float = 1.0f,
 
     // ---------------------------------------------------------------- topological memory
     /** A new graph node is created once the user has travelled this far from the last one. */
@@ -189,6 +229,14 @@ data class NavigationConfig(
      * a slow ARCore warm-up or a few seconds of lost tracking does not eat the budget.
      */
     val minScanMillis: Long = 10_000,
+    /**
+     * Scan time is credited while the latest depth image is at most this old.
+     *
+     * Depth usually updates more slowly than the camera, and the adapter drops frames that would
+     * only repeat the previous depth image, so crediting only frames that carry depth would make
+     * the scan last several times longer than [minScanMillis].
+     */
+    val scanDepthFreshMillis: Long = 300,
     /** No depth for longer than this and the engine stops and asks the user to SCAN. */
     val depthStarvationMillis: Long = 1500,
     /** Tracking must be good for this long before leaving LOST_TRACKING. */

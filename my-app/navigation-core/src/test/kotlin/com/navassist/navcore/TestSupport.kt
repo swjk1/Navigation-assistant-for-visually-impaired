@@ -99,8 +99,10 @@ class SyntheticWorld(
         rayCount: Int = 90,
         maxRange: Float = 6f,
     ): DepthPointCloud {
-        // Up to 1 floor sample every 20 cm plus 3 obstacle heights per ray.
-        val cloud = DepthPointCloud.allocate(rayCount * (kotlin.math.ceil(maxRange / 0.2f).toInt() + 4))
+        // Up to 1 floor sample every 10 cm plus 3 obstacle heights per ray. A real depth sensor is
+        // denser than this; sparser floor sampling would leave holes, because only the low end of
+        // each floor ray is carved as free space.
+        val cloud = DepthPointCloud.allocate(rayCount * (kotlin.math.ceil(maxRange / 0.1f).toInt() + 4))
         val halfFov = GeometryUtils.degreesToRadians(fovDegrees / 2f)
         for (i in 0 until rayCount) {
             val t = if (rayCount == 1) 0.5f else i.toFloat() / (rayCount - 1)
@@ -114,7 +116,7 @@ class SyntheticWorld(
             while (d < range - 0.05f) {
                 val p = pose.position2D + direction * d
                 cloud.add(p.x, floorY, p.z)
-                d += 0.2f
+                d += 0.1f
             }
             if (hit != null) {
                 val p = pose.position2D + direction * hit

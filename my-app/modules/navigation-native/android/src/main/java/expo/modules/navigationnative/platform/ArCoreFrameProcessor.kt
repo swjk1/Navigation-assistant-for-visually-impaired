@@ -8,6 +8,7 @@ import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.geometry.DepthPointCloud
 import com.navassist.navcore.geometry.NavigationFrame
 import com.navassist.navcore.geometry.Vec3
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
 /**
@@ -29,7 +30,26 @@ class ArCoreFrameProcessor(
     var lastDepthPointCount: Int = 0
         private set
 
-    fun reset() {
+    /**
+     * Which coordinate frame the frames produced here belong to. Changes only on the GL thread,
+     * together with the pose basis itself, so a frame and its generation can never disagree.
+     */
+    var generation: Int = 0
+        private set
+
+    private val pendingResetGeneration = AtomicInteger(NO_RESET)
+
+    /**
+     * Asks for the canonical frame to be re-established, from any thread. It happens at the start
+     * of the next [process] call - never in the middle of one, which is what resetting directly
+     * from the JS or engine thread used to risk: a frame converted with half-old, half-new basis.
+     * Frames produced from then on carry [newGeneration].
+     */
+    fun requestReset(newGeneration: Int) {
+        pendingResetGeneration.set(newGeneration)
+    }
+
+    private fun resetNow() {
         poseProvider.reset()
         depthProvider.reset()
         lastTrackingState = TrackingState.STOPPED
@@ -41,6 +61,12 @@ class ArCoreFrameProcessor(
      *         null into LOST_TRACKING + STOP rather than reusing the previous pose.
      */
     fun process(session: Session, frame: Frame): NavigationFrame {
+        val requested = pendingResetGeneration.getAndSet(NO_RESET)
+        if (requested != NO_RESET) {
+            resetNow()
+            generation = requested
+        }
+
         val camera = frame.camera
         lastTrackingState = camera.trackingState
 
@@ -74,6 +100,7 @@ class ArCoreFrameProcessor(
             depthAvailable = points != null && points.count > 0,
             floorHint = floorHint?.first,
             floorHintConfidence = floorHint?.second ?: 0f,
+            sensorPosition = if (points != null) depthProvider.lastSensorPosition else null,
         )
     }
 
@@ -98,7 +125,7 @@ class ArCoreFrameProcessor(
             val center = plane.centerPose
             val canonical: Vec3 = poseProvider.toCanonicalPoint(center.tx(), center.ty(), center.tz())
             val drop = deviceY - canonical.y
-            if (drop < MIN_FLOOR_DROP || drop > MAX_FLOOR_DROP) continue
+            if (drop < config.floorMinDropMeters || drop > config.floorMaxDropMeters) continue
 
             // LOWEST, not largest. A desk, a table or a bed is a horizontal upward-facing plane
             // sitting in the same band as the floor, and near the start of a session it is often
@@ -112,26 +139,28 @@ class ArCoreFrameProcessor(
             }
         }
         val y = lowestY ?: return null
-        // Capped below 1.0 on purpose: a plane is a hint, and the depth-based estimator must stay
-        // able to pull the estimate down if this is still a table.
+        // Capped below 1.0 on purpose: a plane is a hint. The core fuses it with depth and lets a
+        // well-supported surface below it win, in case this is still a table.
         val confidence = min(MAX_FLOOR_HINT_CONFIDENCE, 0.4f + lowestExtent / 8f)
         return y to confidence
     }
 
-    /** Exposed so semantic observations can be turned into world positions. */
-    fun resolveWorldPosition(
-        normalizedX: Float,
-        normalizedY: Float,
+    /** Resolves a semantic observation against the depth of the frame it was seen in. Any thread. */
+    fun resolve(
+        normalizedX: Float?,
+        normalizedY: Float?,
         timestampNanos: Long?,
-    ): Vec3? = depthProvider.resolveWorldPosition(normalizedX, normalizedY, timestampNanos)
+    ): ArCoreDepthProvider.Resolution = depthProvider.resolve(normalizedX, normalizedY, timestampNanos)
+
+    /** Keeps the depth for a frame whose RGB image was just captured for perception. GL thread. */
+    fun pinDepth(timestampNanos: Long) = depthProvider.pin(timestampNanos)
 
     private companion object {
         /** Ignore specks: a real floor patch ARCore is tracking is at least this many m^2. */
         const val MIN_FLOOR_PLANE_AREA = 0.6f
-        /** A held phone is at least this far above the floor. */
-        const val MIN_FLOOR_DROP = 0.7f
-        const val MAX_FLOOR_DROP = 2.6f
         /** A plane never fully overrides depth-based floor estimation. */
         const val MAX_FLOOR_HINT_CONFIDENCE = 0.8f
+
+        const val NO_RESET = -1
     }
 }

@@ -19,7 +19,7 @@ data class FloorEstimate(
 /**
  * Estimates floor height in canonical world Y.
  *
- * Two sources, in priority order:
+ * Two sources, FUSED rather than ranked:
  *  A) A platform-supplied [com.navassist.navcore.geometry.NavigationFrame.floorHint] - on Android
  *     this comes from an ARCore horizontal upward-facing plane. The core never sees the plane
  *     object itself, only the height, so the same path works for ARKit later.
@@ -29,6 +29,11 @@ data class FloorEstimate(
  *     is always the dominant low horizontal surface in an indoor scene, and we only need its
  *     height, not its normal.
  *
+ * The hint is preferred, but it never silences depth: when depth shows a well-supported surface
+ * clearly BELOW the plane, the plane is a table and depth wins. Once established, the estimate
+ * also refuses to jump UP by more than [NavigationConfig.floorMaxRiseMeters] unless the rise
+ * persists - the classic failure is the camera seeing only a desk for a few seconds.
+ *
  * Until confidence reaches the configured minimum, NO point may be classified as an obstacle:
  * misjudging the floor by 20 cm would turn the floor itself into a wall.
  */
@@ -37,34 +42,59 @@ class FloorEstimator(private val config: NavigationConfig) {
     private var current: FloorEstimate = FloorEstimate.UNKNOWN
     private var histogram = IntArray(0)
 
+    /** When a candidate first rose too far above the estimate; null while none is pending. */
+    private var riseSinceMillis: Long? = null
+
     val estimate: FloorEstimate get() = current
 
     fun reset() {
         current = FloorEstimate.UNKNOWN
+        riseSinceMillis = null
     }
 
     /**
-     * @param deviceY current device height in canonical world Y, used to bound the search: the
-     *        floor is always below the phone and never more than ~3 m below it.
+     * @param deviceY current device height in canonical world Y, used to bound the search: a held
+     *        phone is between [NavigationConfig.floorMinDropMeters] and
+     *        [NavigationConfig.floorMaxDropMeters] above the floor.
+     * @param nowMillis platform time; only used to confirm a sustained rise of the floor.
      */
     fun update(
         points: DepthPointCloud,
         deviceY: Float,
         floorHint: Float?,
         floorHintConfidence: Float,
+        nowMillis: Long = 0L,
     ): FloorEstimate {
-        if (floorHint != null && floorHintConfidence >= config.floorMinConfidence) {
-            current = blend(FloorEstimate(floorHint, floorHintConfidence, points.count))
+        val fromDepth = estimateFromDepth(points, deviceY)
+        val fromHint = if (floorHint != null && floorHintConfidence >= config.floorMinConfidence) {
+            FloorEstimate(floorHint, floorHintConfidence, points.count)
+        } else {
+            null
+        }
+
+        val candidate = when {
+            // Depth sees a supported surface clearly below the plane: the plane is furniture.
+            fromHint != null && fromDepth != null &&
+                fromDepth.floorY < fromHint.floorY - config.floorBandBelowMeters -> fromDepth
+            fromHint != null -> fromHint
+            else -> fromDepth
+        }
+
+        if (candidate == null) {
+            // No usable support this frame: decay confidence instead of dropping the estimate.
+            if (current.confidence > 0f) current = current.copy(confidence = current.confidence * 0.97f)
             return current
         }
 
-        val fromDepth = estimateFromDepth(points, deviceY)
-        if (fromDepth != null) {
-            current = blend(fromDepth)
-        } else if (current.confidence > 0f) {
-            // No usable support this frame: decay confidence instead of dropping the estimate.
-            current = current.copy(confidence = current.confidence * 0.97f)
+        val established = current.confidence >= config.floorMinConfidence
+        if (established && candidate.floorY > current.floorY + config.floorMaxRiseMeters) {
+            val since = riseSinceMillis ?: nowMillis.also { riseSinceMillis = it }
+            if (nowMillis - since < config.floorRiseConfirmMillis) return current
+        } else {
+            riseSinceMillis = null
         }
+
+        current = blend(candidate)
         return current
     }
 
@@ -80,9 +110,10 @@ class FloorEstimator(private val config: NavigationConfig) {
         if (points.count < config.floorMinSupportPoints) return null
 
         val bin = config.floorHistogramBinMeters
-        // Search from 3 m below the device up to 0.3 m below it: the floor cannot be above that.
-        val minY = deviceY - 3.0f
-        val maxY = deviceY - 0.3f
+        // Only where a held phone's floor can be. The upper bound matters most: it is what keeps a
+        // desk top from out-competing a floor that is simply out of view.
+        val minY = deviceY - config.floorMaxDropMeters
+        val maxY = deviceY - config.floorMinDropMeters
         val binCount = ((maxY - minY) / bin).toInt() + 1
         if (binCount <= 1) return null
         if (histogram.size < binCount) histogram = IntArray(binCount)

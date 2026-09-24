@@ -34,6 +34,9 @@ sealed interface NavigationEvent {
 
     data object Arrived : NavigationEvent
 
+    /** The learned map was discarded: the initial scan must be earned again. */
+    data object MapReset : NavigationEvent
+
     data class Failed(val message: String) : NavigationEvent
 }
 
@@ -104,6 +107,23 @@ class NavigationStateMachine(initial: NavigationStatus = NavigationStatus.IDLE) 
         if (status == NavigationStatus.IDLE || status == NavigationStatus.ERROR) {
             // Only Start (handled above) leaves these states.
             return status
+        }
+
+        // Without a map nothing below INITIALIZING may carry on: every guided state drops back
+        // to LOCALIZING, which is where the scan gate lives. LOST_TRACKING stays put but must
+        // not return to a moving state afterwards.
+        if (event == NavigationEvent.MapReset) {
+            return when (status) {
+                NavigationStatus.INITIALIZING -> status
+                NavigationStatus.LOST_TRACKING -> {
+                    interruptedStatus = NavigationStatus.LOCALIZING
+                    status
+                }
+                else -> {
+                    interruptedStatus = NavigationStatus.EXPLORING
+                    NavigationStatus.LOCALIZING
+                }
+            }
         }
 
         // Rule 1: tracking loss beats everything else.

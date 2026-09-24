@@ -1,6 +1,7 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
+  NavigationDepthImage,
   NavigationMapImage,
   NavigationNativeModuleEvents,
   NavigationSnapshot,
@@ -38,6 +39,15 @@ declare class NavigationNativeModuleType extends NativeModule<NavigationNativeMo
    * and the user's pose. Pulled on demand for debug UI; the grid itself never crosses the bridge.
    */
   getMapImage(): Promise<NavigationMapImage>;
+
+  /**
+   * A rendered picture of the RAW depth returns of the latest frame, in the same window and scale
+   * as `getMapImage`, plus per-class counts.
+   *
+   * This is the input to mapping rather than its output, so the two views answer different
+   * questions: the map says what the engine believes, this says what the sensor reported.
+   */
+  getDepthImage(): Promise<NavigationDepthImage>;
 
   /**
    * Hands ARCore session ownership to another native module.

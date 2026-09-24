@@ -117,6 +117,45 @@ export type NavigationMapImage = {
   sizeMeters: number;
 };
 
+/**
+ * A rendered PNG of the raw depth returns of the latest frame, plus what the engine made of them.
+ *
+ * Same window and scale as {@link NavigationMapImage}, so the two can be shown in one place and
+ * toggled between. The counts are the useful part: they say whether depth is arriving at all and
+ * which height band it landed in, which is what decides whether the grid fills.
+ */
+export type NavigationDepthImage = {
+  /** PNG bytes, base64. Use as `data:image/png;base64,${base64}`. */
+  base64: string;
+  width: number;
+  height: number;
+  /** Metres per grid cell. Matches the occupancy map. */
+  resolutionMeters: number;
+  /** Side length of the window, in metres. Matches the occupancy map. */
+  sizeMeters: number;
+  /** Returns in the frame, before any filtering. 0 means the sensor gave us nothing. */
+  totalReturns: number;
+  /** Below `minObstacleHeightMeters`: walkable ground, integrated as free space. */
+  floorReturns: number;
+  /** Inside the obstacle band: what actually blocks a cell. */
+  obstacleReturns: number;
+  /** Above `maxObstacleHeightMeters`: passes over the user and is discarded. */
+  overheadReturns: number;
+  /** Below the floor estimate by more than `floorBandBelowMeters`: discarded as untrustworthy. */
+  belowFloorReturns: number;
+  /** Outside [`minDepthMeters`, `maxDepthMeters`]: discarded. */
+  outOfRangeReturns: number;
+  /** Fell outside the rendered window entirely. */
+  offWindowReturns: number;
+  /** Current floor height estimate, in metres, and how much the engine trusts it. */
+  floorY: number;
+  floorConfidence: number;
+  /** Age of the rendered frame in milliseconds. A large value means depth has stalled. */
+  ageMillis: number;
+  /** False until the first depth frame arrives. */
+  hasFrame: boolean;
+};
+
 export type NavigationTarget =
   | { type: 'ROOM'; value: string }
   | { type: 'EXIT' }

@@ -73,9 +73,9 @@ ARCore Frame
   → tracking check              not TRACKING → LOST_TRACKING + STOP
   → camera pose                 → canonical Pose3D
   → depth image (16-bit)        → subsample → camera space → world → canonical points
-  → floor estimation            lowest ARCore plane, else depth histogram
+  → floor estimation            ARCore plane fused with a depth histogram
   → obstacle classification     0.10 m .. 2.10 m above the floor
-  → occupancy grid              log-odds ray integration + temporal decay
+  → occupancy grid              floor-carved free space, one update per cell per frame, decay
   → obstacle inflation          body radius + clearance field
   → goal selection              target known → straight at it, else next graph hop
                                 target unknown → best-scoring frontier
@@ -122,15 +122,23 @@ and an allocation.
 
 ### 3.2 Floor estimation
 
-Two sources, in priority order:
+Two sources, fused:
 
 1. **ARCore horizontal upward-facing planes** — the **lowest** qualifying plane, minimum 0.6 m²,
    between 0.7 m and 2.6 m below the device. Confidence capped at 0.8.
-2. **Depth histogram fallback** — coarse height histogram, lowest well-supported band, refined to
-   the mean of points within one bin.
+2. **Depth histogram** — coarse height histogram over the same 0.7–2.6 m band below the phone,
+   lowest well-supported band, refined to the mean of points within one bin. It runs every frame,
+   not only when there is no plane.
 
-Both pick the *lowest* plausible surface, and the reason is a bug that shipped and was fixed: the
-plane path originally picked the **largest** plane. Early in a session the largest plane ARCore has
+The plane is preferred, but when depth shows a well-supported surface more than
+`floorBandBelowMeters` **below** it, the plane is furniture and depth wins. The plane used to
+short-circuit depth entirely, so a table plane at 0.75 m held the floor at table height even
+with the real floor in view. Once established, the estimate also ignores a rise of more than
+`floorMaxRiseMeters` (0.25 m) unless it persists for `floorRiseConfirmMillis` (2 s): floors do
+not jump by a desk height, but a ramp is still followed.
+
+Both sources pick the *lowest* plausible surface, and the reason is a bug that shipped and was
+fixed: the plane path originally picked the **largest** plane. Early in a session the largest plane ARCore has
 tracked is often a desk or table — close, textured, well lit — so `floorY` came back as desk
 height. Everything below it then classified as floor and was integrated as free space, producing a
 map where green bled through walls and obstacles survived only in patches.
@@ -165,9 +173,30 @@ building-sized 10 cm grid.
 | `depthSampleStride` | 3 | every 3rd depth pixel |
 | `maxDepthMeters` | 6.0 | accuracy degrades badly beyond |
 
-Every observation is **ray-integrated** (Bresenham): cells between sensor and measured point gain
-FREE evidence, the endpoint gains OCCUPIED evidence. Without this the map would be obstacle dots in
-a sea of UNKNOWN, and frontier detection — a FREE cell beside an UNKNOWN cell — could never fire.
+**Free space comes only from floor the sensor actually sees.** A ray that reaches the floor 3 m
+away proves only that nothing along it was taller than the ray itself at each point, so where it
+passes 60 cm above the floor a 40 cm box could sit underneath. Only the stretch of each floor ray
+below `minObstacleHeightMeters` is carved FREE (Bresenham), which is `range × 0.10 / sensorHeight`
+long and grows with range the same way the spacing between floor samples does. Obstacle returns
+mark only their own cell. The engine used to flatten every ray to 2D and clear the whole line: a
+box in front of a wall lost to the rays aimed at the wall above it, and was erased within a
+second (`DepthIntegrationTest`).
+
+Two consequences:
+
+- The floor directly under and around a person holding a phone upright is never in view, so the
+  user's own footprint (`footprintFreeRadiusMeters`, 0.3 m) is marked FREE each frame. Cells
+  already OCCUPIED are skipped, so a wall beside the user is never walked out of the map.
+- The floor between the footprint and the first visible floor (about 1–2 m ahead, depending on
+  pitch) stays UNKNOWN until the user has seen it, from further back or by tilting the phone
+  down. That is deliberate: "a ray passed over it" is not evidence that it is clear.
+
+**One frame is one observation.** Evidence is collected per frame and applied once per touched
+cell, with an obstacle return winning over floor seen in the same cell. Applied per ray, a single
+frame saturated cells to the log-odds limits, and two stray returns made a cell permanently
+OCCUPIED. Floor evidence against a cell that is already OCCUPIED counts at
+`logOddsMissOnOccupiedScale` (0.33): a 10 cm cell at the foot of a wall holds wall and floor, and
+at shallow angles most frames see only the floor strip.
 
 Evidence is stored as log-odds rather than a hard enum, so one noisy reading cannot permanently
 block a corridor, and decay clears returns that never added up to anything.
@@ -175,9 +204,9 @@ block a corridor, and decay clears returns that never added up to anything.
 Decay applies **only to cells that have not reached FREE or OCCUPIED**. Decided cells are never
 faded by the passage of time: decay runs over the whole 12 m window every frame while the depth
 sensor sees a narrow cone of it, so a time-based rule is one-way for everything out of view and
-erases the corridor behind the user. A chair that moved is forgotten by *looking through where it
-was* — the rays give the cell FREE evidence — and confirmed map data otherwise leaves only by
-scrolling out of the rolling window.
+erases the corridor behind the user. A chair that moved is forgotten by *seeing the floor where it
+stood*, after roughly 20 looks, and confirmed map data otherwise leaves only by scrolling out of
+the rolling window.
 
 **UNKNOWN is never traversable.** The single exception is a cell within
 `allowUnknownNearGoalCells` (3) of an *exploration* goal, so a frontier goal sitting exactly on the
@@ -246,8 +275,10 @@ Distance is normalised by half the grid size; raw metres would swamp every other
 frontier was a few metres away, and no semantic clue could ever outweigh it.
 
 **Commitment.** A chosen waypoint is held through frontier splits, merges and score changes, and
-released only on arrival, blockage, repeated route failure, or 20 s without approaching by 0.3 m
-(progress renews the budget). Frontier ids regenerate every detection pass and centroids shift as
+released only on arrival, blockage, repeated route failure, 20 s without approaching by 0.3 m
+(progress renews the budget), or once no frontier cell remains within
+`frontierCommitUnknownRadiusMeters` (1 m) of it — a sweep routinely maps a waypoint picked a
+second earlier, and holding it sent the user back to look at known space. Frontier ids regenerate every detection pass and centroids shift as
 the map fills, so score hysteresis alone was not enough — the previous choice was often not
 recognised at all and a fresh winner was picked, sometimes on the other side.
 
@@ -521,11 +552,24 @@ await NavigationNative.submitSemanticObservations([
 retained copy of the recent depth image — the core never sees depth images or intrinsics. A 5 × 5
 depth window is averaged, because a single pixel on a door plate is easily invalid.
 
-**Timestamps must be ARCore's** `Frame.getTimestamp()` — nanoseconds since boot, not `Date.now()`.
-Passing a wall clock puts every observation billions of nanoseconds out of range and the depth
-association rejects them all *silently*. Since perception now captures from the ARCore session, the
-correct value is available by construction; the adapter additionally detects an out-of-domain
-timestamp, logs it, and falls back to the latest depth frame rather than dropping the observation.
+**Timestamps must be the capture's** — `captureFrame().timestampNs`, which is ARCore's
+`Frame.getTimestamp()` (nanoseconds since boot), never `Date.now()`. Perception takes seconds, so
+the frame an observation came from is long gone when it arrives. At capture time the session owner
+calls `NavigationSensorBridge.onFrameCaptured(timestamp)`, which pins that frame's depth image and
+camera transform; the observation is then resolved against it, and the same lookup supplies the
+pose the user stood at, which directional hints are relative to. With no timestamp the newest depth
+frame is used, which is wrong whenever the user has turned since. A timestamp matching no retained
+frame is rejected. An out-of-domain timestamp (a wall clock) is logged and treated as absent.
+
+The engine ages semantic evidence on **its own clock** (`NavigationEngine.clockMillis`, the frame
+timestamps). The module used to stamp observations with `System.currentTimeMillis()`, so every
+comparison against frame time came out negative: hints never aged and sightings never expired on a
+device, while the tests - which use one clock - passed.
+
+**Image coordinates are sensor coordinates.** Captures are rotated upright before any model or VLM
+sees them (`rotationDegrees` on the capture), so boxes and clock positions mean what the user sees.
+`toSemanticObservations(frame, { timestampNs, rotationDegrees })` rotates box centres back to the
+sensor orientation the depth image uses.
 
 Semantics only ever **bias** frontier choice. The planner decides movement.
 
@@ -557,7 +601,9 @@ frame.acquireCameraImage().use { image -> ... }      // RGB → YOLO / OCR / Gem
 ```
 
 One camera open, two consumers of the same frame. The RGB image is encoded to JPEG **only when a
-capture is requested** — converting every frame would burn battery for nothing. `captureFrame()`
+capture is requested** — converting every frame would burn battery for nothing. The GL thread only
+copies the pixels out and pins the depth; rotation to upright and JPEG encoding run on a
+background thread, because the GL thread is also the one feeding navigation. `captureFrame()`
 carries a 3 s watchdog, because the capture is served by the GL thread and an unmounted AR view
 would otherwise hang the promise and take the caller's perception loop with it.
 
@@ -571,19 +617,34 @@ would otherwise hang the promise and take the caller's perception loop with it.
 
 ```
 GL / AR thread     session.update() → pose + depth unprojection   (cheap, bounded)
-     │  conflated channel — stale frames DROPPED, never queued
+     │  latest-frame slot — stale frames DROPPED, never queued
 engine thread      occupancy, inflation, frontiers, A*, control
      │  throttled
 JS                 one small NavigationSnapshot at ≤ ~8 Hz
 ```
 
-The channel is conflated on purpose: if mapping falls behind, the right answer is to skip old depth,
-not accumulate latency and steer a walking person from a two-second-old map.
+Only the latest frame is kept on purpose: if mapping falls behind, the right answer is to skip old
+depth, not accumulate latency and steer a walking person from a two-second-old map.
 
 All engine access happens on one dedicated thread, so the core stays synchronous and lock-free —
-exactly the property that lets a future iOS adapter choose its own threading. A small round-robin
-pool hands depth clouds across the thread boundary, because the depth provider reuses one buffer
-per frame and publishing it directly would let the GL thread rewrite points mid-integration.
+exactly the property that lets a future iOS adapter choose its own threading. Depth clouds cross
+the thread boundary in pooled buffers that are **owned**: one side at a time, returned when done.
+The pool used to be a round-robin that assumed the engine finished within two GL frames, which
+fails exactly when frames are being skipped.
+
+The pose basis in `ArCoreFrameProcessor` is GL-thread state. Other threads only request a reset
+of it; the GL thread applies it at the start of its next frame and tags frames with a generation,
+and the engine discards frames from an older generation. A map reset keeps the basis — semantic
+memory survives it and is in canonical coordinates — and sends the state machine back to
+LOCALIZING, so the scan gate applies again.
+
+Depth is deduplicated by the depth image's own timestamp and unprojected with the camera pose
+recorded at that timestamp: depth usually updates more slowly than the camera, and re-integrating
+the same image with a newer pose counted one observation many times and smeared walls sideways
+while turning. Scan time is credited while depth is at most `scanDepthFreshMillis` (300 ms) old.
+
+Going to the background pauses guidance; coming back resumes it only if the lifecycle paused it,
+through LOCALIZING. Before, nothing resumed it and a phone locked mid-route stayed PAUSED.
 
 ---
 
@@ -605,7 +666,8 @@ addNavigationStateListener((snapshot) => ...)
 Depth maps, camera frames, point clouds, grids and coordinate lists **never** cross the bridge.
 The debug map is the one exception and is deliberately a *picture*: 14 400 cells several times a
 second is exactly the traffic this boundary exists to prevent, whereas a PNG is a few kilobytes,
-rendered on the engine thread and pulled on demand rather than pushed with every snapshot.
+drawn on the engine thread, PNG-encoded off it, and pulled on demand rather than pushed with every
+snapshot.
 
 ### Connecting to guidance
 
@@ -630,7 +692,7 @@ comes — and it is the first thing the engine says in every session. It has its
 
 ## 9. Testing
 
-**123 tests**, all against the platform-independent core — no ARCore session, no Android context,
+**146 tests**, all against the platform-independent core — no ARCore session, no Android context,
 no Expo module, no device.
 
 | Suite | Covers |
@@ -647,6 +709,9 @@ no Expo module, no device.
 | `NavigationControllerTest` | heading → command, hysteresis, timing contract, arrival |
 | `StopReasonTest` | each reason code, hazard vs fault |
 | `TargetRoutingTest` | all three routing tiers, the latch regression, phantom landmark edges |
+| `DepthIntegrationTest` | low obstacles survive rays over them, one update per frame, sensor origin, footprint |
+| `FloorEstimatorTest` | plane vs depth fusion, desk rejection, rise confirmation |
+| `MapResetTest` | map reset re-enters the scan, scan credit with intermittent depth, engine clock |
 | `NavigationEngineScenarioTest` | full pipeline against a synthetic ray-cast world |
 
 The scenario tests run `synthetic NavigationFrame → occupancy → frontier → A* → NavigationCommand`
@@ -715,7 +780,10 @@ no Metro. Debug builds require all three.
 - **Depth encoding assumption.** `acquireDepthImage16Bits()` is read as 16-bit millimetres per
   ARCore's documentation. A device packing confidence into the top three bits would have readings
   discarded as out-of-range — degrading to `SCAN` rather than inventing free space, but unusable.
-- **Semantic image-coordinate mapping is approximate** — no display-rotation or aspect correction.
+- **Semantic image-coordinate mapping is approximate** — rotation is handled, but the RGB and
+  depth images are assumed to cover the same field of view.
+- **Near-field floor is unknown until seen.** Free space is carved only from visible floor, so at
+  the very start the user may be asked to scan until the floor just ahead has been in view.
 - **Two independent hazard producers.** Geometric blockage from the engine and perceptual hazards
   from `PerceptionFrame.immediateHazard` both drive the same `hazard.detected` flag. Nobody owns
   merging them, so one can mask the other. **Open.**

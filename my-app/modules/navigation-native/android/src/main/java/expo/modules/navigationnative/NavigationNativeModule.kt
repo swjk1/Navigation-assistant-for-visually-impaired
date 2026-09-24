@@ -37,14 +37,16 @@ class NavigationNativeModule : Module() {
             NavigationRuntime.destroySession()
         }
 
-        // The app went to the background: ARCore must release the camera.
+        // The app went to the background: ARCore must release the camera, and guidance stops.
         OnActivityEntersBackground {
-            NavigationRuntime.pause()
+            NavigationRuntime.onHostBackground()
             NavigationRuntime.pauseSession()
         }
 
+        // Undo exactly what going to the background did - a user pause stays paused.
         OnActivityEntersForeground {
             NavigationRuntime.resumeSession()
+            NavigationRuntime.onHostForeground()
         }
 
         // ---------------------------------------------------------------- capability
@@ -102,7 +104,7 @@ class NavigationNativeModule : Module() {
 
         AsyncFunction("submitSemanticObservations") { observations: List<SemanticObservationRecord> ->
             val parsed = observations.mapNotNull { it.toObservation() }
-            NavigationRuntime.submitSemanticObservations(parsed, System.currentTimeMillis())
+            NavigationRuntime.submitSemanticObservations(parsed)
         }
 
         // ---------------------------------------------------------------- introspection
@@ -128,6 +130,46 @@ class NavigationNativeModule : Module() {
                     },
                     onFailure = { error ->
                         promise.reject("ERR_MAP_RENDER", error.message ?: "Render failed", error as? Exception)
+                    },
+                )
+            }
+        }
+
+        /**
+         * A picture of the RAW depth returns of the latest frame, in the same window and scale as
+         * getMapImage, so the two can be toggled between and compared directly.
+         *
+         * The point cloud itself still never crosses the bridge - 6 000 points several times a
+         * second is exactly the traffic getMapImage exists to avoid. This is a few kilobytes of
+         * PNG plus the per-class counts, pulled on demand and only in debug mode.
+         */
+        AsyncFunction("getDepthImage") { promise: Promise ->
+            NavigationRuntime.renderDepth { result ->
+                result.fold(
+                    onSuccess = { depth ->
+                        promise.resolve(
+                            mapOf(
+                                "base64" to depth.base64,
+                                "width" to depth.width,
+                                "height" to depth.height,
+                                "resolutionMeters" to depth.resolutionMeters,
+                                "sizeMeters" to depth.sizeMeters,
+                                "totalReturns" to depth.totalReturns,
+                                "floorReturns" to depth.floorReturns,
+                                "obstacleReturns" to depth.obstacleReturns,
+                                "overheadReturns" to depth.overheadReturns,
+                                "belowFloorReturns" to depth.belowFloorReturns,
+                                "outOfRangeReturns" to depth.outOfRangeReturns,
+                                "offWindowReturns" to depth.offWindowReturns,
+                                "floorY" to depth.floorY,
+                                "floorConfidence" to depth.floorConfidence,
+                                "ageMillis" to depth.ageMillis,
+                                "hasFrame" to depth.hasFrame,
+                            ),
+                        )
+                    },
+                    onFailure = { error ->
+                        promise.reject("ERR_DEPTH_RENDER", error.message ?: "Render failed", error as? Exception)
                     },
                 )
             }

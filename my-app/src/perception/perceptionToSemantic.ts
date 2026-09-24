@@ -30,11 +30,50 @@ const DIRECTION_BY_CLOCK: Record<ClockDirection, SemanticDirection> = {
   "3 o'clock": 'RIGHT',
 };
 
-/** Centre of a bounding box, in the 0..1 image space the engine expects. */
-function centreOf(box: OCRDetection['box']) {
+/**
+ * Where and when the frame was captured, as reported by `IndoorPerception.captureFrame()`.
+ *
+ * Both matter to the engine. `timestampNs` lets it resolve image coordinates against the depth
+ * of THAT frame: perception takes seconds, and by the time it answers the camera is pointing
+ * somewhere else. `rotationDegrees` is needed because the models see the upright image while the
+ * depth image stays in sensor orientation.
+ */
+export type CaptureContext = {
+  timestampNs?: number;
+  rotationDegrees?: number;
+};
+
+type Point = { x: number; y: number };
+
+/**
+ * Upright (display) image coordinates -> camera sensor coordinates, both normalized 0..1.
+ * The upright image is the sensor image rotated clockwise by `rotationDegrees`.
+ */
+export function uprightToSensor(point: Point, rotationDegrees = 0): Point {
+  switch (((rotationDegrees % 360) + 360) % 360) {
+    case 90:
+      return { x: point.y, y: 1 - point.x };
+    case 180:
+      return { x: 1 - point.x, y: 1 - point.y };
+    case 270:
+      return { x: 1 - point.y, y: point.x };
+    default:
+      return point;
+  }
+}
+
+/** Centre of a bounding box in the upright image, as seen by the user. */
+function uprightCentreOf(box: OCRDetection['box']): Point {
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Centre of a bounding box in the SENSOR image space the engine's depth lookup expects. */
+function centreOf(box: OCRDetection['box'], capture: CaptureContext) {
+  const sensor = uprightToSensor(uprightCentreOf(box), capture.rotationDegrees);
   return {
-    normalizedX: box.x + box.width / 2,
-    normalizedY: box.y + box.height / 2,
+    normalizedX: sensor.x,
+    normalizedY: sensor.y,
+    ...timestampOf(capture),
   };
 }
 
@@ -49,7 +88,8 @@ const RANGE_PATTERN = /(\d{2,4})\s*(?:-|–|—|to)\s*(\d{2,4})/;
 
 function rangeFrom(
   detection: OCRDetection,
-  direction: SemanticDirection
+  direction: SemanticDirection,
+  capture: CaptureContext
 ): SemanticObservation | null {
   const match = RANGE_PATTERN.exec(detection.text);
   if (!match) return null;
@@ -62,11 +102,18 @@ function rangeFrom(
     max,
     direction,
     confidence: detection.confidence,
+    // No image position of its own, but the timestamp still tells the engine which way the user
+    // was facing when "to the right" was read.
+    ...timestampOf(capture),
   };
 }
 
+function timestampOf(capture: CaptureContext) {
+  return capture.timestampNs !== undefined ? { timestampNs: capture.timestampNs } : {};
+}
+
 /**
- * Direction implied by where something sits in the image, used for signs, which have no
+ * Direction implied by where something sits in the UPRIGHT image, used for signs, which have no
  * clock position of their own. Left third / middle / right third.
  */
 function directionFromImageX(normalizedX: number): SemanticDirection {
@@ -75,9 +122,10 @@ function directionFromImageX(normalizedX: number): SemanticDirection {
   return 'FORWARD';
 }
 
-function fromObject(object: DetectedObject): SemanticObservation | null {
+function fromObject(object: DetectedObject, capture: CaptureContext): SemanticObservation | null {
+  // Clock positions come from the upright image, so they already mean left/right to the user.
   const direction = DIRECTION_BY_CLOCK[object.clockPosition] ?? 'FORWARD';
-  const centre = centreOf(object.box);
+  const centre = centreOf(object.box, capture);
   const base = { confidence: object.confidence, ...centre };
 
   switch (object.label) {
@@ -92,9 +140,19 @@ function fromObject(object: DetectedObject): SemanticObservation | null {
     case 'left arrow':
       // A wayfinding arrow says "that way" about whatever is written beside it. Without OCR to
       // pair it with, treat it as a weak directional exit hint rather than dropping it.
-      return { type: 'EXIT', direction: 'LEFT', confidence: object.confidence * 0.4 };
+      return {
+        type: 'EXIT',
+        direction: 'LEFT',
+        confidence: object.confidence * 0.4,
+        ...timestampOf(capture),
+      };
     case 'right arrow':
-      return { type: 'EXIT', direction: 'RIGHT', confidence: object.confidence * 0.4 };
+      return {
+        type: 'EXIT',
+        direction: 'RIGHT',
+        confidence: object.confidence * 0.4,
+        ...timestampOf(capture),
+      };
     case 'washroom':
       // A washroom door is a room the user may be looking for, and always sits on a wall the
       // corridor runs along - useful as a landmark even when the plate is unreadable.
@@ -111,11 +169,11 @@ function fromObject(object: DetectedObject): SemanticObservation | null {
   }
 }
 
-function fromText(detection: OCRDetection): SemanticObservation | null {
-  const centre = centreOf(detection.box);
-  const direction = directionFromImageX(centre.normalizedX);
+function fromText(detection: OCRDetection, capture: CaptureContext): SemanticObservation | null {
+  const centre = centreOf(detection.box, capture);
+  const direction = directionFromImageX(uprightCentreOf(detection.box).x);
 
-  const range = rangeFrom(detection, direction);
+  const range = rangeFrom(detection, direction, capture);
   if (range) return range;
 
   const text = detection.text.trim();
@@ -140,21 +198,27 @@ function fromText(detection: OCRDetection): SemanticObservation | null {
 /**
  * Translates one perception frame into observations for the engine.
  *
- * NOTE ON TIMESTAMPS: `timestampNs` is deliberately NOT set from `PerceptionFrame.timestamp`.
- * The engine expects ARCore's `Frame.getTimestamp()` — nanoseconds since boot — while
- * `PerceptionFrame.timestamp` is a wall clock in milliseconds. Passing one for the other puts
- * every observation billions of nanoseconds out of range and the depth association rejects them
- * all, silently. Omitting it makes the engine use its most recent depth frame, which is correct
- * whenever perception is running off the live ARCore feed.
+ * NOTE ON TIMESTAMPS: pass the capture's `timestampNs` (ARCore's `Frame.getTimestamp()`,
+ * nanoseconds since boot) in `capture` - never `PerceptionFrame.timestamp`, which is a wall clock
+ * in milliseconds. With the capture timestamp the engine resolves every image position against
+ * the depth of the frame it was seen in. Without it the engine falls back to its newest depth
+ * frame, which is only right if perception were instantaneous; after the seconds YOLO, OCR and
+ * a VLM take, that frame shows wherever the user has turned since.
+ *
+ * Box coordinates in `frame` are in the upright image; pass the capture's `rotationDegrees` so
+ * they can be mapped back to the sensor orientation the depth image uses.
  */
-export function toSemanticObservations(frame: PerceptionFrame): SemanticObservation[] {
+export function toSemanticObservations(
+  frame: PerceptionFrame,
+  capture: CaptureContext = {}
+): SemanticObservation[] {
   const observations: SemanticObservation[] = [];
   for (const object of frame.objects) {
-    const observation = fromObject(object);
+    const observation = fromObject(object, capture);
     if (observation) observations.push(observation);
   }
   for (const detection of frame.text) {
-    const observation = fromText(detection);
+    const observation = fromText(detection, capture);
     if (observation) observations.push(observation);
   }
   return observations;
