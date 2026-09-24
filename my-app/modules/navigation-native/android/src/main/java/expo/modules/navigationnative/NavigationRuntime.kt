@@ -17,8 +17,6 @@ import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.NavigationSnapshot
 import com.navassist.navcore.state.NavigationStatus
 import expo.modules.navigationnative.platform.ArCoreFrameProcessor
-import expo.modules.navigationnative.platform.ArCorePoseProvider
-import expo.modules.navigationnative.platform.ArCoreDepthProvider
 import expo.modules.navigationnative.platform.ArCoreSessionManager
 import expo.modules.navigationnative.platform.DepthCloudPool
 import expo.modules.navigationnative.platform.DepthReturnRenderer
@@ -65,9 +63,7 @@ object NavigationRuntime {
     private val engineScope = CoroutineScope(SupervisorJob() + engineExecutor.asCoroutineDispatcher())
 
     private val engine = NavigationEngine(config)
-    private val poseProvider = ArCorePoseProvider()
-    private val depthProvider = ArCoreDepthProvider(config)
-    private val frameProcessor = ArCoreFrameProcessor(config, poseProvider, depthProvider)
+    private val frameProcessor = ArCoreFrameProcessor(config)
     private val cloudPool = DepthCloudPool(config.maxPointsPerFrame)
 
     /** A converted frame and the coordinate-frame generation it was converted in. */
