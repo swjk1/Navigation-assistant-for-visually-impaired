@@ -63,7 +63,7 @@ the engine is wrong about the world.
 
 ```bash
 ./gradlew run --args="--scenario find-room-314 --webots webots-out"
-webots webots-out/find-room-314-seed1/worlds/scene.wbt       # Windows: D:\Webots\msys64\mingw64in\webots.exe
+webots webots-out/find-room-314-seed1/worlds/scene.wbt       # Windows: D:\Webots\msys64\mingw64\bin\webots.exe
 ```
 
 Each run becomes a small Webots project: the building as solid geometry (walls grey, low obstacles
