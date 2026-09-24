@@ -6,3 +6,5 @@ sim-reports/
 hs_err_pid*.log
 replay_pid*.log
 webots-out/
+__pycache__/
+*.pyc
