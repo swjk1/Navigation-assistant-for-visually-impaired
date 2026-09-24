@@ -73,6 +73,8 @@ def grid_node(grid):
                 base = len(points)
                 for cx, cz in ((x0, z0), (x1, z0), (x1, z1), (x0, z1)):
                     points.append(plan(cx, cz))
+                # Counter-clockwise seen from above (canonical -> plan is a pure rotation), so the
+                # face points up; Webots' IndexedFaceSet has no `solid` field to draw both sides.
                 faces.append(f"{base} {base + 1} {base + 2} {base + 3} -1")
             gx = end + 1
 
@@ -84,7 +86,7 @@ def grid_node(grid):
         coords = ", ".join(f"{x:.3f} {y:.3f} {height}" for x, y in points)
         shapes.append(
             "Shape { appearance PBRAppearance { baseColor %s %s %s transparency 0.35 roughness 1 metalness 0 } "
-            "geometry IndexedFaceSet { solid FALSE coord Coordinate { point [ %s ] } coordIndex [ %s ] } }"
+            "geometry IndexedFaceSet { coord Coordinate { point [ %s ] } coordIndex [ %s ] } }"
             % (r, g, b, coords, " ".join(faces))
         )
     return 'Solid { name "engine map" children [ %s ] }' % " ".join(shapes)
