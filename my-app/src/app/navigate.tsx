@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { executeCommand } from '@/guidance/guidanceOutput';
+import { executeCommand, isSameAim, speakAim } from '@/guidance/guidanceOutput';
 import {
   isScanRequest,
   startNavigation,
@@ -40,13 +40,27 @@ import {
  */
 
 /**
- * How often to run the perception pipeline. Much slower than the navigation loop on purpose:
- * YOLO + OCR + a Gemini call take a while, and signs do not move.
+ * How often to run the on-device perception pipeline (YOLO + ML Kit OCR). A room plate on a side
+ * wall is legible from only about a metre of the corridor; at one capture every 2.5 s a walking
+ * user usually passed it unread. The simulator's benchmark put finding the destination at 67%
+ * with perfect directions at 2.5 s, 77% at 1 s.
  */
-const PERCEPTION_INTERVAL_MS = 2500;
+const PERCEPTION_INTERVAL_MS = 1000;
+
+/**
+ * Gemini may join at most one capture in this many (its own gate still decides whether it is
+ * needed): a round trip takes seconds, and while it runs no new capture starts.
+ */
+const VLM_EVERY_NTH_CAPTURE = 4;
 
 /** Map refresh. Fast enough to watch the scan fill in, slow enough not to compete with mapping. */
 const MAP_INTERVAL_MS = 700;
+
+/**
+ * The same perception hazard is announced once, then again only after this long. It used to
+ * bypass every filter and stop the user on each 2.5 s capture while the sign stayed in view.
+ */
+const HAZARD_REPEAT_MS = 15000;
 
 /** Don't repeat an identical instruction; it makes the guidance unlistenable. */
 function isSameInstruction(a: NavigationCommand | null, b: NavigationCommand): boolean {
@@ -74,7 +88,10 @@ export default function NavigateScreen() {
   const [depth, setDepth] = useState<NavigationDepthImage | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const lastCommand = useRef<NavigationCommand | null>(null);
+  const lastHazard = useRef<{ text: string; at: number } | null>(null);
   const perceptionBusy = useRef(false);
+  const perceptionCaptures = useRef(0);
+  const lastAim = useRef<NavigationSnapshot['aim']>(null);
 
   const supported = Platform.OS === 'android';
 
@@ -93,6 +110,12 @@ export default function NavigateScreen() {
         lastCommand.current = command;
         void executeCommand(command);
         setSpoken(command.hazard?.detected ? 'Hazard' : command.action);
+      }
+
+      // How to hold the phone changes rarely, and is spoken after the direction, not over it.
+      if (!isSameAim(lastAim.current, next.aim)) {
+        speakAim(next.aim, lastAim.current);
+        lastAim.current = next.aim ?? null;
       }
 
       if (isScanRequest(next)) setSpoken('SCAN');
@@ -136,9 +159,15 @@ export default function NavigateScreen() {
     if (observations.length > 0) {
       void NavigationNative.submitSemanticObservations(observations);
     }
-    const hazard = perceptionHazard(frame);
-    if (hazard) {
-      // Perception hazards outrank navigation guidance and bypass the repeat filter.
+    const hazard = frame.serviceDegraded ? null : perceptionHazard(frame);
+    const now = Date.now();
+    const repeated =
+      hazard !== null &&
+      lastHazard.current?.text === hazard &&
+      now - lastHazard.current.at < HAZARD_REPEAT_MS;
+    if (hazard && !repeated) {
+      // Perception hazards outrank navigation guidance and bypass the repeat filter - once.
+      lastHazard.current = { text: hazard, at: now };
       lastCommand.current = null;
       void executeCommand({
         action: 'STOP',
@@ -210,7 +239,9 @@ export default function NavigateScreen() {
       void (async () => {
         try {
           const captured = await IndoorPerception.captureFrame();
-          await analyzeAndStore(captured.base64);
+          const vlmAllowed = perceptionCaptures.current++ % VLM_EVERY_NTH_CAPTURE === 0;
+          // Only ever narrows: when Gemini is allowed, its own gate and key check still apply.
+          await analyzeAndStore(captured.base64, vlmAllowed ? {} : { allowLiveVlm: false });
           const frame = getLatestPerceptionFrame() as PerceptionFrame | null;
           if (frame && !cancelled) {
             // The capture's own timestamp and rotation, so the engine places what was seen

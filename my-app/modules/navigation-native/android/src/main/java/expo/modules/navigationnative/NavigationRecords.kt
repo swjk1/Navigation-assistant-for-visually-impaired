@@ -174,6 +174,10 @@ fun NavigationSnapshot.toEventMap(): Map<String, Any?> = buildMap {
     put("mapConfidence", mapConfidence)
     put("selectedFrontierId", selectedFrontierId)
     put("target", targetDescription)
+    put(
+        "aim",
+        aim?.let { mapOf("pitchDegrees" to it.pitchDegrees, "yawDegrees" to it.yawDegrees, "sweepDegrees" to it.sweepDegrees) },
+    )
     debug?.let { d ->
         put(
             "debug",

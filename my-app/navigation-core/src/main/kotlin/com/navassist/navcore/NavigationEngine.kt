@@ -14,9 +14,11 @@ import com.navassist.navcore.mapping.OccupancyGrid
 import com.navassist.navcore.planning.AStarPlanner
 import com.navassist.navcore.planning.NavigationController
 import com.navassist.navcore.planning.PathSmoother
+import com.navassist.navcore.semantic.AdviceDirection
 import com.navassist.navcore.semantic.NavigationTarget
 import com.navassist.navcore.semantic.SemanticHintStore
 import com.navassist.navcore.semantic.SemanticObservation
+import com.navassist.navcore.semantic.Situation
 import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.NavigationDebugInfo
 import com.navassist.navcore.state.NavigationEvent
@@ -27,6 +29,7 @@ import com.navassist.navcore.state.StopReason
 import com.navassist.navcore.topology.NodeType
 import com.navassist.navcore.topology.TopologicalMap
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -57,6 +60,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     private val controller = NavigationController(config)
     private val exploration = ExplorationManager(config)
     private val semantics = SemanticHintStore(config)
+    private val aimPolicy = com.navassist.navcore.planning.AimPolicy(config)
     private val stateMachine = NavigationStateMachine()
 
     val topology = TopologicalMap()
@@ -93,6 +97,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     private var lastTrackingGoodMillis: Long = 0
     private var lastInflateMillis: Long = 0
     private var lastFrontierMillis: Long = 0
+    /** Where the path to a located destination actually ends, when that is not the destination. */
+    private var targetApproachPoint: Vec2? = null
     private var lastPlanMillis: Long = 0
 
     private var currentPath: List<Vec2> = emptyList()
@@ -105,6 +111,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     private var lastNodeId: String? = null
     private var lastNodePosition: Vec2? = null
+
+    /** Where the session's first node was dropped, and the furthest the user has been from it. */
+    private var sessionOrigin: Vec2? = null
+    private var farthestFromOrigin = 0f
+
+    /** Distance walked and when walking began, for advisers. */
+    private var walkedMeters = 0f
+    private var lastWalkPosition: Vec2? = null
+    private var sessionStartMillis: Long? = null
+
     private var lastNodeYaw: Float = 0f
     private var lastDepthPointCount: Int = 0
 
@@ -127,6 +143,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
     /** Milliseconds of useful scanning (tracking + depth) accumulated while LOCALIZING. */
     private var scanElapsedMillis: Long = 0
+
+    /** How far the user has turned during the opening look-around, and their yaw last frame. */
+    private var lookAroundRadians = 0f
+    private var lookAroundLastYaw: Float? = null
 
     val snapshot: NavigationSnapshot get() = lastSnapshot
 
@@ -154,7 +174,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     fun setTarget(target: NavigationTarget) {
         if (this.target == target) return
         this.target = target
-        semantics.clearTargetSighting()
+        semantics.clearTargetSighting(forgetGlimpses = true)
         exploration.clearSelection()
         currentPath = emptyList()
         currentGoal = null
@@ -182,6 +202,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     fun reset() {
         grid = OccupancyGrid(config)
         inflated = null
+        targetApproachPoint = null
         floorEstimator.reset()
         controller.reset()
         exploration.reset()
@@ -192,6 +213,11 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         currentGoal = null
         lastNodeId = null
         lastNodePosition = null
+        sessionOrigin = null
+        farthestFromOrigin = 0f
+        walkedMeters = 0f
+        lastWalkPosition = null
+        sessionStartMillis = null
         backtrackTargetNodeId = null
         clearTargetRouteFailures()
         originInitialized = false
@@ -200,6 +226,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastTrackingGoodMillis = 0
         lastDepthPointCount = 0
         scanElapsedMillis = 0
+        lookAroundRadians = 0f
+        lookAroundLastYaw = null
         started = false
         target = NavigationTarget.Explore
     }
@@ -214,6 +242,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     fun resetMap() {
         grid.clear()
         inflated = null
+        targetApproachPoint = null
         floorEstimator.reset()
         exploration.reset()
         topology.reset()
@@ -222,6 +251,11 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         currentGoal = null
         lastNodeId = null
         lastNodePosition = null
+        sessionOrigin = null
+        farthestFromOrigin = 0f
+        walkedMeters = 0f
+        lastWalkPosition = null
+        sessionStartMillis = null
         backtrackTargetNodeId = null
         clearTargetRouteFailures()
         lastFrontierMillis = 0
@@ -229,6 +263,8 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         // give instructions rather than coasting on the previous scan. The scan gate only runs in
         // LOCALIZING, so zeroing the budget alone is not enough: the state machine goes back too.
         scanElapsedMillis = 0
+        lookAroundRadians = 0f
+        lookAroundLastYaw = null
         stateMachine.on(NavigationEvent.MapReset)
         originInitialized = false
     }
@@ -242,8 +278,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         observations: List<SemanticObservation>,
         nowMillis: Long,
         observerPose: Pose3D = lastPose,
+        bearings: List<Vec2?> = emptyList(),
+        elevations: List<Float?> = emptyList(),
     ) {
-        semantics.submit(observations, nowMillis, observerPose, target)
+        val floor = floorEstimator.estimate
+        val cameraHeight = if (floor.confidence >= config.floorMinConfidence) observerPose.position3D.y - floor.floorY else null
+        semantics.submit(observations, nowMillis, observerPose, target, bearings, elevations, cameraHeight)
         // Landmarks worth remembering at building scale go straight into the graph.
         for (observation in observations) {
             val world = observation.worldPosition ?: continue
@@ -278,6 +318,38 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     }
 
     private var lastPose: Pose3D = Pose3D.IDENTITY
+
+    /** The advice (by arrival time) already acted on by [lookTowardsAdvice]. */
+    private var adviceLookedAtMillis = -1L
+
+    /**
+     * Advice can only favour frontiers the map already has. Pointing where it has none - behind
+     * the user at the start, since the opening scan only sweeps the view ahead - it would favour
+     * nothing and be outvoted. Then turn the user to face that way, once per answer: the map
+     * fills in, a frontier appears there, and the advice has something to choose. Turning on the
+     * spot is always safe.
+     */
+    private fun lookTowardsAdvice(pose: Pose3D, nowMillis: Long): NavigationCommand? {
+        if (!config.adviceTurnsToLook || stateMachine.status != NavigationStatus.EXPLORING) return null
+        val advice = semantics.strongestAdvice(nowMillis) ?: return null
+        val stamp = semantics.adviceReceivedAtMillis
+        if (stamp == adviceLookedAtMillis) return null
+        // Only frontiers worth walking to: the edge of the user's own footprint is a frontier too.
+        val matched = exploration.frontiers.filter { it.centroid.distanceTo(pose.position2D) > config.frontierReachedMeters }
+            .maxOfOrNull { semantics.adviceScoreFor(it.centroid, nowMillis) } ?: 0f
+        val error = GeometryUtils.angleDifference(pose.yawRadians, advice.direction.yawRadians())
+        if (matched >= ADVICE_MATCHED_SCORE || abs(error) <= GeometryUtils.degreesToRadians(ADVICE_FACING_DEGREES)) {
+            adviceLookedAtMillis = stamp
+            lastFrontierMillis = 0
+            return null
+        }
+        return if (error > 0f) NavigationCommand.TURN_RIGHT else NavigationCommand.TURN_LEFT
+    }
+
+    /** Until the turn is done - or has had its time: someone who cannot turn is not held forever. */
+    private fun lookingAround(): Boolean =
+        lookAroundRadians < GeometryUtils.degreesToRadians(config.initialLookAroundDegrees) &&
+            scanElapsedMillis < config.minScanMillis + config.initialLookAroundMaxExtraMillis
 
     // ================================================================= frame update
 
@@ -365,17 +437,22 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             if (depthFresh) {
                 scanElapsedMillis += (deltaSeconds * 1000f).toLong()
             }
+            lookAroundLastYaw?.let { lookAroundRadians += abs(GeometryUtils.angleDifference(it, frame.pose.yawRadians)) }
+            lookAroundLastYaw = frame.pose.yawRadians
             if (floorReady &&
                 mapConfidence >= config.minMapConfidenceToNavigate &&
-                scanElapsedMillis >= config.minScanMillis
+                scanElapsedMillis >= config.minScanMillis &&
+                !lookingAround()
             ) {
                 stateMachine.on(NavigationEvent.MapReady)
             }
         }
         if (stateMachine.status == NavigationStatus.LOCALIZING) {
+            // First a full turn on the spot, so the map starts with every way out - a sweep of the
+            // view ahead leaves the way behind unknown, and a destination there with it.
             return finish(
-                nowMillis, frame, NavigationCommand.SCAN, null, null, mapConfidence,
-                stopReason = StopReason.MAP_INCOMPLETE,
+                nowMillis, frame, if (lookingAround()) NavigationCommand.TURN_RIGHT else NavigationCommand.SCAN,
+                null, null, mapConfidence, stopReason = StopReason.MAP_INCOMPLETE,
             )
         }
 
@@ -399,6 +476,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val inflatedGrid = refreshInflation(nowMillis)
 
         // ---------------------------------------------------------- 6. where are we going?
+        lookTowardsAdvice(frame.pose, nowMillis)?.let { turn ->
+            return finish(nowMillis, frame, turn, null, null, mapConfidence)
+        }
         val goal = resolveGoal(frame.pose, inflatedGrid, nowMillis, mapConfidence)
         if (goal == null) {
             currentPath = emptyList()
@@ -409,8 +489,25 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         }
 
         // ---------------------------------------------------------- 7. arrival
+        // A glimpse is where to look, not where to arrive: once there, it has done its job - a
+        // placed reading has replaced it, or there is nothing to find and exploring resumes.
+        semantics.targetSighting?.takeIf { it.glimpsed }?.let {
+            if (it.worldPosition.toVec2().distanceTo(frame.pose.position2D) <= config.glimpseReachedMeters) semantics.spendGlimpse(nowMillis)
+        }
+        val glimpsed = semantics.targetSighting?.glimpsed == true
         val distanceToTarget = finalDestination()?.distanceTo(frame.pose.position2D)
-        if (controller.updateArrival(distanceToTarget, nowMillis)) {
+        // Arrival also counts at the reachable spot nearest the destination (see refreshPath).
+        // Only near the destination itself, though: at the approach spot's edge the user could
+        // otherwise be told they had arrived 2.5 m from it.
+        val arrivalDistance = targetApproachPoint?.let { approach ->
+            val target = finalDestination()
+            if (target != null && approach.distanceTo(target) <= config.targetApproachRadiusMeters &&
+                (distanceToTarget ?: Float.MAX_VALUE) <= config.targetApproachRadiusMeters
+            ) {
+                minOf(distanceToTarget ?: Float.MAX_VALUE, approach.distanceTo(frame.pose.position2D))
+            } else null
+        } ?: distanceToTarget
+        if (controller.updateArrival(arrivalDistance.takeUnless { glimpsed }, nowMillis)) {
             stateMachine.on(NavigationEvent.Arrived)
             return finish(nowMillis, frame, NavigationCommand.ARRIVED, null, distanceToTarget, mapConfidence)
         }
@@ -436,7 +533,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         }
 
         // ---------------------------------------------------------- 9. command
-        val output = controller.update(frame.pose, path, inflatedGrid, nowMillis)
+        val output = controller.update(frame.pose, path, inflatedGrid, nowMillis, grid)
         return finish(
             nowMillis = nowMillis,
             frame = frame,
@@ -479,6 +576,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val minRangeSq = config.minDepthMeters * config.minDepthMeters
         val obstacleRange = min(config.maxObstacleRangeMeters, integrationRangeMeters)
         val obstacleRangeSq = obstacleRange * obstacleRange
+        val nearFloorSq = config.nearFloorVerifyMeters * config.nearFloorVerifyMeters
         val limit = min(points.count, config.maxPointsPerFrame)
 
         for (i in 0 until limit) {
@@ -501,6 +599,20 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                     val t = sensorHeight / (sensorHeight - height)
                     val cell = grid.worldToGrid(Vec2(originX + dx * t, originZ + dz * t))
                     grid.observeOccupied(cell.gx, cell.gz)
+                    // An edge needs more room than a wall: brushing a wall is a bump, brushing a
+                    // drop is a fall. And a drop's edge can sit past floor-level ground that is not
+                    // floor - the flush top plate of a descending escalator, 0.5 m before its
+                    // first step down. Extend it back towards the observer, the side one walks up.
+                    val range = kotlin.math.sqrt(rangeSq) * t
+                    if (range > 1e-3f && config.dropMarginMeters > 0f) {
+                        var back = grid.resolution
+                        while (back <= config.dropMarginMeters && back < range) {
+                            val f = (range - back) / range * t
+                            val c = grid.worldToGrid(Vec2(originX + dx * f, originZ + dz * f))
+                            grid.observeOccupied(c.gx, c.gz)
+                            back += grid.resolution
+                        }
+                    }
                 }
                 // Slightly below the floor we think we have: noise, or an estimate a little off.
                 // It says nothing trustworthy about what is walkable; dropping it is the safe failure.
@@ -514,6 +626,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                         ((sensorHeight - minHeight) / (sensorHeight - height)).coerceIn(0f, 1f)
                     }
                     grid.observeFreeLine(Vec2(originX + dx * t, originZ + dz * t), Vec2(px, pz))
+                    if (rangeSq <= nearFloorSq) grid.worldToGrid(Vec2(px, pz)).let { grid.markNearSeen(it.gx, it.gz) }
                 }
                 // Body-height obstacle - but only where depth is accurate enough to tell one from
                 // a noisy floor return. See NavigationConfig.maxObstacleRangeMeters.
@@ -554,10 +667,13 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 d += step
             }
             if (resume < 0f) continue
+            // Bridged floor is as trustworthy as the floor it bridges to.
+            val nearBeyond = grid.isNearSeen(origin + forward * resume)
             var fill = step
             while (fill < resume) {
                 val cell = grid.worldToGrid(origin + forward * fill)
                 if (grid.stateAt(cell.gx, cell.gz) == CellState.UNKNOWN) grid.observeFree(cell.gx, cell.gz)
+                if (nearBeyond) grid.markNearSeen(cell.gx, cell.gz)
                 fill += step
             }
         }
@@ -586,6 +702,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 val gz = center.gz + dz
                 if (grid.stateAt(gx, gz) == CellState.OCCUPIED) continue
                 grid.observeFree(gx, gz)
+                grid.markNearSeen(gx, gz)
             }
         }
     }
@@ -605,6 +722,11 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
      */
     private fun updateTopology(pose: Pose3D, nowMillis: Long) {
         val position = pose.position2D
+        val origin = sessionOrigin ?: position.also { sessionOrigin = it }
+        farthestFromOrigin = max(farthestFromOrigin, origin.distanceTo(position))
+        if (sessionStartMillis == null) sessionStartMillis = nowMillis
+        lastWalkPosition?.let { walkedMeters += it.distanceTo(position) }
+        lastWalkPosition = position
         val previous = lastNodePosition
         val travelled = previous?.distanceTo(position) ?: Float.MAX_VALUE
         val turned = abs(GeometryUtils.angleDifference(lastNodeYaw, pose.yawRadians))
@@ -614,6 +736,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             (turned >= config.topoTurnThresholdRadians && travelled >= config.topoNodeSpacingMeters * 0.4f)
         if (!shouldDrop) return
 
+        // The first node is dropped before any frontier pass, so it is always typed DEAD_END. That
+        // is kept on purpose: the space behind where the user starts is usually where they came
+        // from, and its revisit penalty stops the engine turning them round to explore it (typed a
+        // plain waypoint, the navigation-sim corridor scenario walked back and stalled there).
         val type = when {
             exploration.frontiers.size >= 2 -> NodeType.JUNCTION
             exploration.frontiers.isEmpty() -> NodeType.DEAD_END
@@ -793,11 +919,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
      * routes back through the remembered graph to the nearest junction with unexplored ways out.
      */
     private fun backtrackGoal(pose: Pose3D): Vec2? {
-        lastNodeId?.let {
-            topology.markType(it, NodeType.DEAD_END)
-            topology.markExhausted(it)
+        // Only a place the user has walked to can be a dead end. Straight after the scan, "no
+        // frontier to choose" means the map is not ready; writing the start off then left no node
+        // to retreat to, and the engine sat in NO_ROUTE for good.
+        if (farthestFromOrigin >= config.minTravelBeforeDeadEndMeters) {
+            lastNodeId?.let {
+                topology.markType(it, NodeType.DEAD_END)
+                topology.markExhausted(it)
+            }
+            exploration.blacklistArea(pose.position2D)
         }
-        exploration.blacklistArea(pose.position2D)
 
         val currentNode = lastNodeId?.let { topology.node(it) }
             ?: topology.findNearest(pose.position2D, config.topoNodeSpacingMeters * 2f)
@@ -874,12 +1005,26 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val goalCell = inflatedGrid.worldToGrid(goal)
         // Only exploration goals may touch unknown space, and only right at the goal.
         val exploring = semantics.targetSighting == null
-        val cells: List<GridCoordinate> =
-            planner.plan(inflatedGrid, start, goalCell, allowUnknownNearGoal = exploring)
-                ?: run {
-                    currentPath = emptyList()
-                    return emptyList()
-                }
+        // A destination is often not itself somewhere to stand: a sign over a glass shop front, a
+        // plate on a wall, a spot the map has not scanned. Aim at the nearest reachable cell
+        // within the approach radius instead, and let arrival count there.
+        val destination = finalDestination()
+        val aimingAtDestination = !exploring && destination != null && destination.distanceTo(goal) < grid.resolution
+        val searchCells = if (aimingAtDestination) (config.targetApproachRadiusMeters / grid.resolution).toInt() else null
+        val direct = planner.plan(inflatedGrid, start, goalCell, allowUnknownNearGoal = exploring, goalSearchCells = searchCells)
+        // No route to a known destination: it lies in space the map has not seen, or has scrolled
+        // past. Head for the unexplored edge nearest it rather than give up on it; mapping on the
+        // way either opens a route or shows there is none.
+        val cells: List<GridCoordinate> = direct
+            ?: destination?.takeIf { !exploring }?.let { towards ->
+                exploration.frontiersToward(grid, inflatedGrid, pose.position2D, towards).asSequence().take(3)
+                    .firstNotNullOfOrNull { planner.plan(inflatedGrid, start, it.centroidCell, allowUnknownNearGoal = true) }
+            }
+            ?: run {
+                currentPath = emptyList()
+                return emptyList()
+            }
+        targetApproachPoint = if (aimingAtDestination && direct != null) inflatedGrid.gridToWorld(cells.last()) else null
 
         val smoothed = PathSmoother.smooth(inflatedGrid, cells)
         currentPath = smoothed.map { inflatedGrid.gridToWorld(it) }
@@ -927,6 +1072,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             // instruction, so advertising a placeholder destination would have it announce
             // "Explore. Straight." on every single command.
             targetDescription = target.takeIf { it != NavigationTarget.Explore }?.description,
+            aim = aimPolicy.aimFor(target, stateMachine.status),
             debug = NavigationDebugInfo(
                 freeCells = stats.free,
                 occupiedCells = stats.occupied,
@@ -966,14 +1112,58 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     /** Most recent device pose, for debug rendering. */
     fun currentPose(): Pose3D = lastPose
 
+    /**
+     * Advice from outside the engine - an LLM, a decision model, a floor plan - on which way to
+     * explore. It biases frontier choice like a sign and expires after
+     * [NavigationConfig.adviceMaxAgeMillis]; it cannot plan, steer, or lift a stop.
+     */
+    fun submitAdvice(directions: List<AdviceDirection>, nowMillis: Long = clockMillis) {
+        semantics.setAdvice(directions, nowMillis)
+        // Re-rank at once rather than at the next frontier pass, and let go of a committed
+        // waypoint the adviser warns against - or simply does not point at, when it points at
+        // another: commitment otherwise outlasts any new evidence, and the first choice, made
+        // before any advice arrived, held against it all the way down the wrong corridor.
+        lastFrontierMillis = 0
+        val selected = exploration.selected ?: return
+        val advised = semantics.adviceScoreFor(selected.centroid, nowMillis)
+        val bestAdvised = exploration.frontiers.maxOfOrNull { semantics.adviceScoreFor(it.centroid, nowMillis) } ?: 0f
+        if (advised < 0f || (config.adviceReleasesCommitment && advised <= 0f && bestAdvised >= ADVICE_SWITCH_SCORE)) {
+            exploration.clearSelection()
+        }
+    }
+
+    /** What the engine knows right now, for an adviser. Perceived state only, never ground truth. */
+    fun situation(): Situation = Situation(
+        target = target,
+        status = stateMachine.status,
+        pose = lastPose,
+        targetLocated = semantics.targetSighting != null,
+        walkedMeters = walkedMeters,
+        elapsedMillis = sessionStartMillis?.let { clockMillis - it } ?: 0L,
+        frontiers = exploration.frontiers,
+        signs = semantics.seenSigns(clockMillis, limit = 60),
+    )
+
     /** The goal currently being steered at, for debug rendering. */
     fun currentGoalWorld(): Vec2? = currentGoal
+
+    /** Where the engine believes the destination is, and how it placed it; null if unknown. */
+    fun targetSighting(): com.navassist.navcore.semantic.TargetSighting? = semantics.targetSighting
 
     fun floorEstimate() = floorEstimator.estimate
 
     private companion object {
         /** ~5 Hz local planning. */
         const val PLAN_INTERVAL_MILLIS = 200L
+
+        /** New advice this strongly for another frontier releases one it does not point at. */
+        const val ADVICE_SWITCH_SCORE = 0.5f
+
+        /** Advice favouring some frontier at least this much needs no turn to look for one. */
+        const val ADVICE_MATCHED_SCORE = 0.3f
+
+        /** Turned to within this of the advised direction counts as having looked. */
+        const val ADVICE_FACING_DEGREES = 30f
         /** ~1.5 Hz frontier detection + scoring. */
         const val FRONTIER_INTERVAL_MILLIS = 650L
         /** ~6 Hz inflation refresh (shared by planning and frontier risk scoring). */

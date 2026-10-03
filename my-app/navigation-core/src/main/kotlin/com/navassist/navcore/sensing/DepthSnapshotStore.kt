@@ -2,6 +2,7 @@ package com.navassist.navcore.sensing
 
 import com.navassist.navcore.NavigationConfig
 import com.navassist.navcore.geometry.Pose3D
+import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.geometry.Vec3
 import kotlin.math.abs
 
@@ -52,6 +53,17 @@ class DepthSnapshotStore(
          */
         val metersPerImageWidth: Float? = null,
         val metersPerImageHeight: Float? = null,
+        /**
+         * Horizontal unit direction (canonical x, z) from the camera through the image point.
+         * Known whenever the frame is, with or without depth - a sign read from beyond depth range
+         * still says which way it is.
+         */
+        val bearing: Vec2? = null,
+        /**
+         * Tangent of the angle above horizontal of that same ray (negative below). With a known
+         * mounting height it ranges a sign that depth cannot reach.
+         */
+        val elevationTan: Float? = null,
     )
 
     private val lock = Any()
@@ -98,17 +110,29 @@ class DepthSnapshotStore(
      * nothing is resolved rather than something wrong. Without one, the newest depth is used.
      * Image coordinates are normalized 0..1 in the SENSOR image, like the depth image.
      */
-    fun resolve(normalizedX: Float?, normalizedY: Float?, timestampNanos: Long?): Resolution = synchronized(lock) {
+    fun resolve(
+        normalizedX: Float?,
+        normalizedY: Float?,
+        timestampNanos: Long?,
+        boxWidth: Float? = null,
+        boxHeight: Float? = null,
+    ): Resolution = synchronized(lock) {
         val snapshot = find(timestampNanos) ?: return@synchronized NOT_RESOLVED
         val pose = CanonicalFrame.poseOf(snapshot.transform)
         if (normalizedX == null || normalizedY == null) return@synchronized Resolution(null, pose)
-        val depth = depthAt(snapshot, normalizedX, normalizedY) ?: return@synchronized Resolution(null, pose)
+        val bearing = bearingOf(snapshot, normalizedX, normalizedY, pose)
+        val elevationTan = elevationTanOf(snapshot, normalizedX, normalizedY, pose)
+        val depth = depthAt(snapshot, normalizedX, normalizedY)
+            ?.takeIf { boxWidth == null || boxHeight == null || oneSurface(snapshot, normalizedX, normalizedY, boxWidth, boxHeight, it) }
+            ?: return@synchronized Resolution(null, pose, bearing = bearing, elevationTan = elevationTan)
         val k = snapshot.intrinsics
         Resolution(
             worldPosition(snapshot, normalizedX, normalizedY, depth),
             pose,
             metersPerImageWidth = depth * snapshot.image.width / k.fx,
             metersPerImageHeight = depth * snapshot.image.height / k.fy,
+            bearing = bearing,
+            elevationTan = elevationTan,
         )
     }
 
@@ -175,6 +199,55 @@ class DepthSnapshotStore(
         return depth
     }
 
+    /**
+     * Whether the object's whole box, not only its centre, lies on the surface found at its
+     * centre. A sign glimpsed just past a column or a corridor corner has a centre window that can
+     * land on the edge of the nearer thing - a hanging sign 12 m off was placed on a column 6 m
+     * away, and the user told they had arrived there - while most of its box has no depth at all
+     * or the far wall's. A sign on a wall has the wall all round it.
+     */
+    private fun oneSurface(snapshot: Snapshot, x: Float, y: Float, boxWidth: Float, boxHeight: Float, depth: Float): Boolean {
+        // A big box is a near object with plenty of depth under its centre, which the centre
+        // window already checks; its edges run into door frames and off the image.
+        if (boxWidth > BOX_CHECK_MAX_FRACTION || boxHeight > BOX_CHECK_MAX_FRACTION) return true
+        val image = snapshot.image
+        val tolerance = maxOf(BOX_TOLERANCE_METERS, depth * BOX_TOLERANCE_FRACTION)
+        var onSurface = 0
+        var total = 0
+        // At least a pixel apart: a far sign spans a pixel or two, and the question is then what
+        // surrounds it - its own wall, or nothing (beyond range) with a nearer edge beside it.
+        val stepX = maxOf(0.18f * boxWidth, 1f / image.width)
+        val stepY = maxOf(0.18f * boxHeight, 1f / image.height)
+        for (i in -2..2) for (j in -2..2) {
+            val px = x + i * stepX
+            val py = y + j * stepY
+            if (px < 0f || py < 0f || px >= 1f || py >= 1f) continue
+            val meters = image.metersAt((px * image.width).toInt(), (py * image.height).toInt())
+            total++
+            if (meters >= config.minDepthMeters && meters <= config.maxDepthMeters && abs(meters - depth) <= tolerance) onSurface++
+        }
+        return total == 0 || onSurface >= total * BOX_MIN_ON_SURFACE
+    }
+
+    /** The image point 1 m out, relative to the camera, flattened to the floor plane. */
+    private fun bearingOf(snapshot: Snapshot, normalizedX: Float, normalizedY: Float, pose: Pose3D): Vec2? {
+        if (snapshot.image.width == 0 || snapshot.image.height == 0) return null
+        val point = worldPosition(snapshot, normalizedX, normalizedY, 1f)
+        val dx = point.x - pose.position3D.x
+        val dz = point.z - pose.position3D.z
+        val length = kotlin.math.sqrt(dx * dx + dz * dz)
+        return if (length < 1e-3f) null else Vec2(dx / length, dz / length)
+    }
+
+    private fun elevationTanOf(snapshot: Snapshot, normalizedX: Float, normalizedY: Float, pose: Pose3D): Float? {
+        if (snapshot.image.width == 0 || snapshot.image.height == 0) return null
+        val point = worldPosition(snapshot, normalizedX, normalizedY, 1f)
+        val dx = point.x - pose.position3D.x
+        val dz = point.z - pose.position3D.z
+        val horizontal = kotlin.math.sqrt(dx * dx + dz * dz)
+        return if (horizontal < 1e-3f) null else (point.y - pose.position3D.y) / horizontal
+    }
+
     private fun worldPosition(snapshot: Snapshot, normalizedX: Float, normalizedY: Float, depth: Float): Vec3 {
         val image = snapshot.image
         val u = (normalizedX * image.width).toInt().coerceIn(0, image.width - 1)
@@ -211,6 +284,12 @@ class DepthSnapshotStore(
         /** How close to the median a sample must be to count as the same surface. */
         private const val SURFACE_TOLERANCE_METERS = 0.1f
         private const val SURFACE_TOLERANCE_FRACTION = 0.05f
+
+        /** Across a whole box: looser, since a plate seen at an angle spans a range of depths. */
+        private const val BOX_TOLERANCE_METERS = 0.2f
+        private const val BOX_TOLERANCE_FRACTION = 0.08f
+        private const val BOX_MIN_ON_SURFACE = 0.6f
+        private const val BOX_CHECK_MAX_FRACTION = 0.25f
 
         private val NOT_RESOLVED = Resolution(null, null)
     }

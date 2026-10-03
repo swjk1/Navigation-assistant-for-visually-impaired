@@ -73,6 +73,12 @@ export interface PerceptionFrame {
   immediateHazard: boolean;
   /** Short phrase safe to speak nearly verbatim (≤ ~100 chars) */
   hazardDescription: string | null;
+  /**
+   * Set when the frame reports the vision service failing (timeout, quota) rather than the scene.
+   * The hazard flag stays set for consumers that treat an empty frame as "clear ahead"; guidance
+   * that has its own depth-based safety should not stop the user over it.
+   */
+  serviceDegraded?: true;
 }
 
 /** Result of a single low-latency camera capture (Person 1 internal → perception). */

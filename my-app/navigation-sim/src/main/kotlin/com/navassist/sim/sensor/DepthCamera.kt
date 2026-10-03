@@ -76,6 +76,10 @@ class DepthCamera(
         val ox = m[12]
         val oy = m[13]
         val oz = m[14]
+        // Rays from the camera: a sample is z-depth, and its ray is longer than that, but never
+        // longer than maxRange divided by the cosine of the corner of the view.
+        val reach = noise.maxRangeMeters * sqrt(1f + (k.width / (2f * k.fx)).let { it * it } + (k.height / (2f * k.fy)).let { it * it })
+        val candidates = scene.near(ox, oy, oz, reach)
 
         // Pass 1: exact depth at each sample.
         for (sy in 0 until samplesY) {
@@ -91,9 +95,9 @@ class DepthCamera(
                 val dz = m[2] * a + m[6] * b - m[10]
                 val length = sqrt(dx * dx + dy * dy + dz * dz)
                 val tMax = noise.maxRangeMeters
-                var hit = scene.raycast(ox, oy, oz, dx, dy, dz, tMax)
+                var hit = scene.raycast(ox, oy, oz, dx, dy, dz, tMax, candidates = candidates)
                 if (hit != null && hit.box.material == Material.GLASS && random.nextFloat() >= noise.glassReturn) {
-                    hit = scene.raycast(ox, oy, oz, dx, dy, dz, tMax, skipGlass = true)
+                    hit = scene.raycast(ox, oy, oz, dx, dy, dz, tMax, skipGlass = true, candidates = candidates)
                 }
                 val i = sy * samplesX + sx
                 if (hit == null) {

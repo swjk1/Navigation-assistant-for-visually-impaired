@@ -125,6 +125,14 @@ data class NavigationConfig(
      * floor: it fails safe.
      */
     val dropOffDepthMeters: Float = 0.2f,
+    /** A drop-off is marked this much further towards the observer than its edge (see integrateDepth). */
+    val dropMarginMeters: Float = 0.3f,
+    /**
+     * Walking straight on needs the floor ahead to have been seen by depth from within this range:
+     * beyond it noise (8 mm x range squared) outgrows a 25 cm step down, and a descending escalator
+     * seen only from far off looked like floor.
+     */
+    val nearFloorVerifyMeters: Float = 3.5f,
     /**
      * The floor within about this distance in front of the phone is below the camera's view even
      * when it is tilted down. Unknown cells there are bridged as floor, but ONLY when seen floor
@@ -186,6 +194,13 @@ data class NavigationConfig(
     // ---------------------------------------------------------------- frontier exploration
     /** Frontier clusters smaller than this are noise and are rejected. */
     val minFrontierCells: Int = 6,
+    /**
+     * Frontier clusters longer than this are split into pieces no longer than it, each with its
+     * own waypoint. In open space the edge of what has been scanned is one long arc that passes the
+     * user; judged as one cluster its waypoint lands at the user's feet ("already reached"), and
+     * nothing was ever selected.
+     */
+    val frontierSegmentMeters: Float = 3.0f,
     /** Radius (in cells) used to estimate how much unknown space a frontier would reveal. */
     val informationGainRadiusCells: Int = 12,
     /** Frontier score weights. Not scientifically derived: tune on real hardware. */
@@ -194,10 +209,40 @@ data class NavigationConfig(
     val weightDistance: Float = -1.0f,
     val weightRevisit: Float = -2.0f,
     val weightRisk: Float = -2.0f,
+    /**
+     * Once the user has mapped up to the chosen frontier, the frontier nearest it (within this
+     * distance) is chosen next, unless another scores at least [frontierContinuationMargin] more.
+     */
+    val frontierContinuationMeters: Float = 3f,
+    val frontierContinuationMargin: Float = 0.5f,
+    /**
+     * Weight of advice from outside the engine (see [com.navassist.navcore.semantic.AdviceDirection]):
+     * comparable to a sign, below what a located destination does. No adviser, no effect.
+     */
+    val weightAdvice: Float = 2.0f,
+    /** Advice fades to nothing this far either side of the suggested direction. */
+    val adviceHalfAngleDegrees: Float = 60f,
+    /** Advice older than this is ignored: the user has moved on from where it was given. */
+    val adviceMaxAgeMillis: Long = 20_000,
+    /** New advice releases a committed frontier it does not point at, when it points at another. */
+    val adviceReleasesCommitment: Boolean = true,
+    /** Advice pointing where no frontier lies turns the user to look that way, once per answer. */
+    val adviceTurnsToLook: Boolean = true,
     /** A frontier counts as reached within this distance. */
     val frontierReachedMeters: Float = 0.9f,
     /** Frontiers we failed to route to are blacklisted within this radius. */
     val frontierBlacklistRadiusMeters: Float = 0.8f,
+    /**
+     * A blacklisted area is given another chance after this long: the map around it has usually
+     * changed (a doorway seen properly, a sensor dropout recovered), and a permanent blacklist
+     * could erase the only way on.
+     */
+    val frontierBlacklistMillis: Long = 90_000,
+    /**
+     * The user's own position is only written off as exhausted once they have walked this far
+     * since the session began. Before that, "nothing to explore" means the map is not ready yet.
+     */
+    val minTravelBeforeDeadEndMeters: Float = 2.0f,
     /** Consecutive planning failures before a frontier is abandoned. */
     val frontierFailuresBeforeBlacklist: Int = 3,
     /** Minimum spacing between failed attempts counted against an exploration waypoint. */
@@ -283,6 +328,12 @@ data class NavigationConfig(
     val driftCorrectionDegrees: Float = 3f,
     /** Distance at which the final target counts as reached. */
     val arrivalRadiusMeters: Float = 1.0f,
+    /**
+     * When a located destination is not itself reachable (a sign over glass, a plate on a wall,
+     * unscanned floor), the engine heads for the nearest reachable spot within this distance of it
+     * and counts arrival there.
+     */
+    val targetApproachRadiusMeters: Float = 1.5f,
     /** Time spent continuously within [arrivalRadiusMeters] before ARRIVED is declared. */
     val arrivalStableMillis: Long = 600,
     /**
@@ -309,6 +360,15 @@ data class NavigationConfig(
      */
     val minScanMillis: Long = 10_000,
     /**
+     * Before that scan finishes, the user turns on the spot through this many degrees, so the map
+     * starts with every way out rather than only the view ahead. 0 = no turn. Off by default: on
+     * the benchmark it found destinations behind the start, but cost more elsewhere (90.5% -> 87.2%
+     * with the oracle over 20 seeds) - the extra ways out it maps compete with the one ahead.
+     */
+    val initialLookAroundDegrees: Float = 0f,
+    /** The turn may hold the scan past [minScanMillis] by at most this long. */
+    val initialLookAroundMaxExtraMillis: Long = 8_000,
+    /**
      * Scan time is credited while the latest depth image is at most this old.
      *
      * Depth usually updates more slowly than the camera, and the adapter drops frames that would
@@ -330,6 +390,40 @@ data class NavigationConfig(
     val semanticDirectionHalfAngleDegrees: Float = 55f,
     /** Observations below this confidence are discarded on arrival. */
     val semanticMinConfidence: Float = 0.3f,
+    /**
+     * Typical mounting height of the signs worth ranging without depth: a shop's name on the fascia
+     * over its entrance, a hanging sign. Real ones sit at about 3-5 m; the estimate's range error
+     * is proportional to how far off this is (0.5 m off at a 2.7 m rise is about 18%).
+     */
+    val heightRangingMountMeters: Float = 4.0f,
+    /** Readings flatter than this are not ranged: near horizontal, the range blows up. */
+    val heightRangingMinElevationDegrees: Float = 12f,
+    /** Nearer than this, depth should have placed it; farther, the estimate is too loose. */
+    val heightRangingMinRangeMeters: Float = 3.5f,
+    val heightRangingMaxRangeMeters: Float = 15f,
+    /**
+     * A facility's sign (a washroom's) placed higher than this above the floor hangs over the way
+     * to it rather than marking it: a hint, never the destination. Door signs sit at about 1.6 m,
+     * hanging ones at 2.5 m and up.
+     */
+    val facilitySignMaxHeightMeters: Float = 2.3f,
+    /**
+     * A destination plate read without depth is guessed this far along its bearing, and followed
+     * up (see SemanticHintStore.glimpse): for at most [glimpseMaxAgeMillis], until the user is
+     * within [glimpseReachedMeters] of the guess. A spent guess blocks new ones within
+     * [glimpseSpentRadiusMeters] for [glimpseMemoryMillis].
+     */
+    val glimpseRangeMeters: Float = 2.5f,
+    val glimpseMaxAgeMillis: Long = 15_000,
+    val glimpseReachedMeters: Float = 1.0f,
+    val glimpseSpentRadiusMeters: Float = 1.5f,
+    val glimpseMemoryMillis: Long = 60_000,
+
+    // ---------------------------------------------------------------- phone aim (see AimPolicy)
+    /** Looking for a shop: hold the camera this far above horizontal; null = the usual hold. */
+    val namedPlaceAimPitchDegrees: Float? = 10f,
+    /** Looking for a numbered room: sweep the phone this far either side while walking; 0 = never. */
+    val roomSearchSweepDegrees: Float = 0f,
 
     // ---------------------------------------------------------------- output throttling
     /** Minimum interval between snapshots pushed to JS, unless status/command changed. */

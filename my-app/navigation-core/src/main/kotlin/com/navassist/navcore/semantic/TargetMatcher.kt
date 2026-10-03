@@ -47,7 +47,8 @@ object TargetMatcher {
                     val normalized = normalizeLabel(room.label)
                     val numeric = numericPart(room.label)
                     normalized == target.normalizedLabel ||
-                        (numeric != null && target.number != null && numeric == target.number)
+                        (numeric != null && target.number != null && numeric == target.number) ||
+                        nameMatches(normalized, target)
                 }
             }
 
@@ -57,6 +58,34 @@ object TargetMatcher {
             NavigationTarget.Elevator -> observation is SemanticObservation.Elevator
             NavigationTarget.Explore -> false
         }
+
+    /**
+     * A named destination ("Pharmacy") read with one character wrong still matches: OCR misreads
+     * a letter far more often than it invents a different name. Only for names of five or more
+     * characters with no digits - a room number one digit off is a different room.
+     */
+    private fun nameMatches(read: String, target: NavigationTarget.Room): Boolean {
+        val wanted = target.normalizedLabel
+        if (target.number != null || wanted.length < 5) return false
+        return editDistanceAtMostOne(read, wanted)
+    }
+
+    private fun editDistanceAtMostOne(a: String, b: String): Boolean {
+        if (kotlin.math.abs(a.length - b.length) > 1) return false
+        var i = 0
+        var j = 0
+        var edits = 0
+        while (i < a.length && j < b.length) {
+            if (a[i] == b[j]) { i++; j++; continue }
+            if (++edits > 1) return false
+            when {
+                a.length > b.length -> i++
+                a.length < b.length -> j++
+                else -> { i++; j++ }
+            }
+        }
+        return edits + (a.length - i) + (b.length - j) <= 1
+    }
 
     /**
      * Relevance of a directional room-range sign to the target, in -1..1.

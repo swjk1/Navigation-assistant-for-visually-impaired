@@ -30,12 +30,19 @@ dependencies {
     // Live streaming to Foxglove (MIT). Small, pure Java, and also runs on Android.
     implementation("org.java-websocket:Java-WebSocket:1.6.0")
     implementation("org.slf4j:slf4j-nop:2.0.16")
+    // Claude, for the benchmark's LLM adviser (see advice/LlmClient.kt). Simulator only.
+    implementation("com.anthropic:anthropic-java:2.34.0")
     testImplementation(kotlin("test"))
 }
 
 application {
     mainClass.set("com.navassist.sim.MainKt")
     applicationDefaultJvmArgs = listOf("-Djava.awt.headless=true")
+}
+
+// SIM_XMX=3g caps the simulator's heap, for a machine short of memory.
+tasks.named<JavaExec>("run") {
+    System.getenv("SIM_XMX")?.let { maxHeapSize = it }
 }
 
 tasks.test {

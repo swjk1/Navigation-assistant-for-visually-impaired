@@ -121,6 +121,10 @@ export function validateAndSanitizeFrame(rawPayload, latencyMs) {
     floorDetected,
     immediateHazard,
     hazardDescription,
+    // The frame reports the vision service failing (timeout, quota), not the scene. Consumers of
+    // the public frame still see the hazard; the navigation flow must not stop a user whose depth
+    // pipeline is healthy just because the network is slow.
+    ...(raw.serviceDegraded ? { serviceDegraded: true } : {}),
   };
 }
 

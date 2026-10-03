@@ -16,13 +16,34 @@ data class TargetSighting(
     val confidence: Float,
     val observedAtMillis: Long,
     val label: String,
-)
+    /** Placed from one sightline's bearing and elevation, assuming a typical mounting height. */
+    val ranged: Boolean = false,
+    /** How far away it was measured from; depth error grows with range. */
+    val rangeMeters: Float = Float.MAX_VALUE,
+    /**
+     * Only its bearing is known - a plate read in passing, where depth had nothing - and this is a
+     * guess along it. Somewhere to go and look properly, never somewhere to arrive.
+     */
+    val glimpsed: Boolean = false,
+) {
+    /** Inferred rather than measured: any depth-placed sighting replaces it. */
+    val estimated: Boolean get() = ranged || glimpsed
+
+    /** How it was placed, for diagnostics. */
+    val source: String get() = when {
+        ranged -> "ranged"
+        glimpsed -> "glimpsed"
+        else -> "depth"
+    }
+}
 
 /** One stored observation together with where the user was standing when it arrived. */
 private data class StoredHint(
     val observation: SemanticObservation,
     val observerPose: Pose3D,
     val receivedAtMillis: Long,
+    /** Horizontal direction it was seen in, when known. */
+    val bearing: Vec2? = null,
 )
 
 /**
@@ -48,15 +69,94 @@ class SemanticHintStore(private val config: NavigationConfig) {
     var targetSighting: TargetSighting? = null
         private set
 
+    /** The latest advice from outside the engine, and when it arrived. */
+    private var advice: List<AdviceDirection> = emptyList()
+    private var adviceAtMillis = 0L
+
+    /** The strongest direction the current advice favours, or null when there is none or it is stale. */
+    fun strongestAdvice(nowMillis: Long): AdviceDirection? {
+        if (nowMillis - adviceAtMillis > config.adviceMaxAgeMillis) return null
+        return advice.filter { it.weight > 0f }.maxByOrNull { it.weight }
+    }
+
+    /** When the current advice arrived: identifies one answer. */
+    val adviceReceivedAtMillis: Long get() = adviceAtMillis
+
+    /** Replaces the current advice. Advice is never merged: each answer is a fresh judgement. */
+    fun setAdvice(directions: List<AdviceDirection>, nowMillis: Long) {
+        advice = directions
+        adviceAtMillis = nowMillis
+    }
+
+    /**
+     * How strongly the current advice favours a frontier, in -1..1: each suggested direction
+     * contributes its weight, tapering to nothing [NavigationConfig.adviceHalfAngleDegrees] away
+     * from it, as seen from where the advice was asked. Zero once the advice is stale.
+     */
+    fun adviceScoreFor(frontierCentroid: Vec2, nowMillis: Long): Float {
+        if (advice.isEmpty() || nowMillis - adviceAtMillis > config.adviceMaxAgeMillis) return 0f
+        val halfAngle = GeometryUtils.degreesToRadians(config.adviceHalfAngleDegrees)
+        var score = 0f
+        for (a in advice) {
+            val toFrontier = frontierCentroid - a.origin
+            if (toFrontier.lengthSquared() < 1e-4f) continue
+            val diff = abs(GeometryUtils.angleDifference(toFrontier.yawRadians(), a.direction.yawRadians()))
+            if (diff >= halfAngle) continue
+            score += a.weight * (1f - diff / halfAngle)
+        }
+        return GeometryUtils.clamp(score, -1f, 1f)
+    }
+
+    /** What has been read or detected recently, newest first, for an adviser. */
+    fun seenSigns(nowMillis: Long, limit: Int = 20): List<SeenSign> = hints.asReversed().asSequence().mapNotNull { hint ->
+        val o = hint.observation
+        val (kind, label, pointing) = when (o) {
+            is SemanticObservation.Room -> Triple("ROOM", o.label, null)
+            is SemanticObservation.RoomRange -> Triple("ROOM_RANGE", "${o.min}-${o.max}", o.direction)
+            is SemanticObservation.Exit -> Triple("EXIT", null, o.direction)
+            is SemanticObservation.Door -> Triple("DOOR", null, o.direction)
+            is SemanticObservation.Stairs -> Triple("STAIRS", null, null)
+            is SemanticObservation.Elevator -> Triple("ELEVATOR", null, null)
+            else -> return@mapNotNull null
+        }
+        SeenSign(
+            kind = kind, label = label, pointing = pointing,
+            position = o.worldPosition?.toVec2(),
+            observerPosition = hint.observerPose.position2D,
+            bearing = hint.bearing,
+            ageMillis = nowMillis - hint.receivedAtMillis,
+        )
+    }.take(limit).toList()
+
+    /** Glimpses that were followed up and came to nothing: where, and when. */
+    private val spentGlimpses = ArrayList<Pair<Vec2, Long>>()
+
     fun reset() {
         hints.clear()
         roomTrail.clear()
+        advice = emptyList()
         currentFloorId = null
         targetSighting = null
+        spentGlimpses.clear()
     }
 
-    /** Called when the destination changes: an old sighting must not steer a new search. */
-    fun clearTargetSighting() {
+    /**
+     * Drops the sighting: the destination changed ([forgetGlimpses], so an old search does not
+     * steer a new one), or it could not be reached.
+     */
+    fun clearTargetSighting(forgetGlimpses: Boolean = false) {
+        targetSighting = null
+        if (forgetGlimpses) spentGlimpses.clear()
+    }
+
+    /**
+     * The user went to look where a glimpse pointed and nothing better turned up: drop it, and do
+     * not send them back there on the next reading of the same plate from the same corridor.
+     */
+    fun spendGlimpse(nowMillis: Long) {
+        val sighting = targetSighting ?: return
+        if (!sighting.glimpsed) return
+        spentGlimpses += sighting.worldPosition.toVec2() to nowMillis
         targetSighting = null
     }
 
@@ -65,14 +165,20 @@ class SemanticHintStore(private val config: NavigationConfig) {
     /**
      * @param observerPose where the user stood when the observation was made. Directional hints
      *        ("rooms 300-349 to the right") are meaningless without it.
+     * @param elevations per observation, tangent of the angle above horizontal it was seen at.
+     * @param cameraHeightMeters the camera's height above the floor then; null if the floor is not
+     *        known yet.
      */
     fun submit(
         observations: List<SemanticObservation>,
         nowMillis: Long,
         observerPose: Pose3D,
         target: NavigationTarget,
+        bearings: List<Vec2?> = emptyList(),
+        elevations: List<Float?> = emptyList(),
+        cameraHeightMeters: Float? = null,
     ) {
-        for (observation in observations) {
+        for ((index, observation) in observations.withIndex()) {
             if (observation.confidence < config.semanticMinConfidence) continue
 
             if (observation is SemanticObservation.Floor) {
@@ -80,7 +186,7 @@ class SemanticHintStore(private val config: NavigationConfig) {
                 continue
             }
 
-            hints.add(StoredHint(observation, observerPose, nowMillis))
+            hints.add(StoredHint(observation, observerPose, nowMillis, bearings.getOrNull(index)))
 
             if (observation is SemanticObservation.Room) {
                 TargetMatcher.numericPart(observation.label)?.let { number ->
@@ -92,9 +198,30 @@ class SemanticHintStore(private val config: NavigationConfig) {
             // A localized sighting of the destination is what flips EXPLORING -> NAVIGATING.
             if (TargetMatcher.matches(observation, target)) {
                 val world = observation.worldPosition
-                if (world != null) {
+                val bearing = bearings.getOrNull(index)
+                val facility = isFacility(target)
+                // A facility's own sign is at door height; one hung higher is a pointer to it
+                // ("washrooms this way" over a corridor mouth), which steers but is not there.
+                val pointer = facility && world != null && cameraHeightMeters != null &&
+                    world.y - (observerPose.position3D.y - cameraHeightMeters) > config.facilitySignMaxHeightMeters
+                // Without depth, only a shop's name is placed, by ranging on its fascia's usual
+                // height. Crossing sightlines was tried and dropped: from a walk past, they cross
+                // at shallow angles, and put the destination metres off nine times in ten.
+                if (world == null && bearing != null && !facility) {
+                    if (isNamedPlace(target)) {
+                        rangeByHeight(bearing, elevations.getOrNull(index), cameraHeightMeters, observerPose, observation.confidence, nowMillis, target)
+                    } else if ((target as? NavigationTarget.Room)?.number != null) {
+                        // A numbered plate: small, so a reading means it is near. An exit or
+                        // lift sign is recognised from far off, and a guess along it is not.
+                        glimpse(bearing, observerPose, observation.confidence, nowMillis, target)
+                    }
+                }
+                if (world != null && !pointer) {
                     val existing = targetSighting
-                    if (existing == null || observation.confidence >= existing.confidence ||
+                    // A measurement from nearer is the better one: depth error grows with range,
+                    // and a far reading is the one that lands on something in front.
+                    val range = world.toVec2().distanceTo(observerPose.position2D)
+                    if (existing == null || existing.estimated || range <= existing.rangeMeters + NEARER_SLACK_METERS ||
                         nowMillis - existing.observedAtMillis > config.semanticMaxAgeMillis / 2
                     ) {
                         targetSighting = TargetSighting(
@@ -102,6 +229,7 @@ class SemanticHintStore(private val config: NavigationConfig) {
                             confidence = observation.confidence,
                             observedAtMillis = nowMillis,
                             label = target.description,
+                            rangeMeters = range,
                         )
                     }
                 }
@@ -110,12 +238,83 @@ class SemanticHintStore(private val config: NavigationConfig) {
         prune(nowMillis)
     }
 
+    /** Found by a generic pictogram, not a name or number: a washroom. */
+    private fun isFacility(target: NavigationTarget): Boolean =
+        target is NavigationTarget.Room && target.normalizedLabel == "WASHROOM"
+
+    /** A place known by name, like a shop, whose sign is on a fascia over its entrance. */
+    private fun isNamedPlace(target: NavigationTarget): Boolean =
+        target is NavigationTarget.Room && target.number == null && !isFacility(target)
+
+    /**
+     * A plate that names the destination, read but not placed: it is small, so legible only a
+     * few metres off, and passing it along a corridor the one legible moment is at a grazing
+     * angle to its wall, where depth returns nothing. Guess it [NavigationConfig.glimpseRangeMeters]
+     * along the bearing, so the engine turns the user towards it and walks them up - facing the
+     * wall, depth places the next reading. Only while nothing better is known.
+     */
+    private fun glimpse(bearing: Vec2, observerPose: Pose3D, confidence: Float, nowMillis: Long, target: NavigationTarget) {
+        val existing = targetSighting
+        if (existing != null && !existing.glimpsed) return
+        spentGlimpses.removeAll { nowMillis - it.second > config.glimpseMemoryMillis }
+        val guess = observerPose.position2D + bearing * config.glimpseRangeMeters
+        if (spentGlimpses.any { it.first.distanceTo(guess) < config.glimpseSpentRadiusMeters }) return
+        targetSighting = TargetSighting(
+            worldPosition = Vec3(guess.x, observerPose.position3D.y, guess.z),
+            confidence = confidence * RANGED_CONFIDENCE,
+            observedAtMillis = nowMillis,
+            label = target.description,
+            glimpsed = true,
+        )
+    }
+
+    /**
+     * Places the destination from ONE sighting that depth could not reach, using how steeply the
+     * camera looked up at it. Shop names and hanging signs are mounted high: seen from the
+     * concourse they are beyond depth range, walking up to them they leave the top of the frame, so
+     * a pass usually yields one reading. Their
+     * mounting height is fairly uniform, and with it the elevation angle gives the range:
+     * `(mount height - camera height) / tan(elevation)`.
+     *
+     * An estimate, and the weakest kind: only used while nothing better exists, replaced by any
+     * depth measurement, refreshed by each new reading. Near-horizontal readings
+     * are refused, since a small angle error there is a large range error, and so are readings
+     * that would place the sign closer than depth should have reached.
+     */
+    private fun rangeByHeight(
+        bearing: Vec2,
+        elevationTan: Float?,
+        cameraHeightMeters: Float?,
+        observerPose: Pose3D,
+        confidence: Float,
+        nowMillis: Long,
+        target: NavigationTarget,
+    ) {
+        if (elevationTan == null || cameraHeightMeters == null) return
+        val existing = targetSighting
+        if (existing != null && !existing.ranged) return
+        val minTan = kotlin.math.tan(GeometryUtils.degreesToRadians(config.heightRangingMinElevationDegrees))
+        if (elevationTan < minTan) return
+        val range = (config.heightRangingMountMeters - cameraHeightMeters) / elevationTan
+        if (range < config.heightRangingMinRangeMeters || range > config.heightRangingMaxRangeMeters) return
+        val origin = observerPose.position2D
+        targetSighting = TargetSighting(
+            worldPosition = Vec3(origin.x + bearing.x * range, observerPose.position3D.y, origin.z + bearing.z * range),
+            confidence = confidence * RANGED_CONFIDENCE,
+            observedAtMillis = nowMillis,
+            label = target.description,
+            ranged = true,
+        )
+    }
+
     fun prune(nowMillis: Long) {
         val maxAge = config.semanticMaxAgeMillis
         hints.removeAll { nowMillis - it.receivedAtMillis > maxAge }
         targetSighting?.let {
             // A sighting survives longer than a directional hint: it is a concrete destination.
             if (nowMillis - it.observedAtMillis > maxAge * 4) targetSighting = null
+            // A glimpse is worth one look, not a long walk.
+            if (it.glimpsed && nowMillis - it.observedAtMillis > config.glimpseMaxAgeMillis) spendGlimpse(nowMillis)
         }
     }
 
@@ -259,6 +458,12 @@ class SemanticHintStore(private val config: NavigationConfig) {
 
     private companion object {
         const val MAX_ROOM_TRAIL = 12
+
+        /** One reading and an assumed height: ranks below any depth-placed sighting. */
+        const val RANGED_CONFIDENCE = 0.5f
         const val MAX_GRADIENT_SCORE = 0.5f
+
+        /** A new depth sighting replaces one measured from at most this much nearer. */
+        const val NEARER_SLACK_METERS = 1f
     }
 }

@@ -71,7 +71,10 @@ orange, glass translucent, signs as coloured plates), the user as a blue figure 
 where the phone points, a trail of discs coloured by instruction (green straight, blue turning,
 yellow scan, red stop), and the engine's occupancy map drawn on the floor as it grew (green
 believed free, red believed occupied). The top-left label is the time, engine status and the
-instruction being spoken.
+instruction being spoken. The overlay on the 3D view is the phone's camera: what it sees as the user
+walks, turns and scans (drag its corner to resize it, double-click it for its own window). The
+engine's map and the trail show up in it too, as an AR-style overlay; the depth the engine actually
+got, with sensor noise, is `/camera/depth` in Foxglove.
 
 Webots is only the viewer: everything ran in the simulator, and a supervisor controller replays the
 recording. Use Webots' play, fast-forward and pause buttons; reset the world to watch again. The
@@ -81,19 +84,37 @@ controller also writes `controllers/sim_replay/replay.log`.
 
 | Modelled | Not modelled |
 |---|---|
-| Axis-aligned walls, furniture, doors, glass, dark surfaces, floor openings | Curved or diagonal geometry, stairs as steps |
+| Axis-aligned walls, furniture, doors, glass, dark surfaces, floor openings | Curved or diagonal geometry |
+| Multi-storey buildings: stairs as steps (up is in the way, down is a drop), escalators, atriums | Climbing stairs or riding a lift: a run stays on one floor |
 | Portrait phone at chest height, pitch, walking sway | The phone rolling, or being put in a pocket |
 | Depth: z-depth in mm, sensor orientation, range-squared noise, dropouts, grazing-angle loss, flying pixels at edges, glass seen through, 15 Hz one frame late | ARCore's own depth smoothing and temporal filtering; noise calibrated on a real device |
 | Tracking loss windows | Pose drift, relocalisation jumps |
 | Plane tracking: a surface appears once enough of it is seen, extent grows | Plane merging, vertical planes |
-| Perception: signs in view, occlusion, apparent size, the shipped model's recall per class, OCR misreads, 0.6–2.5 s latency, capture timestamps | Pixels. No image is rendered; YOLO and OCR are not run |
-| A person: reaction time, turn rate, speed, scanning habits, collisions, falls | Hearing the wrong instruction, or ignoring one |
+| Perception: signs in view, occlusion, apparent size, the shipped model's recall per class, OCR misreads, a capture every 1 s (0.3–0.8 s on device; every 4th may wait 0.6–2.5 s on Gemini), capture timestamps | Pixels. No image is rendered; YOLO and OCR are not run |
+| A person: reaction time, turn rate, speed, scanning habits, holding the phone as asked (tilt, point, sweep), collisions, falls | Hearing the wrong instruction, or ignoring one |
 
 The perception stand-in re-implements the label mapping of `src/perception/perceptionToSemantic.ts`
 (TypeScript can't run here). Keep the two in step.
 
 The noise parameters in `DepthNoise` are plausible, not measured. Before trusting absolute numbers,
 record a real session and compare depth statistics.
+
+## Large buildings
+
+Two multi-storey buildings sit beside the single-feature scenes:
+
+- **School** (`world/School.kt`, 3 floors): a 60 m locker-lined corridor of numbered classrooms
+  (1xx-3xx), a wing, a switchback stairwell at each end, a lift niche, washrooms, room-range signs
+  with arrows; an entrance lobby on floor 1, EXIT signs on the stairwells above it.
+- **Mall** (`world/Mall.kt`, 2 levels): an 84 m concourse between glass-fronted shops with shelving
+  and name signs, an atrium behind a glass balustrade, escalators, kiosks, a food court, and a
+  services corridor with lifts and washrooms.
+
+`School.build(floor)` / `Mall.build(level)` put the chosen floor at height 0, so everything that
+assumes one floor still holds; the others are real geometry above and below it (visible through
+stair openings and the atrium, drawn see-through in Webots and Foxglove). Draw a new one with
+`SceneBuilder.storey(elevation) { ... }` and `stairwell(...)`. Their scenarios are prefixed
+`school-` and `mall-`; most are `KNOWN_LIMITATION`s, and their notes say what the runs showed.
 
 ## Adding a scenario
 

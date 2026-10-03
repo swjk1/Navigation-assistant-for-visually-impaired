@@ -72,6 +72,8 @@ data class Sign(
     val normalZ: Float,
     val widthMeters: Float,
     val heightMeters: Float,
+    /** Hung from the ceiling to point the way, not mounted where the thing it names is. */
+    val hanging: Boolean = false,
 )
 
 /** A ray hit: distance along the (unnormalised) ray direction, what was hit, and its normal. */
@@ -87,19 +89,30 @@ class Scene(
     val floors: List<Box> = boxes.filter { it.isFloor }
 
     /**
+     * Underside of the lowest floor slab overhead - where the storey above begins. Viewers draw
+     * everything from there up see-through, so the storey being walked stays visible.
+     */
+    val ceilingHeight: Float = floors.filter { it.maxY > BODY_HEIGHT }.minOfOrNull { it.minY } ?: Float.POSITIVE_INFINITY
+
+    /** True for geometry on a storey above the one being walked. */
+    fun isAbove(box: Box): Boolean = box.minY >= ceilingHeight - 0.01f
+
+    /**
      * Nearest hit along origin + t * direction for t in (0, tMax].
      *
      * @param skipGlass when true, glass boxes are transparent - how depth usually sees them.
+     * @param candidates the boxes to test; [near] narrows them down for many rays from one point.
      */
     fun raycast(
         ox: Float, oy: Float, oz: Float,
         dx: Float, dy: Float, dz: Float,
         tMax: Float,
         skipGlass: Boolean = false,
+        candidates: List<Box> = boxes,
     ): Hit? {
         var best: Hit? = null
         var bestT = tMax
-        for (box in boxes) {
+        for (box in candidates) {
             if (skipGlass && box.material == Material.GLASS) continue
             var tNear = 0f
             var tFar = bestT
@@ -133,6 +146,21 @@ class Scene(
             )
         }
         return best
+    }
+
+    /**
+     * The boxes within [radius] of world point (x, y, z), in scene order - so a ray from that point
+     * no longer than [radius] hits exactly what it would against every box. Large buildings have
+     * hundreds of boxes; a depth frame only needs the few dozen in sensor range.
+     */
+    fun near(x: Float, y: Float, z: Float, radius: Float): List<Box> {
+        val r2 = radius * radius
+        return boxes.filter { box ->
+            val dx = max(max(box.minX - x, 0f), x - box.maxX)
+            val dy = max(max(box.minY - y, 0f), y - box.maxY)
+            val dz = max(max(box.minZ - z, 0f), z - box.maxZ)
+            dx * dx + dy * dy + dz * dz <= r2
+        }
     }
 
     /** Distance from a floor-plan point (world x/z) to the nearest obstacle footprint. */

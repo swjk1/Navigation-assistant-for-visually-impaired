@@ -140,8 +140,13 @@ class SensorFrameAssembler(
     fun pinDepth(timestampNanos: Long) = snapshots.pin(timestampNanos)
 
     /** See [DepthSnapshotStore.resolve]. Any thread. */
-    fun resolve(normalizedX: Float?, normalizedY: Float?, timestampNanos: Long?): DepthSnapshotStore.Resolution =
-        snapshots.resolve(normalizedX, normalizedY, timestampNanos)
+    fun resolve(
+        normalizedX: Float?,
+        normalizedY: Float?,
+        timestampNanos: Long?,
+        boxWidth: Float? = null,
+        boxHeight: Float? = null,
+    ): DepthSnapshotStore.Resolution = snapshots.resolve(normalizedX, normalizedY, timestampNanos, boxWidth, boxHeight)
 
     /**
      * Floor height from horizontal upward-facing planes, in canonical Y, with a confidence.

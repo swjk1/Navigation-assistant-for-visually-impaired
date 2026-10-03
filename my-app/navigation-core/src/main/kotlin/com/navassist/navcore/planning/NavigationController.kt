@@ -6,6 +6,7 @@ import com.navassist.navcore.geometry.GridCoordinate
 import com.navassist.navcore.geometry.Pose3D
 import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.mapping.InflatedGrid
+import com.navassist.navcore.mapping.OccupancyGrid
 import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.StopReason
 import kotlin.math.abs
@@ -91,6 +92,8 @@ class NavigationController(private val config: NavigationConfig) {
         path: List<Vec2>,
         inflated: InflatedGrid,
         nowMillis: Long,
+        /** The raw grid, for which floor was seen close up; without it, any free floor will do. */
+        grid: OccupancyGrid? = null,
     ): ControllerOutput {
         this.nowMillis = nowMillis
         trackYawRate(pose.yawRadians, nowMillis)
@@ -116,7 +119,7 @@ class NavigationController(private val config: NavigationConfig) {
         // Something solid ahead is a hazard (STOP). Floor that has simply never been seen is not:
         // the user is asked to look (SCAN), because standing still would never reveal it.
         val ahead = if (desired == NavigationCommand.STRAIGHT) {
-            forwardState(pose, inflated, remainingPathMeters(pose.position2D, path))
+            forwardState(pose, inflated, remainingPathMeters(pose.position2D, path), grid)
         } else {
             Ahead.CLEAR
         }
@@ -157,10 +160,14 @@ class NavigationController(private val config: NavigationConfig) {
             // straight in between rather than a flip to the opposite turn.
             val lead = config.turnLeadMillis / 1000f
             val predicted = errorDegrees - GeometryUtils.radiansToDegrees(yawRate) * lead
+            // Only past the path on the NEAR side: with the waypoint behind, the error wraps from
+            // +179 to -179 as the user turns, which is not an overshoot - it is still behind them.
+            // Taking it for one ended the turn, the drift correction turned them back the other
+            // way, and a user by a wall stood flipping between "left" and "right" for minutes.
             val ended = if (emittedCommand == NavigationCommand.TURN_LEFT) {
-                predicted >= -config.turnReleaseDegrees
+                predicted >= -config.turnReleaseDegrees && predicted < OVERSHOOT_LIMIT_DEGREES
             } else {
-                predicted <= config.turnReleaseDegrees
+                predicted <= config.turnReleaseDegrees && predicted > -OVERSHOOT_LIMIT_DEGREES
             }
             return if (ended) NavigationCommand.STRAIGHT else emittedCommand
         }
@@ -283,7 +290,7 @@ class NavigationController(private val config: NavigationConfig) {
      * where unknown space begins, and unknown can be a drop-off. (Ignoring it there walked a
      * simulated user off the end of a floor.)
      */
-    private fun forwardState(pose: Pose3D, inflated: InflatedGrid, remainingMeters: Float): Ahead {
+    private fun forwardState(pose: Pose3D, inflated: InflatedGrid, remainingMeters: Float, grid: OccupancyGrid?): Ahead {
         val forward = pose.forward2D
         val steps = (config.forwardSafetyDistanceMeters / inflated.resolution).toInt().coerceAtLeast(1)
         val start = inflated.worldToGrid(pose.position2D)
@@ -293,7 +300,10 @@ class NavigationController(private val config: NavigationConfig) {
             val probe = pose.position2D + forward * distance
             val cell = inflated.worldToGrid(probe)
             if (cell == start) continue
-            if (inflated.isUnknown(cell)) {
+            // Floor only ever seen from afar is not yet known to be floor: at 5 m depth noise is
+            // bigger than a step down, and a phone held high for a shop sign never looks close.
+            // The top of a descending escalator read as floor that way, and a user walked onto it.
+            if (inflated.isUnknown(cell) || (grid != null && !grid.isNearSeen(probe))) {
                 unknown = true
                 continue
             }
@@ -309,6 +319,9 @@ class NavigationController(private val config: NavigationConfig) {
     private companion object {
         /** Per-frame blend for the measured turn rate: settles in about a quarter second at 30 fps. */
         const val YAW_RATE_SMOOTHING = 0.25f
+
+        /** Beyond this the other side of the path is not an overshoot but the error wrapping round. */
+        const val OVERSHOOT_LIMIT_DEGREES = 90f
 
         /** ~200 degrees a second: a brisk turn on the spot. */
         const val MAX_HUMAN_TURN_RATE = 3.5f

@@ -63,6 +63,20 @@ export type StopReason =
   | 'NOT_STARTED'
   | 'PAUSED';
 
+/**
+ * How to hold the phone, on top of the walking command, so the camera sees what the destination's
+ * sign needs seen (a shop's name high over its door, a room plate on a side wall). Absent or null
+ * means the usual hold: upright, pointing ahead, tilted a little down at the floor.
+ */
+export type PhoneAim = {
+  /** Angle above horizontal to hold the camera at (negative = down); null for the usual tilt. */
+  pitchDegrees?: number | null;
+  /** Where to point it relative to the way the user faces; positive = right. */
+  yawDegrees: number;
+  /** When above zero, sweep slowly left and right this far while walking. */
+  sweepDegrees: number;
+};
+
 export type NavigationDebugInfo = {
   freeCells: number;
   occupiedCells: number;
@@ -103,6 +117,8 @@ export type NavigationSnapshot = {
   mapConfidence: number;
   selectedFrontierId?: string | null;
   target?: string | null;
+  /** How to hold the phone; speak it when it changes. */
+  aim?: PhoneAim | null;
   debug?: NavigationDebugInfo | null;
 };
 

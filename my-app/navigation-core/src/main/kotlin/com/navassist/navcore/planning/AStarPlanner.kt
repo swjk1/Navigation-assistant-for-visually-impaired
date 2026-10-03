@@ -49,6 +49,9 @@ class AStarPlanner(private val config: NavigationConfig) {
      *        ONLY situation in which the engine plans into unknown space, and it exists so that an
      *        exploration goal that sits exactly on a FREE/UNKNOWN frontier stays reachable.
      *        Ordinary navigation to a known target always passes false.
+     * @param goalSearchCells when the goal cell itself is not passable, how far out to look for
+     *        the nearest one that is (the nearest to [start] within the first ring that has any).
+     *        Null keeps the default, just past the inflation halo.
      * @return the cell path from start to goal inclusive, or null when no route exists.
      */
     fun plan(
@@ -56,12 +59,13 @@ class AStarPlanner(private val config: NavigationConfig) {
         start: GridCoordinate,
         goal: GridCoordinate,
         allowUnknownNearGoal: Boolean = false,
+        goalSearchCells: Int? = null,
     ): List<GridCoordinate>? {
         val n = grid.cells
         if (!grid.inBounds(start)) return null
         ensureCapacity(n)
 
-        val resolvedGoal = resolveGoal(grid, start, goal, allowUnknownNearGoal) ?: return null
+        val resolvedGoal = resolveGoal(grid, start, goal, allowUnknownNearGoal, goalSearchCells) ?: return null
         val startIndex = start.gz * n + start.gx
         val goalIndex = resolvedGoal.gz * n + resolvedGoal.gx
         if (startIndex == goalIndex) return listOf(start)
@@ -161,23 +165,28 @@ class AStarPlanner(private val config: NavigationConfig) {
         start: GridCoordinate,
         goal: GridCoordinate,
         allowUnknownNearGoal: Boolean,
+        goalSearchCells: Int?,
     ): GridCoordinate? {
         val budget = if (allowUnknownNearGoal) config.allowUnknownNearGoalCells else 0
         if (isPassable(grid, goal.gx, goal.gz, start, goal, budget)) return goal
-        val maxRadius = max(2, config.inflationRadiusCells + 2)
+        val maxRadius = goalSearchCells ?: max(2, config.inflationRadiusCells + 2)
+        val nearestToStart = goalSearchCells != null
         for (radius in 1..maxRadius) {
             var best: GridCoordinate? = null
-            for (dz in -radius..radius) {
+            var bestDistance = Int.MAX_VALUE
+            ring@ for (dz in -radius..radius) {
                 for (dx in -radius..radius) {
                     if (max(abs(dx), abs(dz)) != radius) continue
                     val gx = goal.gx + dx
                     val gz = goal.gz + dz
-                    if (isPassable(grid, gx, gz, start, goal, budget)) {
+                    if (!isPassable(grid, gx, gz, start, goal, budget)) continue
+                    val distance = (gx - start.gx) * (gx - start.gx) + (gz - start.gz) * (gz - start.gz)
+                    if (distance < bestDistance) {
                         best = GridCoordinate(gx, gz)
-                        break
+                        bestDistance = distance
+                        if (!nearestToStart) break@ring
                     }
                 }
-                if (best != null) break
             }
             if (best != null) return best
         }

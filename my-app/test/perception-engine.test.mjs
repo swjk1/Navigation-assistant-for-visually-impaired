@@ -111,6 +111,7 @@ describe('buildScanTimeoutFrame', () => {
     assert.equal(frame.immediateHazard, true);
     assert.ok(frame.hazardDescription, 'must carry a speakable explanation');
     assert.equal(frame.floorDetected, false);
+    assert.equal(frame.serviceDegraded, true, 'marked as a service failure, not a scene hazard');
   });
 
   it('carries the measured latency through', () => {

@@ -107,28 +107,84 @@ class FrontierDetector(private val config: NavigationConfig) {
 
             if (count < config.minFrontierCells) continue
 
-            val centroidX = (sumX.toDouble() / count).toInt()
-            val centroidZ = (sumZ.toDouble() / count).toInt()
-            val centroidCell = inflated?.let { openMemberNearest(it, n, count, centroidX, centroidZ) }
-                ?: nearestFrontierCell(n, centroidX, centroidZ)
-            val centroidWorld = grid.gridToWorld(centroidCell)
-            frontiers.add(
-                Frontier(
-                    id = "F${idCounter++}",
-                    centroid = centroidWorld,
-                    centroidCell = centroidCell,
-                    cellCount = count,
-                    estimatedInformationGain = informationGain(grid, centroidCell),
-                ),
-            )
+            for ((from, size) in segments(n, count, grid.resolution)) {
+                var segX = 0L
+                var segZ = 0L
+                for (k in from until from + size) {
+                    segX += members[k] % n
+                    segZ += members[k] / n
+                }
+                val centroidX = (segX.toDouble() / size).toInt()
+                val centroidZ = (segZ.toDouble() / size).toInt()
+                val centroidCell = inflated?.let { openMemberNearest(it, n, from, size, centroidX, centroidZ) }
+                    ?: nearestMember(n, from, size, centroidX, centroidZ)
+                frontiers.add(
+                    Frontier(
+                        id = "F${idCounter++}",
+                        centroid = grid.gridToWorld(centroidCell),
+                        centroidCell = centroidCell,
+                        cellCount = size,
+                        estimatedInformationGain = informationGain(grid, centroidCell),
+                    ),
+                )
+            }
         }
         return frontiers
     }
 
-    private fun openMemberNearest(inflated: InflatedGrid, n: Int, count: Int, gx: Int, gz: Int): GridCoordinate? {
+    /**
+     * Splits the cluster in members[0, count) into pieces no longer than
+     * [NavigationConfig.frontierSegmentMeters], reordering [members] so each piece is contiguous.
+     * Returns (start, size) of every piece big enough to keep. A short cluster is one piece.
+     *
+     * Pieces are square buckets of the cluster's bounding box: cheap, deterministic, and enough to
+     * turn one arc round the user into waypoints spread along it.
+     */
+    private fun segments(n: Int, count: Int, resolution: Float): List<Pair<Int, Int>> {
+        var minX = Int.MAX_VALUE; var minZ = Int.MAX_VALUE; var maxX = Int.MIN_VALUE; var maxZ = Int.MIN_VALUE
+        for (k in 0 until count) {
+            val x = members[k] % n
+            val z = members[k] / n
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (z < minZ) minZ = z
+            if (z > maxZ) maxZ = z
+        }
+        val side = kotlin.math.max(1, (config.frontierSegmentMeters / resolution).toInt())
+        if (maxX - minX < side && maxZ - minZ < side) return listOf(0 to count)
+        val across = (maxX - minX) / side + 1
+        fun bucket(cell: Int) = ((cell / n - minZ) / side) * across + (cell % n - minX) / side
+        val sorted = (0 until count).map { members[it] }.sortedWith(compareBy({ bucket(it) }, { it }))
+        val pieces = ArrayList<Pair<Int, Int>>()
+        var start = 0
+        for (k in sorted.indices) {
+            members[k] = sorted[k]
+            val last = k == sorted.lastIndex || bucket(sorted[k + 1]) != bucket(sorted[k])
+            if (last) {
+                val size = k + 1 - start
+                if (size >= config.minFrontierCells) pieces += start to size
+                start = k + 1
+            }
+        }
+        return pieces
+    }
+
+    private fun nearestMember(n: Int, from: Int, size: Int, gx: Int, gz: Int): GridCoordinate {
+        var best = members[from]
+        var bestDistance = Int.MAX_VALUE
+        for (k in from until from + size) {
+            val x = members[k] % n
+            val z = members[k] / n
+            val d = (x - gx) * (x - gx) + (z - gz) * (z - gz)
+            if (d < bestDistance) { bestDistance = d; best = members[k] }
+        }
+        return GridCoordinate(best % n, best / n)
+    }
+
+    private fun openMemberNearest(inflated: InflatedGrid, n: Int, from: Int, size: Int, gx: Int, gz: Int): GridCoordinate? {
         var best = -1
         var bestDistance = Int.MAX_VALUE
-        for (k in 0 until count) {
+        for (k in from until from + size) {
             val cell = members[k]
             val x = cell % n
             val z = cell / n
@@ -147,30 +203,6 @@ class FrontierDetector(private val config: NavigationConfig) {
             grid.stateAt(gx - 1, gz) == CellState.UNKNOWN ||
             grid.stateAt(gx, gz + 1) == CellState.UNKNOWN ||
             grid.stateAt(gx, gz - 1) == CellState.UNKNOWN
-
-    /**
-     * The arithmetic centroid of a curved cluster can land off the cluster itself (e.g. an
-     * L-shaped opening), which would hand the planner a goal inside a wall. Snap back to the
-     * closest actual frontier cell.
-     */
-    private fun nearestFrontierCell(n: Int, gx: Int, gz: Int): GridCoordinate {
-        if (gx in 0 until n && gz in 0 until n && isFrontier[gz * n + gx]) {
-            return GridCoordinate(gx, gz)
-        }
-        for (radius in 1..n) {
-            for (dz in -radius..radius) {
-                for (dx in -radius..radius) {
-                    if (kotlin.math.max(kotlin.math.abs(dx), kotlin.math.abs(dz)) != radius) continue
-                    val nx = gx + dx
-                    val nz = gz + dz
-                    if (nx in 0 until n && nz in 0 until n && isFrontier[nz * n + nx]) {
-                        return GridCoordinate(nx, nz)
-                    }
-                }
-            }
-        }
-        return GridCoordinate(gx, gz)
-    }
 
     /** Fraction of cells around the frontier that are still unknown, normalised to 0..1. */
     private fun informationGain(grid: OccupancyGrid, cell: GridCoordinate): Float {

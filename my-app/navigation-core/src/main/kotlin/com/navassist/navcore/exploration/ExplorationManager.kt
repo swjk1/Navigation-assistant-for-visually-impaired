@@ -38,7 +38,7 @@ class ExplorationManager(
     private val detector: FrontierDetector = FrontierDetector(config),
     private val scorer: FrontierScorer = FrontierScorer(config),
 ) {
-    private class Blacklisted(val position: Vec2, var failures: Int)
+    private class Blacklisted(val position: Vec2, var failures: Int, var sinceMillis: Long)
 
     private val blacklist = ArrayList<Blacklisted>()
 
@@ -52,6 +52,11 @@ class ExplorationManager(
 
     var selected: Frontier? = null
         private set
+
+    /** Where a frontier just mapped up to was, so the next choice can follow on from it. */
+    private var continuingFrom: Vec2? = null
+
+    private var clockMillis: Long = 0
 
     fun reset() {
         blacklist.clear()
@@ -79,6 +84,8 @@ class ExplorationManager(
         topology: TopologicalMap,
         nowMillis: Long,
     ): ExplorationResult {
+        clockMillis = nowMillis
+        blacklist.removeAll { nowMillis - it.sinceMillis >= config.frontierBlacklistMillis }
         val detected = detector.detect(grid, inflated).filterNot { isBlacklisted(it.centroid) }
         val scored = scorer.score(detected, userPose, target, semantics, topology, inflated, nowMillis)
         frontiers = scored
@@ -105,19 +112,51 @@ class ExplorationManager(
                 selected = previous.copy(centroidCell = cell, distanceMeters = distance)
                 return ExplorationResult(scored, selected, exhausted = false)
             }
-            if (blocked || stalled) blacklistArea(previous.centroid)
+            if (blocked || stalled) blacklistArea(previous.centroid, nowMillis)
             clearSelection()
+            // Mapped up to, not failed: the way on is usually the frontier that has receded from
+            // it - down the same corridor. Keep following that unless something is clearly
+            // better. Re-ranking from scratch turned a user round in a straight corridor for a
+            // sliver of floor behind the start, when the corridor's frontier slid 0.2 m towards a
+            // wall and picked up a risk penalty.
+            if (explored || reached) continuingFrom = previous.centroid
         }
 
-        val choice = scored.firstOrNull {
+        val candidates = scored.filter {
             it.distanceMeters > config.frontierReachedMeters &&
                 !isBlacklisted(it.centroid) && !inflated.isBlocked(inflated.worldToGrid(it.centroid))
+        }
+        val best = candidates.firstOrNull()
+        val continuation = continuingFrom?.let { from ->
+            candidates.filter { it.centroid.distanceTo(from) <= config.frontierContinuationMeters }
+                .minByOrNull { it.centroid.distanceTo(from) }
+        }
+        continuingFrom = null
+        val choice = if (best != null && continuation != null && best.score - continuation.score < config.frontierContinuationMargin) {
+            continuation
+        } else {
+            best
         }
         selectedCentroid = choice?.centroid
         selected = choice
         lastProgressMillis = nowMillis
         bestDistanceMeters = choice?.distanceMeters ?: Float.POSITIVE_INFINITY
         return ExplorationResult(scored, choice, exhausted = choice == null)
+    }
+
+    /**
+     * Frontiers that lead towards a known [destination] the local map has no route to yet - it
+     * lies beyond what the map has seen, or the map has scrolled past it - best first: nearest the
+     * destination, then nearest the user. Only ones nearer the destination than the user is.
+     */
+    fun frontiersToward(grid: OccupancyGrid, inflated: InflatedGrid, from: Vec2, destination: Vec2): List<Frontier> {
+        val limit = from.distanceTo(destination)
+        return detector.detect(grid, inflated)
+            .filter {
+                !isBlacklisted(it.centroid) && !inflated.isBlocked(inflated.worldToGrid(it.centroid)) &&
+                    it.centroid.distanceTo(destination) < limit
+            }
+            .sortedBy { it.centroid.distanceTo(destination) + 0.5f * it.centroid.distanceTo(from) }
     }
 
     // ------------------------------------------------------------------ failure handling
@@ -138,8 +177,9 @@ class ExplorationManager(
         }
         if (existing != null) {
             existing.failures++
+            existing.sinceMillis = nowMillis
         } else {
-            blacklist.add(Blacklisted(centroid, 1))
+            blacklist.add(Blacklisted(centroid, 1, nowMillis))
         }
         if ((existing?.failures ?: 1) >= config.frontierFailuresBeforeBlacklist) {
             clearSelection()
@@ -155,9 +195,18 @@ class ExplorationManager(
         }?.let { if (it.failures < config.frontierFailuresBeforeBlacklist) it.failures = 0 }
     }
 
-    /** Permanently abandons the area around [position] (e.g. a confirmed dead end). */
-    fun blacklistArea(position: Vec2) {
-        blacklist.add(Blacklisted(position, config.frontierFailuresBeforeBlacklist))
+    /**
+     * Abandons the area around [position] (e.g. a confirmed dead end) for
+     * [NavigationConfig.frontierBlacklistMillis]. Blacklisting the same spot again renews it rather
+     * than stacking entries: callers may do this every frame while they wait.
+     */
+    fun blacklistArea(position: Vec2, nowMillis: Long = clockMillis) {
+        val existing = blacklist.firstOrNull {
+            it.failures >= config.frontierFailuresBeforeBlacklist &&
+                it.position.distanceTo(position) <= config.frontierBlacklistRadiusMeters / 2f
+        }
+        if (existing != null) existing.sinceMillis = nowMillis
+        else blacklist.add(Blacklisted(position, config.frontierFailuresBeforeBlacklist, nowMillis))
         val current = selectedCentroid
         if (current != null && current.distanceTo(position) <= config.frontierBlacklistRadiusMeters) {
             clearSelection()

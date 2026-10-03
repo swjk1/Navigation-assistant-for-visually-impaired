@@ -2,6 +2,7 @@ package com.navassist.sim.user
 
 import com.navassist.navcore.geometry.GeometryUtils
 import com.navassist.navcore.state.NavigationCommand
+import com.navassist.navcore.state.PhoneAim
 import com.navassist.navcore.state.StopReason
 import com.navassist.sim.sensor.BodyPose
 import com.navassist.sim.sensor.PhoneHold
@@ -78,6 +79,9 @@ class VirtualUser(
     var collisions = 0
         private set
 
+    /** What each collision was with, in order. */
+    val collidedWith = ArrayList<Box>()
+
     var fell = false
         private set
 
@@ -86,6 +90,20 @@ class VirtualUser(
         private set
 
     private class Heard(val atSeconds: Double, val command: NavigationCommand, val reason: StopReason?)
+
+    /** How they are holding the phone as asked; null for their usual hold. */
+    var aim: PhoneAim? = null
+        private set
+    private val heardAims = ArrayDeque<Pair<Double, PhoneAim?>>()
+    private var lastAimHeard: PhoneAim? = null
+    private var sweepClock = 0f
+
+    /** Called with every engine output; the person hears a change of aim, and acts on it later. */
+    fun hearAim(next: PhoneAim?, nowSeconds: Double) {
+        if (next == lastAimHeard) return
+        lastAimHeard = next
+        heardAims.addLast(nowSeconds + profile.reactionSeconds to next)
+    }
 
     private val heard = ArrayDeque<Heard>()
     private var lastHeard: Pair<NavigationCommand, StopReason?>? = null
@@ -110,13 +128,23 @@ class VirtualUser(
             }
         }
 
-        val holdPitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
+        while (heardAims.isNotEmpty() && heardAims.first().first <= nowSeconds) aim = heardAims.removeFirst().second
+
+        val usualPitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
+        // Pitch is stored as degrees DOWN; an aim is given as degrees above horizontal.
+        val holdPitch = aim?.pitchDegrees?.let { GeometryUtils.degreesToRadians(-it) } ?: usualPitch
+        val aimYaw = GeometryUtils.degreesToRadians(aim?.yawDegrees ?: 0f)
         when (acting) {
             NavigationCommand.STRAIGHT -> {
                 walk(profile.walkMetersPerSecond * dt)
                 strideClock += dt
                 val sway = GeometryUtils.degreesToRadians(profile.swayDegrees) * sin(strideClock * 2f * PI.toFloat() * 0.9f)
-                phoneYaw = body.heading + sway
+                val sweepDegrees = aim?.sweepDegrees ?: 0f
+                val sweep = if (sweepDegrees > 0f) {
+                    sweepClock += dt
+                    GeometryUtils.degreesToRadians(sweepDegrees) * sin(2f * PI.toFloat() * sweepClock / profile.scanPeriodSeconds)
+                } else 0f
+                phoneYaw = GeometryUtils.normalizeAngle(body.heading + sway + aimYaw + sweep)
                 phonePitch = holdPitch
             }
             NavigationCommand.TURN_LEFT, NavigationCommand.TURN_RIGHT -> {
@@ -124,7 +152,7 @@ class VirtualUser(
                 val turn = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond) * dt * direction
                 body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
                 if (profile.walkWhileTurningMetersPerSecond > 0f) walk(profile.walkWhileTurningMetersPerSecond * dt)
-                phoneYaw = body.heading
+                phoneYaw = GeometryUtils.normalizeAngle(body.heading + aimYaw)
                 phonePitch = holdPitch
             }
             NavigationCommand.SCAN -> if (actingReason == StopReason.UNKNOWN_AHEAD && profile.scanTiltsDown) {
@@ -145,7 +173,7 @@ class VirtualUser(
                 }
             }
             NavigationCommand.STOP, NavigationCommand.ARRIVED -> {
-                phoneYaw = body.heading
+                phoneYaw = GeometryUtils.normalizeAngle(body.heading + aimYaw)
                 phonePitch = holdPitch
             }
         }
@@ -169,7 +197,10 @@ class VirtualUser(
         // World z is -north.
         val blocker = scene.obstacleTouching(nx, -ny, profile.bodyRadiusMeters)
         if (blocker != null) {
-            if (touching != blocker) collisions++
+            if (touching != blocker) {
+                collisions++
+                collidedWith += blocker
+            }
             touching = blocker
             return
         }

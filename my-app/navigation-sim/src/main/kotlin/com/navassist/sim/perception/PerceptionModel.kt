@@ -14,10 +14,15 @@ import kotlin.random.Random
  * model (TECHNICAL.md section 4.1) - the classes navigation needs most are the weakest.
  */
 data class PerceptionProfile(
-    val captureIntervalSeconds: Double = 2.5,
-    /** Capture to observations arriving: YOLO + OCR on device, sometimes a VLM round trip. */
-    val latencyMinSeconds: Double = 0.6,
-    val latencyMaxSeconds: Double = 2.5,
+    /** As the app captures: on-device YOLO + OCR every second (navigate.tsx). */
+    val captureIntervalSeconds: Double = 1.0,
+    /** Capture to observations arriving, on device. */
+    val latencyMinSeconds: Double = 0.3,
+    val latencyMaxSeconds: Double = 0.8,
+    /** Every Nth capture may also make a Gemini round trip, and takes this long instead; 0 = never. */
+    val slowEveryNth: Int = 4,
+    val slowLatencyMinSeconds: Double = 0.6,
+    val slowLatencyMaxSeconds: Double = 2.5,
     val recall: Map<SignKind, Float> = mapOf(
         SignKind.DOOR to 0.63f,
         SignKind.EXIT_SIGN to 0.73f,
@@ -35,9 +40,15 @@ data class PerceptionProfile(
     val minReadPixels: Float = 12f,
 ) {
     companion object {
+        /** The app before on-device capture ran every second: one pipeline, Gemini included, every 2.5 s. */
+        val LEGACY = PerceptionProfile(
+            captureIntervalSeconds = 2.5, latencyMinSeconds = 0.6, latencyMaxSeconds = 2.5, slowEveryNth = 0,
+        )
+
         val PERFECT = PerceptionProfile(
             latencyMinSeconds = 0.0,
             latencyMaxSeconds = 0.0,
+            slowEveryNth = 0,
             recall = SignKind.entries.associateWith { 1f },
             ocrReadRate = 1f,
             ocrMisreadRate = 0f,
@@ -71,6 +82,17 @@ class PerceptionModel(
     var detections = 0
         private set
 
+    /** Diagnostics: told why each sign was or was not reported at every capture. */
+    var probe: ((Sign, String) -> Unit)? = null
+
+    /** Diagnostics: where in the sensor image (0..1) each reported sign was. */
+    var seenAt: ((Sign, Float, Float) -> Unit)? = null
+
+    private fun miss(sign: Sign, why: String): SemanticObservation? {
+        probe?.invoke(sign, why)
+        return null
+    }
+
     /** Whether a capture should be taken now. Captures never overlap, as in the app. */
     fun wantsCapture(nowSeconds: Double): Boolean = pending == null && nowSeconds >= nextCaptureSeconds
 
@@ -80,8 +102,12 @@ class PerceptionModel(
         nextCaptureSeconds = nowSeconds + profile.captureIntervalSeconds
         val observations = scene.signs.mapNotNull { observe(it, scene, cameraToWorld, timestampNanos) }
         detections += observations.size
-        val latency = profile.latencyMinSeconds +
-            random.nextDouble() * (profile.latencyMaxSeconds - profile.latencyMinSeconds)
+        val slow = profile.slowEveryNth > 0 && captures % profile.slowEveryNth == 0
+        val latency = if (slow) {
+            profile.slowLatencyMinSeconds + random.nextDouble() * (profile.slowLatencyMaxSeconds - profile.slowLatencyMinSeconds)
+        } else {
+            profile.latencyMinSeconds + random.nextDouble() * (profile.latencyMaxSeconds - profile.latencyMinSeconds)
+        }
         pending = Pending(nowSeconds + latency, observations)
     }
 
@@ -101,28 +127,29 @@ class PerceptionModel(
         val ty = sign.y - oy
         val tz = sign.z - oz
         val distance = sqrt(tx * tx + ty * ty + tz * tz)
-        if (distance < 0.3f) return null
+        if (distance < 0.3f) return miss(sign, "too-close")
 
         // Only readable from in front.
-        if ((-tx * sign.normalX - tz * sign.normalZ) / distance < 0.3f) return null
+        if ((-tx * sign.normalX - tz * sign.normalZ) / distance < 0.3f) return miss(sign, "behind-or-oblique")
 
         // Camera space: project onto the camera axes (columns of the rotation).
         val cx = tx * m[0] + ty * m[1] + tz * m[2]
         val cy = tx * m[4] + ty * m[5] + tz * m[6]
         val cz = tx * m[8] + ty * m[9] + tz * m[10]
-        if (cz >= -0.1f) return null
+        if (cz >= -0.1f) return miss(sign, "behind-camera")
         val depth = -cz
         val u = intrinsics.cx + intrinsics.fx * cx / depth
         val v = intrinsics.cy - intrinsics.fy * cy / depth
-        if (u < 0f || v < 0f || u >= intrinsics.width || v >= intrinsics.height) return null
+        if (u < 0f || v < 0f || u >= intrinsics.width || v >= intrinsics.height) return miss(sign, "out-of-frame")
 
         // Occluded? Glass does not block the view, only depth-like surfaces do.
         val hit = scene.raycast(ox, oy, oz, tx, ty, tz, 1f, skipGlass = true)
-        if (hit != null && hit.t < 1f - 0.12f / distance) return null
+        if (hit != null && hit.t < 1f - 0.12f / distance) return miss(sign, "occluded")
 
         val apparent = intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth
         val sensorX = u / intrinsics.width
         val sensorY = v / intrinsics.height
+        seenAt?.invoke(sign, sensorX, sensorY)
         val (boxWidth, boxHeight) = boxSize(sign, m)
         // Portrait capture rotated upright (90 degrees clockwise): upright x = 1 - sensor y.
         val uprightX = 1f - sensorY
@@ -130,13 +157,16 @@ class PerceptionModel(
 
         return when (sign.kind) {
             SignKind.ROOM_PLATE, SignKind.ROOM_RANGE -> {
-                if (apparent < profile.minReadPixels || random.nextFloat() >= profile.ocrReadRate) return null
-                text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
+                if (apparent < profile.minReadPixels) return miss(sign, "too-small")
+                if (random.nextFloat() >= profile.ocrReadRate) return miss(sign, "ocr-failed")
+                (text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight) ?: miss(sign, "unparsed"))
+                    ?.also { probe?.invoke(sign, "seen") }
             }
             else -> {
-                if (apparent < profile.minDetectPixels) return null
-                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return null
+                if (apparent < profile.minDetectPixels) return miss(sign, "too-small")
+                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return miss(sign, "not-detected")
                 detected(sign.kind, confidence, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
+                    ?.also { probe?.invoke(sign, "seen") }
             }
         }
     }
@@ -211,9 +241,23 @@ class PerceptionModel(
         return when {
             Regex("\\b(exit|way\\s*out)\\b", RegexOption.IGNORE_CASE).containsMatchIn(read) ->
                 SemanticObservation.Exit(direction, 0.9f, x, y, timestampNanos)
+            Regex("\\bstairs?\\b", RegexOption.IGNORE_CASE).containsMatchIn(read) ->
+                SemanticObservation.Stairs(0.9f, x, y, timestampNanos)
+            Regex("\\b(elevator|lift)\\b", RegexOption.IGNORE_CASE).containsMatchIn(read) ->
+                SemanticObservation.Elevator(0.9f, x, y, timestampNanos)
             read.any { it.isDigit() } -> SemanticObservation.Room(read, 0.9f, x, y, timestampNanos)
+            isPlaceName(read) -> SemanticObservation.Room(read, 0.9f, x, y, timestampNanos)
             else -> null
         }
+    }
+
+    /** Mirrors `isPlaceName` in perceptionToSemantic.ts. */
+    private fun isPlaceName(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.length !in 3..30) return false
+        if (!trimmed.first().isLetter() || !trimmed.all { it.isLetter() || it.isWhitespace() || it in "&'.-" }) return false
+        if (trimmed.count { it.isLetter() } < 3) return false
+        return trimmed.uppercase().replace(Regex("\\s+"), " ") !in NOT_PLACE_NAMES
     }
 
     /** Mirrors `arrowDirection` in perceptionToSemantic.ts. */
@@ -240,6 +284,14 @@ class PerceptionModel(
     }
 
     private companion object {
-        val RANGE = Regex("(\\d{2,4})\\s*(?:-|–|—|to)\\s*(\\d{2,4})")
+        /** Mirrors NOT_PLACE_NAMES in perceptionToSemantic.ts. */
+        val NOT_PLACE_NAMES = setOf(
+            "PUSH", "PULL", "OPEN", "CLOSED", "SALE", "CAUTION", "DANGER", "WARNING", "NOTICE", "ENTER",
+            "ENTRANCE", "IN", "OUT", "NO", "STOP", "WET FLOOR", "NO SMOKING", "NO ENTRY", "STAFF ONLY",
+            "PRIVATE", "KEEP OUT", "KEEP CLEAR", "FIRE DOOR", "FIRE DOOR KEEP SHUT", "EMERGENCY",
+            "DO NOT ENTER", "AUTHORIZED PERSONNEL ONLY", "WELCOME", "THANK YOU", "OFFICE HOURS",
+        )
+
+        val RANGE =Regex("(\\d{2,4})\\s*(?:-|–|—|to)\\s*(\\d{2,4})")
     }
 }

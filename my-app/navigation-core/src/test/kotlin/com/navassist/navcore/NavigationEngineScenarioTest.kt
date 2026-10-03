@@ -4,6 +4,7 @@ import com.navassist.navcore.geometry.DepthPointCloud
 import com.navassist.navcore.geometry.GeometryUtils
 import com.navassist.navcore.geometry.NavigationFrame
 import com.navassist.navcore.geometry.Pose3D
+import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.geometry.Vec3
 import com.navassist.navcore.semantic.NavigationTarget
 import com.navassist.navcore.semantic.SemanticObservation
@@ -442,6 +443,73 @@ class NavigationEngineScenarioTest {
             snapshot!!.status,
             "after a full scan it should be ready to move",
         )
+    }
+
+    @Test
+    fun `a configured look-around turns the user through a full circle, and gives up on one who cannot`() {
+        val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -1f, toZ = 14f)
+        val config = NavigationConfig(initialLookAroundDegrees = 330f)
+
+        // A user who turns when told: TURN_RIGHT until they have come round, then the scan.
+        val turner = NavigationEngine(config)
+        turner.start(NavigationTarget.Explore)
+        var yaw = 0f
+        val commands = ArrayList<NavigationCommand>()
+        repeat(900) {
+            val snapshot = turner.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, yaw)))
+            commands += snapshot.command
+            if (snapshot.command == NavigationCommand.TURN_RIGHT) yaw += 2f
+        }
+        assertEquals(NavigationCommand.TURN_RIGHT, commands.first { it != NavigationCommand.STOP })
+        assertTrue(yaw >= 330f && yaw < 400f, "turned $yaw degrees")
+        assertEquals(NavigationStatus.EXPLORING, turner.status)
+
+        // One who never turns - the phone only wavers, 10 degrees either way - is released once
+        // the look-around has had its time.
+        val still = NavigationEngine(config)
+        still.start(NavigationTarget.Explore)
+        var snapshot: NavigationSnapshot? = null
+        var phase = 0.0
+        repeat(900) {
+            phase += 0.06
+            snapshot = still.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, (kotlin.math.sin(phase) * 10.0).toFloat())))
+        }
+        assertEquals(NavigationStatus.EXPLORING, snapshot!!.status)
+    }
+
+    @Test
+    fun `advice for the way behind releases the way ahead`() {
+        // In a corridor running both ways, after the scan facing north: south is unmapped.
+        val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -14f, toZ = 14f)
+        val engine = NavigationEngine(NavigationConfig())
+        engine.start(NavigationTarget.Explore)
+        var sweep = 0.0
+        var snapshot: NavigationSnapshot? = null
+        repeat(460) {
+            sweep += 0.06
+            snapshot = engine.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, (kotlin.math.sin(sweep) * 60.0).toFloat())))
+        }
+        repeat(60) { snapshot = engine.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, 0f))) }
+        assertEquals(NavigationStatus.EXPLORING, snapshot!!.status)
+        val ahead = assertNotNull(engine.currentGoalWorld())
+        assertTrue(ahead.z > 0f, "should be heading north first, goal $ahead")
+
+        // The adviser says south. The first choice, made before it spoke, must not outlast that.
+        engine.submitAdvice(listOf(com.navassist.navcore.semantic.AdviceDirection(Vec2(0f, 0f), Vec2(0f, -1f), 1f)))
+        snapshot = engine.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, 0f)))
+        assertTrue(
+            snapshot!!.command == NavigationCommand.TURN_LEFT || snapshot!!.command == NavigationCommand.TURN_RIGHT,
+            "nothing mapped that way yet: expected a turn to look, got ${snapshot!!.command}",
+        )
+        // The user turns round and looks: the way south appears, and becomes the goal.
+        var yaw = 0f
+        repeat(120) {
+            snapshot = engine.updateFrame(world.frame(nextTimestamp(33), pose(0f, 0f, yaw)))
+            if (snapshot!!.command == NavigationCommand.TURN_RIGHT) yaw += 2f
+            if (snapshot!!.command == NavigationCommand.TURN_LEFT) yaw -= 2f
+        }
+        val goal = assertNotNull(engine.currentGoalWorld())
+        assertTrue(goal.z < 0f, "should now head south, goal $goal")
     }
 
     @Test

@@ -100,7 +100,8 @@ object TopDownRenderer {
         }
 
         g.font = Font(Font.SANS_SERIF, Font.PLAIN, 10)
-        for (sign in sim.scene.signs) {
+        // Signs on this storey only: the others are over or under it.
+        for (sign in sim.scene.signs.filter { it.y > 0f && it.y < sim.scene.ceilingHeight }) {
             g.color = signColor
             val x = px(sign.x)
             val y = py(-sign.z)

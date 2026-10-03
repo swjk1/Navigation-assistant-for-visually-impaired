@@ -2,8 +2,9 @@
 
 Generated next to trace.json by navigation-sim (WebotsExporter). Webots is only the viewer: the
 engine, depth and the user all ran in the simulator; this moves the user along the recording,
-shows what they were being told, leaves a trail coloured by instruction, and draws the engine's
-occupancy map on the floor (green = believed free, red = believed occupied) as it grew.
+shows what they were being told and what their phone's camera sees, leaves a trail coloured by
+instruction, and draws the engine's occupancy map on the floor (green = believed free, red =
+believed occupied) as it grew.
 
 Plays in simulation time: use Webots' play / fast-forward / pause buttons. Reset the world to
 start again.
@@ -104,6 +105,8 @@ def main():
     translation = user.getField("translation")
     rotation = user.getField("rotation")
     phone = sup.getFromDef("PHONE").getField("rotation")
+    # The phone's camera: enabled, Webots shows what it sees as an overlay on the 3D view.
+    sup.getDevice("phone camera").enable(step)
     root = sup.getRoot().getField("children")
 
     sup.setLabel(1, trace["title"], 0.01, 0.94, 0.07, 0xFFFFFF, 0, "Arial")

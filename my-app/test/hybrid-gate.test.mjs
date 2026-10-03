@@ -209,6 +209,24 @@ describe('mergeNativeToRaw', () => {
     assert.ok(raw.hazardDescription);
   });
 
+  it('does not let a failed VLM call overrule a healthy on-device frame with a hazard', () => {
+    const raw = mergeNativeToRaw(healthyNative(), {
+      objects: [],
+      text: [],
+      immediateHazard: true,
+      hazardDescription: 'Vision service slow. Hold still and try again.',
+      serviceDegraded: true,
+    });
+    assert.equal(raw.immediateHazard, false);
+  });
+
+  it('does not treat wayfinding text as a hazard', () => {
+    for (const sign of ['STAIRS', 'Stair 2', 'EXIT ONLY']) {
+      const raw = mergeNativeToRaw(healthyNative({ text: [{ text: sign, confidence: 0.95, box: {} }] }));
+      assert.equal(raw.immediateHazard, false, sign);
+    }
+  });
+
   it('lets the VLM fill labels the native model missed', () => {
     const raw = mergeNativeToRaw(healthyNative({ objects: [] }), {
       objects: [{ label: 'door', confidence: 0.7, box: { x: 0.4, y: 0.3, width: 0.2, height: 0.4 } }],

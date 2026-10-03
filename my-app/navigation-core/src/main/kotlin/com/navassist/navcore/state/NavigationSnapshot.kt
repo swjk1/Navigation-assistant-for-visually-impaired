@@ -27,6 +27,8 @@ data class NavigationSnapshot(
     val mapConfidence: Float = 0f,
     val selectedFrontierId: String? = null,
     val targetDescription: String? = null,
+    /** How to hold the phone, on top of [command]; null for the usual hold. */
+    val aim: PhoneAim? = null,
     val debug: NavigationDebugInfo? = null,
 )
 

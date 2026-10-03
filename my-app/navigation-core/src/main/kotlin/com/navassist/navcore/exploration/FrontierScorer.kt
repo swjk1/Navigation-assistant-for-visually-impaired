@@ -16,6 +16,7 @@ import com.navassist.navcore.topology.TopologicalMap
  *         + weightDistance    * normalisedDistance
  *         + weightRevisit     * revisitPenalty
  *         + weightRisk        * riskPenalty
+ *         + weightAdvice      * adviceScore   (only when an adviser has spoken)
  *
  * (the distance / revisit / risk weights are negative by default, so those terms subtract.)
  *
@@ -44,6 +45,7 @@ class FrontierScorer(private val config: NavigationConfig) {
                 val distance = frontier.centroid.distanceTo(userPosition)
                 val semanticScore =
                     semantics.semanticScoreFor(frontier.centroid, userPose, target, nowMillis)
+                val adviceScore = semantics.adviceScoreFor(frontier.centroid, nowMillis)
                 val revisit = topology.revisitDensity(frontier.centroid, config.topoNodeSpacingMeters)
                 val risk = riskOf(frontier, inflated)
 
@@ -55,7 +57,8 @@ class FrontierScorer(private val config: NavigationConfig) {
                         config.weightSemantic * semanticScore +
                         config.weightDistance * normalizedDistance +
                         config.weightRevisit * revisit +
-                        config.weightRisk * risk
+                        config.weightRisk * risk +
+                        config.weightAdvice * adviceScore
 
                 frontier.copy(
                     distanceMeters = distance,

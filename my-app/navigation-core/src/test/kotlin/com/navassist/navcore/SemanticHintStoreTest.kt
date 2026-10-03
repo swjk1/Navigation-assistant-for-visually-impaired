@@ -253,4 +253,71 @@ class SemanticHintStoreTest {
         )
         assertNotNull(store.targetSighting)
     }
+
+    // ---------------------------------------------------------------- placement rules
+
+    @Test
+    fun `a washroom sign hung high is a pointer, not the destination`() {
+        val store = SemanticHintStore(config)
+        // Camera 1.4 m up, so the floor is at y = 0: one sign at 2.8 m, one at door height.
+        store.submit(
+            listOf(SemanticObservation.Room("washroom", 0.9f, worldPosition = Vec3(0f, 2.8f, 6f))),
+            nowMillis = 1_000, observerPose = origin, target = NavigationTarget.Room("washroom"), cameraHeightMeters = 1.4f,
+        )
+        assertNull(store.targetSighting)
+        store.submit(
+            listOf(SemanticObservation.Room("washroom", 0.9f, worldPosition = Vec3(1f, 1.6f, 9f))),
+            nowMillis = 2_000, observerPose = origin, target = NavigationTarget.Room("washroom"), cameraHeightMeters = 1.4f,
+        )
+        assertEquals(9f, store.targetSighting?.worldPosition?.z)
+    }
+
+    @Test
+    fun `a sighting measured from nearer replaces one from farther, whatever its confidence`() {
+        val store = SemanticHintStore(config)
+        val target = NavigationTarget.Room("314")
+        store.submit(listOf(SemanticObservation.Room("314", 0.95f, worldPosition = Vec3(0f, 1.5f, 6f))), 1_000, origin, target)
+        val nearer = Pose3D(0f, 1.4f, 5f, 0f)
+        store.submit(listOf(SemanticObservation.Room("314", 0.6f, worldPosition = Vec3(0.5f, 1.5f, 7f))), 2_000, nearer, target)
+        assertEquals(7f, store.targetSighting?.worldPosition?.z)
+    }
+
+    @Test
+    fun `a plate read without depth is a glimpse - somewhere to look, once`() {
+        val store = SemanticHintStore(config)
+        val target = NavigationTarget.Room("314")
+        val read = SemanticObservation.Room("314", 0.9f)
+        store.submit(listOf(read), 1_000, origin, target, bearings = listOf(Vec2(0f, 1f)))
+        val glimpse = assertNotNull(store.targetSighting)
+        assertTrue(glimpse.glimpsed && glimpse.estimated)
+        assertEquals(config.glimpseRangeMeters, glimpse.worldPosition.z, 1e-3f)
+
+        // Followed up and nothing better turned up: the same reading does not send them back.
+        store.spendGlimpse(3_000)
+        assertNull(store.targetSighting)
+        store.submit(listOf(read), 4_000, origin, target, bearings = listOf(Vec2(0f, 1f)))
+        assertNull(store.targetSighting)
+
+        // A depth-placed reading is taken as ever.
+        store.submit(listOf(read.copy(worldPosition = Vec3(1f, 1.5f, 2f))), 5_000, origin, target)
+        assertTrue(store.targetSighting?.glimpsed == false)
+    }
+
+    @Test
+    fun `a shop name read without depth is ranged, a facility sign is not placed at all`() {
+        val store = SemanticHintStore(config)
+        // 20 degrees up from 1.4 m: a fascia at 4 m is about 7 m away.
+        val up = kotlin.math.tan(Math.toRadians(20.0)).toFloat()
+        store.submit(
+            listOf(SemanticObservation.Room("Pharmacy", 0.9f)), 1_000, origin, NavigationTarget.Room("Pharmacy"),
+            bearings = listOf(Vec2(0f, 1f)), elevations = listOf(up), cameraHeightMeters = 1.4f,
+        )
+        assertTrue(store.targetSighting?.ranged == true)
+        val other = SemanticHintStore(config)
+        other.submit(
+            listOf(SemanticObservation.Room("washroom", 0.9f)), 1_000, origin, NavigationTarget.Room("washroom"),
+            bearings = listOf(Vec2(0f, 1f)), elevations = listOf(up), cameraHeightMeters = 1.4f,
+        )
+        assertNull(other.targetSighting)
+    }
 }

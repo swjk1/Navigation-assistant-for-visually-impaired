@@ -54,7 +54,11 @@ class TopologicalMap {
         floorId: String? = null,
         semanticLabels: Set<String> = emptySet(),
     ): TopologicalNode {
-        val existing = findNearest(position, mergeRadiusMeters, floorId)
+        // Places walked and landmarks seen are kept apart. A sign 1.2 m across a corridor is not
+        // the spot the user stood on: merged, its ROOM/EXIT type outranked the node's JUNCTION and
+        // quietly removed a way out from backtracking.
+        val structural = isStructural(type)
+        val existing = findNearest(position, mergeRadiusMeters, floorId) { isStructural(it.type) == structural }
         if (existing != null) {
             val merged = existing.copy(
                 // A junction or dead end outranks a plain waypoint: never downgrade.
@@ -79,6 +83,12 @@ class TopologicalMap {
         nodesById[node.id] = node
         edgesByNode[node.id] = ArrayList()
         return node
+    }
+
+    /** Places the user walked through, as opposed to landmarks seen from somewhere else. */
+    private fun isStructural(type: NodeType) = when (type) {
+        NodeType.WAYPOINT, NodeType.FRONTIER, NodeType.DEAD_END, NodeType.JUNCTION -> true
+        else -> false
     }
 
     private fun mergeType(existing: NodeType, incoming: NodeType): NodeType {
@@ -143,11 +153,17 @@ class TopologicalMap {
 
     // ------------------------------------------------------------------ queries
 
-    fun findNearest(position: Vec2, radiusMeters: Float, floorId: String? = null): TopologicalNode? {
+    fun findNearest(
+        position: Vec2,
+        radiusMeters: Float,
+        floorId: String? = null,
+        accept: (TopologicalNode) -> Boolean = { true },
+    ): TopologicalNode? {
         var best: TopologicalNode? = null
         var bestDistance = radiusMeters * radiusMeters
         for (node in nodesById.values) {
             if (floorId != null && node.floorId != null && node.floorId != floorId) continue
+            if (!accept(node)) continue
             val d = node.position.distanceSquaredTo(position)
             if (d <= bestDistance) {
                 bestDistance = d

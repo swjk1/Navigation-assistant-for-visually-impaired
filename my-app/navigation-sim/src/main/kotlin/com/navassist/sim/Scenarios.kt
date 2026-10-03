@@ -5,6 +5,9 @@ import com.navassist.navcore.state.NavigationCommand
 import com.navassist.sim.sensor.BodyPose
 import com.navassist.sim.user.UserProfile
 import com.navassist.sim.world.Buildings
+import com.navassist.sim.world.Mall
+import com.navassist.sim.world.School
+import kotlin.math.PI
 import kotlin.math.hypot
 
 /**
@@ -33,6 +36,15 @@ object Scenarios {
     private fun noCollisions(r: SimResult) =
         if (r.collisions > 0) listOf("walked into something ${r.collisions} time(s)") else emptyList()
 
+    /**
+     * Collisions with anything but glass. Glass is invisible to depth (see glass-pane); scenarios
+     * about something else check this instead, so a glass contact does not hide what they test.
+     */
+    private fun noVisibleCollisions(sim: Simulation): List<String> {
+        val visible = sim.user.collidedWith.filter { it.material != com.navassist.sim.world.Material.GLASS }
+        return if (visible.isNotEmpty()) listOf("walked into ${visible.joinToString { it.name }}") else emptyList()
+    }
+
     private fun notFallen(r: SimResult) =
         if (r.outcome == Outcome.FELL) listOf("fell into a drop-off") else emptyList()
 
@@ -46,15 +58,28 @@ object Scenarios {
         return if (furthest > x) listOf("only got to x = ${"%.1f".format(furthest)} (wanted $x or further west)") else emptyList()
     }
 
-    private fun arrivedNear(r: SimResult, x: Float, y: Float, radius: Float): List<String> {
+    private fun reachedEast(sim: Simulation, x: Float): List<String> {
+        val furthest = sim.trace.maxOfOrNull { it.body.x } ?: 0f
+        return if (furthest < x) listOf("only got to x = ${"%.1f".format(furthest)} (wanted $x or further east)") else emptyList()
+    }
+
+    private fun arrivedNear(r: SimResult, x: Float, y: Float, radius: Float): List<String> =
+        arrivedNearAny(r, listOf(x to y), radius)
+
+    /** ARRIVED within [radius] of any of [places] - either stairwell, either lift. */
+    private fun arrivedNearAny(r: SimResult, places: List<Pair<Float, Float>>, radius: Float): List<String> {
         val failures = ArrayList<String>()
         if (r.outcome != Outcome.ARRIVED) failures += "never announced ARRIVED (${r.outcome}, ${r.finalStatus})"
-        val miss = hypot(r.finalBody.x - x, r.finalBody.y - y)
+        val miss = places.minOf { (x, y) -> hypot(r.finalBody.x - x, r.finalBody.y - y) }
         if (r.outcome == Outcome.ARRIVED && miss > radius) {
             failures += "announced ARRIVED ${"%.1f".format(miss)} m from the destination"
         }
         return failures
     }
+
+    private const val EAST = (PI / 2).toFloat()
+    private const val SOUTH = PI.toFloat()
+    private const val WEST = (-PI / 2).toFloat()
 
     val all: List<Scenario> = listOf(
         Scenario(
@@ -261,6 +286,182 @@ object Scenarios {
                 "there. Has not caused a collision in these seeds only because the user rarely gets that " +
                 "far. Needs a non-depth cue: perception (door frames, glass-door signage) or the pane's " +
                 "occasional returns accumulated rather than outvoted.",
+        ),
+
+        // ---------------------------------------------------------------- school, three storeys
+
+        Scenario(
+            "school-find-room",
+            "School, floor 1: from the entrance lobby, follow the range signs west and stop at room 104.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(School.build(1), BodyPose(30f, -8f, 0f), target = NavigationTarget.Room("104"), maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ ->
+                val (x, y) = School.platePlan(104)
+                noCollisions(r) + arrivedNear(r, x, y, 2.0f)
+            },
+            limitation = "Never takes a step from the 12 x 10 m lobby: the open-space stall. After the scan, the only frontier left is one long cluster - " +
+                "the edge of the scanned half-disc - which passes by the user, so its representative point is ~0.6 m " +
+                "away: inside frontierReachedMeters, never chosen. With no choice, backtrackGoal() blacklists the " +
+                "user's own position (every frame), which blacklists that frontier for good, and the engine sits in " +
+                "NO_ROUTE. Corridors escape it because their walls cut the edge into short separate frontiers. Needs " +
+                "long frontier clusters split into segments, and no self-blacklisting before a first move.",
+        ),
+        Scenario(
+            "school-upper-room",
+            "School, floor 2: step out of the lift, turn east, take the wing the signs point to, stop at 218.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(School.build(2), BodyPose(30f, 4.5f, SOUTH), target = NavigationTarget.Room("218"), maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ ->
+                val (x, y) = School.platePlan(218)
+                noCollisions(r) + arrivedNear(r, x, y, 2.0f)
+            },
+            limitation = "Passes 4 in 5. The failing seed times out still exploring, having walked 165 m.",
+        ),
+        Scenario(
+            "school-stairs",
+            "School, floor 3: from mid-corridor, find a stairwell (one 18 m behind, one 42 m ahead).",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(School.build(3), BodyPose(18f, 1.5f, EAST), target = NavigationTarget.Stairs, maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ -> notFallen(r) + noCollisions(r) + arrivedNearAny(r, listOf(School.westStairDoor, School.eastStairDoor), 2.5f) },
+            limitation = "Passes 1 in 5. Failing runs reach a stairwell - one walks through its doorway and back out - " +
+                "without ever announcing ARRIVED, and time out exploring. The stair signs are 0.3 m pictograms beside " +
+                "the doorway (recall 0.55); why they are not acted on is not yet diagnosed.",
+        ),
+        Scenario(
+            "school-exit",
+            "School, floor 1: from the wing, find an exit - the wing's end door 7 m behind, or the main doors.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(School.build(1), BodyPose(45.5f, 20f, SOUTH), target = NavigationTarget.Exit, maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNearAny(r, listOf(School.wingDoor, School.lobbyDoor), 2.5f) },
+            limitation = "Passes 1 in 5. Failing runs walk the building for 5 minutes with 50-100 detections, passing within " +
+                "~3 m of the main doors and within ~5 m of the wing's end door, and never lock onto an exit. Not yet " +
+                "diagnosed.",
+        ),
+        Scenario(
+            "school-elevator",
+            "School, floor 2: from the west stairwell door, walk 28 m of corridor to the lift niche.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(School.build(2), BodyPose(1.5f, 1.5f, EAST), target = NavigationTarget.Elevator, maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNearAny(r, School.lifts.map { (x, y) -> x to y - 0.7f }, 2.0f) },
+            limitation = "Passes 4 in 5. The failing seed times out still exploring, having walked 158 m.",
+        ),
+        Scenario(
+            "school-stairwell",
+            "School, floor 2: exploring from a stairwell doorway, with the flight down beside the landing. Never fall.",
+            Expectation.PASS,
+            { seed -> SimSettings(School.build(2), BodyPose(1.2f, 1.5f, WEST), maxSeconds = 120.0, seed = seed) },
+            { r, _ -> notFallen(r) + noCollisions(r) },
+        ),
+
+        // ---------------------------------------------------------------- mall, two levels
+
+        Scenario(
+            "mall-exit",
+            "Mall, ground floor: from the concourse, past a kiosk, to the entrance doors 24 m east.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Mall.build(1), BodyPose(60f, 3f, EAST), target = NavigationTarget.Exit, maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ ->
+                noCollisions(r) + arrivedNearAny(r, listOf(Mall.eastEntrance, Mall.westEntrance, Mall.carParkExit), 2.5f)
+            },
+            limitation = "Never takes a step: the open-space stall. After the scan, the only frontier left is one long cluster - " +
+                "the edge of the scanned half-disc - which passes by the user, so its representative point is ~0.6 m " +
+                "away: inside frontierReachedMeters, never chosen. With no choice, backtrackGoal() blacklists the " +
+                "user's own position (every frame), which blacklists that frontier for good, and the engine sits in " +
+                "NO_ROUTE. Corridors escape it because their walls cut the edge into short separate frontiers. Needs " +
+                "long frontier clusters split into segments, and no self-blacklisting before a first move.",
+        ),
+        Scenario(
+            "mall-elevator",
+            "Mall, ground floor: walk the concourse and find the lifts in the services corridor off its north side.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Mall.build(1), BodyPose(30f, 3f, EAST), target = NavigationTarget.Elevator, maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNearAny(r, Mall.lifts.map { (x, y) -> x - 0.7f to y }, 2.0f) },
+            limitation = "Never takes a step: the open-space stall. After the scan, the only frontier left is one long cluster - " +
+                "the edge of the scanned half-disc - which passes by the user, so its representative point is ~0.6 m " +
+                "away: inside frontierReachedMeters, never chosen. With no choice, backtrackGoal() blacklists the " +
+                "user's own position (every frame), which blacklists that frontier for good, and the engine sits in " +
+                "NO_ROUTE. Corridors escape it because their walls cut the edge into short separate frontiers. Needs " +
+                "long frontier clusters split into segments, and no self-blacklisting before a first move.",
+        ),
+        Scenario(
+            "mall-washroom",
+            "Mall, upper floor: a hanging washroom sign marks the services corridor; stop at a washroom door.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Mall.build(2), BodyPose(36f, 11.5f, EAST), target = NavigationTarget.Room("washroom"), maxSeconds = 300.0, seed = seed)
+            },
+            { r, _ -> noCollisions(r) + arrivedNearAny(r, Mall.washroomDoors.map { (x, y) -> x + 0.7f to y }, 2.5f) },
+            limitation = "Never arrives. Exploration goes in through the nearest shop entrance and spends the run inside the " +
+                "shop (the 3 m entrances are just openings to it), or stalls as in mall-exit; one seed walked into a " +
+                "glass shop front. The hanging sign is readable only from in front of the corridor mouth, which the " +
+                "user rarely reaches.",
+        ),
+        Scenario(
+            "mall-upper-walkway",
+            "Mall, upper floor: explore a 5 m walkway between glass shop fronts and the atrium's glass balustrade.",
+            Expectation.KNOWN_LIMITATION,
+            { seed -> SimSettings(Mall.build(2), BodyPose(6f, 2.5f, EAST), maxSeconds = 180.0, seed = seed) },
+            { r, sim -> notFallen(r) + noCollisions(r) + reachedEast(sim, 30f) },
+            limitation = "Never takes a step: the open-space stall. After the scan, the only frontier left is one long cluster - " +
+                "the edge of the scanned half-disc - which passes by the user, so its representative point is ~0.6 m " +
+                "away: inside frontierReachedMeters, never chosen. With no choice, backtrackGoal() blacklists the " +
+                "user's own position (every frame), which blacklists that frontier for good, and the engine sits in " +
+                "NO_ROUTE. Corridors escape it because their walls cut the edge into short separate frontiers. Needs " +
+                "long frontier clusters split into segments, and no self-blacklisting before a first move.",
+        ),
+        Scenario(
+            "mall-escalator-edge",
+            "Mall, upper floor: exploring from the escalator landing, facing the open head of two escalators. Never fall.",
+            Expectation.PASS,
+            { seed -> SimSettings(Mall.build(2), BodyPose(34.5f, 7.2f, WEST), maxSeconds = 90.0, seed = seed) },
+            // Glass shop fronts line this walkway; contact with them is the glass-pane limitation.
+            { r, sim -> notFallen(r) + noVisibleCollisions(sim) },
+        ),
+        Scenario(
+            "mall-food-court",
+            "Mall, upper floor: explore through a food court of tables; the floor estimate must stay on the floor.",
+            Expectation.KNOWN_LIMITATION,
+            { seed -> SimSettings(Mall.build(2), BodyPose(64f, 2.5f, EAST), maxSeconds = 180.0, seed = seed) },
+            { r, sim ->
+                val floorY = sim.engine.floorEstimate().floorY
+                notFallen(r) + noCollisions(r) + reachedEast(sim, 76f) + if (kotlin.math.abs(floorY + 1.3f) > 0.1f) {
+                    listOf("floor estimated at ${"%.2f".format(floorY + 1.3f)} m above the real floor")
+                } else {
+                    emptyList()
+                }
+            },
+            limitation = "Passes 1 in 5. Failing runs cross part of the food court without collisions, then go in through " +
+                "a shop entrance and explore the shop instead of the rest of the concourse.",
+        ),
+        Scenario(
+            "mall-find-store",
+            "Mall, ground floor: find the Pharmacy by the name over its entrance.",
+            Expectation.KNOWN_LIMITATION,
+            { seed ->
+                SimSettings(Mall.build(1), BodyPose(8f, 7f, EAST), target = NavigationTarget.Room("Pharmacy"), maxSeconds = 240.0, seed = seed)
+            },
+            { r, _ ->
+                val (x, y) = Mall.shopEntrance("Pharmacy")
+                noCollisions(r) + arrivedNear(r, x, y, 2.5f)
+            },
+            limitation = "The name hangs 4.1 m up on the fascia, facing across the concourse. A portrait camera walking " +
+                "the concourse has it in frame only from ~6-10 m ahead at an angle: beyond depth range, often not at all " +
+                "(one reading per pass, or none). Names are observations now, and a single reading is ranged from its " +
+                "elevation (SemanticHintStore.rangeByHeight), but runs that never face the shop front still never see it.",
         ),
     )
 

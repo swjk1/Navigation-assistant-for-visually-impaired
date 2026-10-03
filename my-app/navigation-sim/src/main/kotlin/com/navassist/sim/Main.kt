@@ -1,5 +1,6 @@
 package com.navassist.sim
 
+import com.navassist.sim.bench.BenchmarkCli
 import java.io.File
 
 private const val USAGE = """
@@ -16,6 +17,15 @@ Navigation simulator
   --live PORT            run the first scenario in real time, streaming to Foxglove at
                          ws://localhost:PORT; publish a Twist on /cmd_vel to drive it yourself
   --list                 list scenarios and exit
+
+Benchmark (start -> destination episodes, success rate, paired comparison):
+  --benchmark            run the episode set on --seeds seeds (default 5 here)
+  --name NAME            label for the results (default "run"); saved to benchmarks/NAME.json
+  --filter TEXT          only episodes whose id contains TEXT
+  --design NAME          design variant to run (see Designs.kt; default "current")
+  --compare A.json B.json  paired comparison of two saved results, and a verdict
+  --episodes             list the episodes with their shortest walks and exit
+  --pictures DIR         also draw a top-down picture of every benchmark run into DIR
 """
 
 fun main(args: Array<String>) {
@@ -27,12 +37,33 @@ fun main(args: Array<String>) {
     var mcapDir: File? = null
     var livePort: Int? = null
     var webotsDir: File? = null
+    var benchmark = false
+    var seedsGiven = false
+    var benchName = "run"
+    var filter: String? = null
+    var design = "current"
+    var pictures: File? = null
     var i = 0
     while (i < args.size) {
         when (args[i]) {
             "--all" -> Unit
             "--scenario" -> names += args[++i]
-            "--seeds" -> seeds = args[++i].toInt()
+            "--seeds" -> { seeds = args[++i].toInt(); seedsGiven = true }
+            "--benchmark" -> benchmark = true
+            "--name" -> benchName = args[++i]
+            "--filter" -> filter = args[++i]
+            "--design" -> design = args[++i]
+            "--pictures" -> pictures = File(args[++i])
+            "--compare" -> {
+                BenchmarkCli.compare(File(args[i + 1]), File(args[i + 2]))
+                return
+            }
+            "--episodes" -> { BenchmarkCli.list(filter); return }
+            "--diagnose" -> {
+                val seedList = args[++i].split(',').map { it.toLong() }
+                com.navassist.sim.bench.Diagnose.run(filter, seedList, design)
+                return
+            }
             "--report" -> reportDir = File(args[++i])
             "--snapshots" -> snapshotAll = args[++i] == "all"
             "--trace" -> trace = true
@@ -40,13 +71,17 @@ fun main(args: Array<String>) {
             "--live" -> livePort = args[++i].toInt()
             "--webots" -> webotsDir = File(args[++i])
             "--list" -> {
-                Scenarios.all.forEach { println("${it.name.padEnd(18)} ${it.expectation.name.padEnd(17)} ${it.description}") }
+                Scenarios.all.forEach { println("${it.name.padEnd(24)} ${it.expectation.name.padEnd(17)} ${it.description}") }
                 return
             }
             "--help", "-h" -> { println(USAGE.trimIndent()); return }
             else -> error("unknown argument ${args[i]}\n$USAGE")
         }
         i++
+    }
+    if (benchmark) {
+        BenchmarkCli.run(benchName, if (seedsGiven) seeds else 5, filter, design, pictures)
+        return
     }
     val scenarios = if (names.isEmpty()) Scenarios.all else names.map { Scenarios.named(it) }
     livePort?.let { port ->
@@ -90,7 +125,12 @@ private var lastKey: String? = null
 /** One line whenever what the engine says, or why, changes. */
 private fun printTransition(sim: Simulation, sample: TraceSample, snapshot: com.navassist.navcore.state.NavigationSnapshot) {
     val key = "${snapshot.status}/${snapshot.command}/${snapshot.stopReason}"
-    if (key == lastKey) return
+    val window = System.getenv("TRACE_FRAMES")?.split('-')?.map { it.toDouble() }
+    val everyFrame = window != null && sample.seconds in window[0]..window[1]
+    if (key == lastKey && !everyFrame) return
+    if (everyFrame) println("    %6.2fs err %s heading %.0f acting %s goal %s frontiers %s".format(sample.seconds, snapshot.headingErrorDegrees?.let { "%.0f".format(it) }, Math.toDegrees(sample.body.heading.toDouble()), sample.acting,
+        sim.engine.currentGoalWorld()?.let { sim.canonicalToPlan(it) }?.let { "(%.1f, %.1f)".format(it.first, it.second) },
+        sim.engine.frontiers().joinToString { f -> sim.canonicalToPlan(f.centroid)?.let { "(%.1f, %.1f)x%d s%.2f[ig%.2f d%.1f rv%.2f rk%.2f]".format(it.first, it.second, f.cellCount, f.score, f.estimatedInformationGain, f.distanceMeters, f.revisitPenalty, f.riskPenalty) } ?: "?" }))
     lastKey = key
     val d = snapshot.debug
     println(

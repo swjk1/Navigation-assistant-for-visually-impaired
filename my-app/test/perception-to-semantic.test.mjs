@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 
 import {
   arrowDirection,
+  isPlaceName,
   toSemanticObservations,
   uprightToSensor,
 } from '../src/perception/perceptionToSemantic.ts';
@@ -117,5 +118,25 @@ describe('toSemanticObservations', () => {
       })
     );
     assert.equal('timestampNs' in door, false);
+  });
+});
+
+describe('place names', () => {
+  it('turns the name over a door into a room observation', () => {
+    const [shop] = toSemanticObservations(
+      frame({ text: [{ text: 'Pharmacy', confidence: 0.9, box: box(0.5, 0.2) }] }),
+      { timestampNs: 1, rotationDegrees: 90 }
+    );
+    assert.equal(shop.type, 'ROOM');
+    assert.equal(shop.label, 'Pharmacy');
+  });
+
+  it('keeps names and rejects notices, fragments and codes', () => {
+    for (const name of ['Pharmacy', 'Staff Room', "Children's Books", 'Café']) {
+      assert.ok(isPlaceName(name), name);
+    }
+    for (const notice of ['PUSH', 'Wet floor', 'No Entry', 'ab', 'x', '@@@', 'a'.repeat(31)]) {
+      assert.ok(!isPlaceName(notice), notice);
+    }
   });
 });

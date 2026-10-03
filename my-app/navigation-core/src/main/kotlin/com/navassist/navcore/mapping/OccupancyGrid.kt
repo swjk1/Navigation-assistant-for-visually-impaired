@@ -63,6 +63,26 @@ class OccupancyGrid(
     private val logOdds = FloatArray(cells * cells)
 
     /**
+     * Cells depth has seen as floor from close enough to trust it (see
+     * NavigationConfig.nearFloorVerifyMeters). Far away, depth noise is larger than a step down.
+     */
+    private val nearSeen = BooleanArray(cells * cells)
+
+    fun markNearSeen(gx: Int, gz: Int) {
+        if (inBounds(gx, gz)) nearSeen[index(gx, gz)] = true
+    }
+
+    fun isNearSeen(gx: Int, gz: Int): Boolean = inBounds(gx, gz) && nearSeen[index(gx, gz)]
+
+    /**
+     * Whether floor at or right beside [world] was seen close up. Depth samples the floor as points
+     * a cell or two apart, so an exact cell would leave holes in floor that was seen perfectly well.
+     */
+    fun isNearSeen(world: Vec2): Boolean = worldToGrid(world).let { c ->
+        (-1..1).any { dz -> (-1..1).any { dx -> isNearSeen(c.gx + dx, c.gz + dz) } }
+    }
+
+    /**
      * Per-observation scratch: what this sensor frame said about each cell it touched.
      * See [observeFree], [observeOccupied] and [commitObservation].
      */
@@ -189,6 +209,7 @@ class OccupancyGrid(
 
     fun clear() {
         logOdds.fill(0f)
+        nearSeen.fill(false)
         discardObservation()
     }
 
@@ -348,8 +369,9 @@ class OccupancyGrid(
             val xRange = if (shiftX > 0) 0 until cells else cells - 1 downTo 0
             for (gx in xRange) {
                 val srcX = gx + shiftX
-                logOdds[index(gx, gz)] =
-                    if (srcX in 0 until cells && srcZ in 0 until cells) logOdds[index(srcX, srcZ)] else 0f
+                val inside = srcX in 0 until cells && srcZ in 0 until cells
+                logOdds[index(gx, gz)] = if (inside) logOdds[index(srcX, srcZ)] else 0f
+                nearSeen[index(gx, gz)] = inside && nearSeen[index(srcX, srcZ)]
             }
         }
     }

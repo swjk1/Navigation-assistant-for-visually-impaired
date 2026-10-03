@@ -2,6 +2,7 @@ package com.navassist.navcore.sensing
 
 import com.navassist.navcore.NavigationEngine
 import com.navassist.navcore.geometry.Pose3D
+import com.navassist.navcore.geometry.Vec2
 import com.navassist.navcore.semantic.SemanticObservation
 
 /**
@@ -13,8 +14,17 @@ import com.navassist.navcore.semantic.SemanticObservation
  */
 object SemanticLocator {
 
-    /** An observation with its world position filled in where possible, and the observer's pose. */
-    data class Located(val observation: SemanticObservation, val observerPose: Pose3D?)
+    /**
+     * An observation with its world position filled in where possible, the observer's pose, the
+     * horizontal bearing it was seen on, and how steeply above horizontal (the last two known even
+     * when depth was not).
+     */
+    data class Located(
+        val observation: SemanticObservation,
+        val observerPose: Pose3D?,
+        val bearing: Vec2? = null,
+        val elevationTan: Float? = null,
+    )
 
     /** Any thread: only touches the assembler's locked depth snapshots. */
     fun locate(observations: List<SemanticObservation>, assembler: SensorFrameAssembler): List<Located> =
@@ -22,9 +32,12 @@ object SemanticLocator {
 
     fun locate(observation: SemanticObservation, assembler: SensorFrameAssembler): Located {
         val (x, y) = imageCoordinatesOf(observation)
-        val resolution = assembler.resolve(x, y, observation.timestampNanos)
+        val box = boxSizeOf(observation)
+        val resolution = assembler.resolve(x, y, observation.timestampNanos, box?.first, box?.second)
         val world = resolution.worldPosition?.takeIf { plausibleSize(observation, resolution) }
-        if (observation.worldPosition != null || world == null) return Located(observation, resolution.observerPose)
+        if (observation.worldPosition != null || world == null) {
+            return Located(observation, resolution.observerPose, resolution.bearing, resolution.elevationTan)
+        }
         val placed = when (observation) {
             is SemanticObservation.Room -> observation.copy(worldPosition = world)
             is SemanticObservation.Exit -> observation.copy(worldPosition = world)
@@ -33,7 +46,7 @@ object SemanticLocator {
             is SemanticObservation.Elevator -> observation.copy(worldPosition = world)
             else -> observation
         }
-        return Located(placed, resolution.observerPose)
+        return Located(placed, resolution.observerPose, resolution.bearing, resolution.elevationTan)
     }
 
     /**
@@ -46,6 +59,8 @@ object SemanticLocator {
                 group.map { it.observation },
                 engine.clockMillis,
                 observerPose ?: engine.currentPose(),
+                group.map { it.bearing },
+                group.map { it.elevationTan },
             )
         }
     }
@@ -95,10 +110,11 @@ object SemanticLocator {
      * How far off the typical size a placement may be and still be believed. Wrong placements err
      * NEAR - depth picked up something in front of the object - which makes it look too small, so
      * the lower bound is the one that matters. A third let a lift door placed on a corridor corner
-     * 2.5 m away pass as 0.75 m tall; half does not. Partly hidden objects still pass unless more
-     * than half is hidden.
+     * 2.5 m away pass as 0.75 m tall; half does not, and neither did a stair sign 10 m off placed
+     * at 6 m on the corridor wall beside it (0.51 of its size). Objects still pass while up to a
+     * third is hidden.
      */
-    private const val MIN_SIZE_FRACTION = 0.5f
+    private const val MIN_SIZE_FRACTION = 0.65f
     private const val MAX_SIZE_FACTOR = 3f
 
     private fun imageCoordinatesOf(observation: SemanticObservation): Pair<Float?, Float?> =

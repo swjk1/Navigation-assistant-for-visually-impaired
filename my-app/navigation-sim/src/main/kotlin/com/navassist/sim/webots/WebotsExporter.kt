@@ -10,11 +10,13 @@ import com.navassist.sim.foxglove.json
 import com.navassist.sim.foxglove.obj
 import com.navassist.sim.world.Box
 import com.navassist.sim.world.Material
+import com.navassist.sim.sensor.DepthCamera
 import com.navassist.sim.world.SignKind
 import java.io.File
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
+import kotlin.math.atan
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -134,7 +136,7 @@ object WebotsExporter {
         appendLine("DirectionalLight { direction 0.3 0.5 -1 intensity 1.4 castShadows FALSE }")
         appendLine("DirectionalLight { direction -0.4 -0.2 -1 intensity 0.6 castShadows FALSE }")
 
-        for ((i, box) in scene.boxes.withIndex()) append(solid("box $i ${box.name}", box))
+        for ((i, box) in scene.boxes.withIndex()) append(solid("box $i ${box.name}", box, scene.isAbove(box)))
         for ((i, sign) in scene.signs.withIndex()) {
             val alongX = abs(sign.normalX) > 0.5f
             val sx = if (alongX) 0.03f else sign.widthMeters
@@ -148,9 +150,10 @@ object WebotsExporter {
             // Sit the plate just proud of the wall so it is not buried in it.
             val px = sign.x + sign.normalX * 0.03f
             val py = -sign.z - sign.normalZ * 0.03f
+            val transparency = if (sign.y >= scene.ceilingHeight) ABOVE_TRANSPARENCY else 0f
             appendLine("Solid {")
             appendLine("  translation $px $py ${sign.y}")
-            appendLine("  children [ Shape { appearance PBRAppearance { baseColor $r $g $bl roughness 1 metalness 0 } geometry Box { size $sx $sy ${sign.heightMeters} } } ]")
+            appendLine("  children [ Shape { appearance PBRAppearance { baseColor $r $g $bl transparency $transparency roughness 1 metalness 0 } geometry Box { size $sx $sy ${sign.heightMeters} } } ]")
             appendLine("  name \"sign $i ${sign.kind.name.lowercase()} ${sign.text}\"")
             appendLine("}")
         }
@@ -171,13 +174,23 @@ object WebotsExporter {
         appendLine("      children [")
         appendLine("        Shape { appearance PBRAppearance { baseColor 0.1 0.1 0.1 roughness 1 metalness 0 } geometry Box { size 0.02 0.08 0.15 } }")
         appendLine("        Pose { translation 0.35 0 0 rotation 0 1 0 1.5708 children [ Shape { appearance PBRAppearance { baseColor 1 1 1 transparency 0.3 roughness 1 metalness 0 } geometry Cone { bottomRadius 0.12 height 0.6 } } ] }")
+        // What the phone's camera sees, at half the simulated RGB resolution and the same field of
+        // view, portrait when the phone is held portrait. Webots shows it as an overlay on the 3D
+        // view (double-click it for its own window). The near plane sits past the pointing cone.
+        val k = DepthCamera.DEFAULT_RGB
+        val (across, along) = if (hold.portrait) k.height to k.width else k.width to k.height
+        val focal = if (hold.portrait) k.fy else k.fx
+        appendLine("        Camera { name \"phone camera\" width ${across / 2} height ${along / 2} fieldOfView ${2 * atan(across / 2f / focal)} near 0.7 }")
         appendLine("      ]")
         appendLine("    }")
         appendLine("  ]")
         appendLine("}")
     }
 
-    private fun solid(name: String, box: Box): String {
+    /** Storeys above the one walked are drawn nearly clear, so the overview can see the run. */
+    private const val ABOVE_TRANSPARENCY = 0.85f
+
+    private fun solid(name: String, box: Box, above: Boolean): String {
         val px = (box.minX + box.maxX) / 2f
         val py = -(box.minZ + box.maxZ) / 2f
         val pz = (box.minY + box.maxY) / 2f
@@ -188,7 +201,7 @@ object WebotsExporter {
             box.material == Material.DARK -> listOf(0.05f, 0.05f, 0.05f, 0f)
             box.maxY < 1.2f -> listOf(0.9f, 0.55f, 0.25f, 0f)
             else -> listOf(0.7f, 0.7f, 0.75f, 0f)
-        }
+        }.let { if (above) it.take(3) + maxOf(it[3], ABOVE_TRANSPARENCY) else it }
         return "Solid {\n" +
             "  translation $px $py $pz\n" +
             "  children [ Shape { appearance PBRAppearance { baseColor $r $g $b transparency $transparency roughness 1 metalness 0 } " +

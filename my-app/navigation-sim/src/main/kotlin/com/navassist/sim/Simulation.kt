@@ -12,6 +12,8 @@ import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.NavigationSnapshot
 import com.navassist.navcore.state.NavigationStatus
 import com.navassist.navcore.state.StopReason
+import com.navassist.navcore.semantic.AdviceDirection
+import com.navassist.sim.advice.Adviser
 import com.navassist.sim.perception.PerceptionModel
 import com.navassist.sim.perception.PerceptionProfile
 import com.navassist.sim.sensor.BodyPose
@@ -42,6 +44,11 @@ data class SimSettings(
     /** Time windows, in seconds, during which the platform reports lost tracking. */
     val trackingLoss: List<ClosedFloatingPointRange<Double>> = emptyList(),
     val seed: Long = 1,
+    /** An adviser (LLM, decision model, oracle) asked which way to explore; null for none. */
+    val adviser: Adviser? = null,
+    /** How often the adviser is asked while exploring, and how long its answer takes to arrive. */
+    val adviceIntervalSeconds: Double = 8.0,
+    val adviceLatencySeconds: Double = 2.0,
 )
 
 enum class Outcome { ARRIVED, TIMEOUT, FELL }
@@ -101,7 +108,7 @@ class Simulation(val settings: SimSettings) {
     val engine = NavigationEngine(settings.engineConfig)
     private val assembler = SensorFrameAssembler(settings.engineConfig)
     private val camera = DepthCamera(noise = settings.depthNoise, renderStride = settings.engineConfig.depthSampleStride, random = random)
-    private val perception = PerceptionModel(settings.perception, camera.rgbIntrinsics, random)
+    val perception = PerceptionModel(settings.perception, camera.rgbIntrinsics, random)
     val user = VirtualUser(settings.start, settings.user, scene)
 
     val trace = ArrayList<TraceSample>()
@@ -126,6 +133,16 @@ class Simulation(val settings: SimSettings) {
     private var canonicalOrigin: Triple<Float, Float, Float>? = null
 
     var frameIndex = 0L
+        private set
+
+    private var nextAdviceSeconds = 0.0
+    private var pendingAdvice: Pair<Double, List<AdviceDirection>>? = null
+
+    /** Diagnostics: every batch of observations as placed, before the engine gets it. */
+    var onLocated: ((List<SemanticLocator.Located>) -> Unit)? = null
+
+    /** How many times the adviser was asked. */
+    var adviceRequests = 0
         private set
     val seconds: Double get() = frameIndex * FRAME_SECONDS
     private val timestampNanos: Long get() = START_NANOS + frameIndex * FRAME_NANOS
@@ -185,14 +202,21 @@ class Simulation(val settings: SimSettings) {
         lastFrame = frame
         lastSnapshot = snapshot
         user.hear(snapshot.command, snapshot.stopReason, seconds)
+        user.hearAim(snapshot.aim, seconds)
 
         // Perception, on the app's cadence: observations placed with the depth of THEIR frame.
         val arrived = perception.deliver(seconds)
-        if (arrived.isNotEmpty()) SemanticLocator.submit(engine, SemanticLocator.locate(arrived, assembler))
+        if (arrived.isNotEmpty()) {
+            val located = SemanticLocator.locate(arrived, assembler)
+            onLocated?.invoke(located)
+            SemanticLocator.submit(engine, located)
+        }
         if (tracking && perception.wantsCapture(seconds)) {
             assembler.pinDepth(timestampNanos)
             perception.capture(seconds, timestampNanos, scene, cameraMatrix)
         }
+
+        settings.adviser?.let { consult(it) }
 
         val sample = TraceSample(
             seconds, user.body, user.phoneYaw, snapshot.command, snapshot.status, snapshot.stopReason,
@@ -203,8 +227,32 @@ class Simulation(val settings: SimSettings) {
         return snapshot
     }
 
+    /**
+     * Asks the adviser at its cadence while the engine explores, and hands the answer over after
+     * the adviser's latency - the engine keeps going meanwhile, as it would waiting on a network.
+     */
+    private fun consult(adviser: Adviser) {
+        pendingAdvice?.let { (due, advice) ->
+            if (seconds < due) return
+            engine.submitAdvice(advice)
+            pendingAdvice = null
+        }
+        if (seconds < nextAdviceSeconds || engine.status != NavigationStatus.EXPLORING) return
+        nextAdviceSeconds = seconds + settings.adviceIntervalSeconds
+        adviceRequests++
+        val advice = adviser.advise(engine.situation(), this) ?: return
+        pendingAdvice = (seconds + settings.adviceLatencySeconds) to advice
+    }
+
     /** Plan position and yaw of the phone where the engine fixed its canonical frame. */
     fun canonicalOriginPlan(): Triple<Float, Float, Float>? = canonicalOrigin
+
+    /** Floor-plan direction (x, y) -> engine canonical direction (x, z). Null until the frame is established. */
+    fun planDirectionToCanonical(dx: Float, dy: Float): Vec2? {
+        val (_, _, yaw) = canonicalOrigin ?: return null
+        // Inverse of canonicalToPlan's rotation: canonical x along the right axis, z along forward.
+        return Vec2(dx * cos(yaw) - dy * sin(yaw), dx * sin(yaw) + dy * cos(yaw))
+    }
 
     /** Engine canonical (x, z) -> floor-plan (x, y). Null until the frame is established. */
     fun canonicalToPlan(point: Vec2): Pair<Float, Float>? {

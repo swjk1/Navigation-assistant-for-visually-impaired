@@ -109,7 +109,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
                 "lifetime" to time(0)
                 "frame_locked" to true
                 "metadata" to arr {}
-                "cubes" to arr { for (box in sim.scene.boxes) add(cube(box)) }
+                "cubes" to arr { for (box in sim.scene.boxes) add(cube(box, sim.scene.isAbove(box))) }
                 "texts" to arr {
                     for (sign in sim.scene.signs) add(obj {
                         "pose" to pose(sign.x, -sign.z, sign.y + 0.25f)
@@ -125,7 +125,8 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
         }
     }
 
-    private fun cube(box: Box) = obj {
+    /** [above]: on a storey over the one walked, drawn faint so the 3D view can see down to the user. */
+    private fun cube(box: Box, above: Boolean) = obj {
         // World is AR-style (y up, z = -north); plan is x east, y north, z up.
         "pose" to pose((box.minX + box.maxX) / 2f, -(box.minZ + box.maxZ) / 2f, (box.minY + box.maxY) / 2f)
         "size" to obj {
@@ -134,6 +135,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
             "z" to (box.maxY - box.minY)
         }
         "color" to when {
+            above -> color(0.62f, 0.62f, 0.68f, 0.08f)
             box.isFloor && box.maxY < -0.5f -> color(0.12f, 0.12f, 0.14f, 1f)
             box.isFloor -> color(0.28f, 0.28f, 0.32f, 1f)
             box.material == Material.GLASS -> color(0.35f, 0.8f, 0.95f, 0.3f)

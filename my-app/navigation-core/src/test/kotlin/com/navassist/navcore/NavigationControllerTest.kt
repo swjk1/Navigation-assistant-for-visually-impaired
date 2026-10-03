@@ -255,4 +255,26 @@ class NavigationControllerTest {
         assertTrue(NavigationCommand.TURN_RIGHT !in spoken, "never needs correcting back the other way: $spoken")
         assertEquals(NavigationCommand.STRAIGHT, said)
     }
+
+    @Test
+    fun `a waypoint behind does not flip left and right as the error wraps past 180`() {
+        // Facing a wall, the path straight behind, the phone still wavering from a sweep: the
+        // error crosses +-180 back and forth. That once ended each turn as an "overshoot", and the
+        // drift correction turned the user back the other way - left, right, left, for minutes.
+        val grid = openGrid()
+        for (gx in 0 until grid.cells) grid.setState(gx, grid.worldToGrid(Vec2(0f, 0.6f)).gz, CellState.OCCUPIED)
+        val inflated = TestSupport.inflate(grid, config)
+        val behind = listOf(Vec2(0f, 0f), Vec2(0f, -1f), Vec2(0f, -2f), Vec2(0f, -3f))
+        val controller = NavigationController(config)
+        val turns = ArrayList<NavigationCommand>()
+        repeat(90) { frame ->
+            clock += 33
+            val wobble = GeometryUtils.degreesToRadians(5f) * kotlin.math.sin(frame * 0.033f * 2f * Math.PI.toFloat())
+            val command = controller.update(Pose3D(0f, 1.4f, 0f, wobble), behind, inflated, clock).command
+            if ((command == NavigationCommand.TURN_LEFT || command == NavigationCommand.TURN_RIGHT) && turns.lastOrNull() != command) {
+                turns += command
+            }
+        }
+        assertEquals(1, turns.size, "turn direction changed: $turns")
+    }
 }

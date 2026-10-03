@@ -271,6 +271,7 @@ export function buildScanTimeoutFrame(latencyMs) {
       ...MOCK_TIMEOUT_SAFE_FRAME,
       hazardDescription:
         'Vision service slow. Hold still and try again.',
+      serviceDegraded: true,
     },
     latencyMs
   );
@@ -391,6 +392,7 @@ export async function processFrameLive(base64Image) {
       hazardDescription: quotaHit
         ? 'Vision quota reached. Wait one minute then retry.'
         : 'Perception temporarily unavailable. Hold position.',
+      serviceDegraded: true,
     },
     latencyMs
   );

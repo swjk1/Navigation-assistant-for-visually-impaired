@@ -208,7 +208,29 @@ function fromText(detection: OCRDetection, capture: CaptureContext): SemanticObs
   if (/\d/.test(text)) {
     return { type: 'ROOM', label: text, confidence: detection.confidence, ...centre };
   }
+  // A name over a door ("Pharmacy", "Staff Room"): places in malls, hospitals and offices are
+  // signed by name, not number. The engine only acts on it when it matches the destination.
+  if (isPlaceName(text)) {
+    return { type: 'ROOM', label: text, confidence: detection.confidence, ...centre };
+  }
   return null;
+}
+
+/** Signage words that are instructions or notices, never the name of a place. */
+const NOT_PLACE_NAMES = new Set([
+  'PUSH', 'PULL', 'OPEN', 'CLOSED', 'SALE', 'CAUTION', 'DANGER', 'WARNING', 'NOTICE', 'ENTER',
+  'ENTRANCE', 'IN', 'OUT', 'NO', 'STOP', 'WET FLOOR', 'NO SMOKING', 'NO ENTRY', 'STAFF ONLY',
+  'PRIVATE', 'KEEP OUT', 'KEEP CLEAR', 'FIRE DOOR', 'FIRE DOOR KEEP SHUT', 'EMERGENCY',
+  'DO NOT ENTER', 'AUTHORIZED PERSONNEL ONLY', 'WELCOME', 'THANK YOU', 'OFFICE HOURS',
+]);
+
+/** Three to thirty characters, mostly letters, not a notice: plausibly the name of a place. */
+export function isPlaceName(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 3 || trimmed.length > 30) return false;
+  if (!/^[\p{L}][\p{L}\s&'.-]*$/u.test(trimmed)) return false;
+  if ((trimmed.match(/\p{L}/gu) ?? []).length < 3) return false;
+  return !NOT_PLACE_NAMES.has(trimmed.toUpperCase().replace(/\s+/g, ' '));
 }
 
 /**

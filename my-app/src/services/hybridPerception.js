@@ -40,6 +40,7 @@ import { CAMERA_CAPTURE_CONFIG } from '../constants/cameraConfig.js';
  *   floorDetected?: boolean,
  *   immediateHazard?: boolean,
  *   hazardDescription?: string | null,
+ *   serviceDegraded?: boolean,
  * }} RawFrame
  */
 
@@ -109,11 +110,11 @@ function hazardHintsFromOcr(textItems = []) {
     .map((t) => String(t.text || '').toUpperCase())
     .join(' ');
   const keywords = [
+    // Warnings only. "STAIRS" and "EXIT ONLY" are wayfinding text: flagging them stopped the
+    // user every capture while a stair sign was in view. Stairs as a drop are the depth map's job.
     'CAUTION',
     'WET',
     'DANGER',
-    'STAIR',
-    'EXIT ONLY',
     'CONSTRUCTION',
     'KEEP OUT',
   ];
@@ -225,10 +226,13 @@ export function mergeNativeToRaw(native, vlmPartial = null) {
     box: item.box,
   }));
 
-  let immediateHazard = Boolean(vlmPartial?.immediateHazard);
+  // A VLM frame that only reports its own failure says nothing about the scene: the on-device
+  // result stands on its own rather than being overruled by "vision service slow".
+  const vlmScene = vlmPartial?.serviceDegraded ? null : vlmPartial;
+  let immediateHazard = Boolean(vlmScene?.immediateHazard);
   let hazardDescription =
-    vlmPartial?.hazardDescription != null
-      ? vlmPartial.hazardDescription
+    vlmScene?.hazardDescription != null
+      ? vlmScene.hazardDescription
       : null;
 
   // Do not assume floor is present when VLM was skipped
