@@ -273,6 +273,21 @@ class SemanticHintStoreTest {
     }
 
     @Test
+    fun `a washroom sign hung high steers exploration towards itself`() {
+        val store = SemanticHintStore(config)
+        val target = NavigationTarget.Room("washroom")
+        store.submit(
+            listOf(SemanticObservation.Room("washroom", 0.9f, worldPosition = Vec3(0f, 2.8f, 6f))),
+            nowMillis = 1_000, observerPose = origin, target = target, cameraHeightMeters = 1.4f,
+        )
+        assertNull(store.targetSighting)
+        val towardsSign = store.semanticScoreFor(Vec2(0f, 4f), origin, target, 1_000)
+        val sideways = store.semanticScoreFor(Vec2(4f, 0f), origin, target, 1_000)
+        assertTrue(towardsSign > 0.5f, "a frontier under the sign should be pulled: $towardsSign")
+        assertEquals(0f, sideways)
+    }
+
+    @Test
     fun `a sighting measured from nearer replaces one from farther, whatever its confidence`() {
         val store = SemanticHintStore(config)
         val target = NavigationTarget.Room("314")

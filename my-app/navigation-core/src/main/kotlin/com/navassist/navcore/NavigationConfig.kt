@@ -210,6 +210,23 @@ data class NavigationConfig(
     val weightRevisit: Float = -2.0f,
     val weightRisk: Float = -2.0f,
     /**
+     * Bonus for frontiers along the long axis of the free space around the user: down a
+     * concourse or corridor rather than off to its side, where shops and rooms open. Scaled by how
+     * elongated that space is, so it does nothing in a square lobby. Off (0) until measured; see
+     * exploration/SpaceShape.kt.
+     */
+    val weightAxis: Float = 0f,
+    /** Free space within this radius of the user decides the long axis. */
+    val axisRadiusMeters: Float = 8f,
+    /**
+     * Weight on how cluttered a frontier's surroundings are (shelving, tables, a room's
+     * furniture); negative penalises, like the other penalty weights. Off (0) until measured.
+     * Walls count too, so a narrow corridor scores some clutter as well.
+     */
+    val weightClutter: Float = 0f,
+    /** Blocked cells within this radius of a frontier count as its clutter. */
+    val clutterRadiusMeters: Float = 2f,
+    /**
      * Once the user has mapped up to the chosen frontier, the frontier nearest it (within this
      * distance) is chosen next, unless another scores at least [frontierContinuationMargin] more.
      */

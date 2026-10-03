@@ -3,7 +3,9 @@ package com.navassist.sim.bench
 import com.navassist.sim.SimSettings
 import com.navassist.sim.advice.LlmAdviser
 import com.navassist.sim.advice.LlmClient
+import com.navassist.sim.advice.NoisyOracleAdviser
 import com.navassist.sim.advice.OracleAdviser
+import com.navassist.sim.advice.OutageAdviser
 import com.navassist.sim.perception.PerceptionProfile
 import java.io.File
 
@@ -46,7 +48,7 @@ object Designs {
     /** Counts the questions an LLM design would ask, answering each with "no preference". */
     val dryRunQuestions = java.util.concurrent.atomic.AtomicInteger()
 
-    val all: Map<String, (SimSettings) -> SimSettings> = linkedMapOf(
+    val all: Map<String, (SimSettings) -> SimSettings> = linkedMapOf<String, (SimSettings) -> SimSettings>(
         "current" to { s -> s },
         // Upper bound: an adviser that knows the building's true shortest route.
         "oracle-advice" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target)) },
@@ -93,7 +95,26 @@ object Designs {
         "llm-advice" to { s -> s.copy(adviser = LlmAdviser(llm)) },
         // How many questions llm-advice would ask, without asking any.
         "llm-dry-run" to { s -> s.copy(adviser = LlmAdviser(null) { dryRunQuestions.incrementAndGet() }) },
-    )
+        // The oracle behind a connection that drops out for 30-60 s at a time: the engine must
+        // carry on, and stale advice must expire.
+        "oracle-outage" to { s -> s.copy(adviser = OutageAdviser(OracleAdviser(s.scene, s.target), s.seed)) },
+        // Shape cues for exploration, no adviser: favour the space's long axis, avoid clutter.
+        "axis-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 1f)) },
+        "axis-2" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 2f)) },
+        "clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -1f)) },
+        "clutter-3" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -3f)) },
+        "axis-1-clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 1f, weightClutter = -1f)) },
+    ).apply {
+        // An adviser of known quality, for free: right a given share of the time, each answer at a
+        // given weight. noisy-a60-w50 is right 60% of the time, at half weight.
+        for (accuracy in listOf(40, 50, 60, 70, 80, 90)) {
+            for (weight in listOf(25, 50, 100)) {
+                put("noisy-a$accuracy-w$weight") { s ->
+                    s.copy(adviser = NoisyOracleAdviser(s.scene, s.target, accuracy / 100f, weight / 100f, s.seed))
+                }
+            }
+        }
+    }
 
     fun named(name: String) = all[name] ?: error("no design '$name'; known: ${all.keys.joinToString()}")
 }

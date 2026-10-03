@@ -17,6 +17,8 @@ import com.navassist.navcore.topology.TopologicalMap
  *         + weightRevisit     * revisitPenalty
  *         + weightRisk        * riskPenalty
  *         + weightAdvice      * adviceScore   (only when an adviser has spoken)
+ *         + weightAxis        * along the space's long axis   (off by default)
+ *         + weightClutter     * obstacles around the frontier (off by default)
  *
  * (the distance / revisit / risk weights are negative by default, so those terms subtract.)
  *
@@ -40,6 +42,11 @@ class FrontierScorer(private val config: NavigationConfig) {
     ): List<Frontier> {
         val userPosition = userPose.position2D
         val normalizer = config.gridSizeMeters * 0.5f
+        val axis = if (config.weightAxis != 0f) {
+            SpaceShape.axis(inflated, userPosition, config.axisRadiusMeters, config.gridResolutionMeters)
+        } else {
+            null
+        }
         return frontiers
             .map { frontier ->
                 val distance = frontier.centroid.distanceTo(userPosition)
@@ -52,8 +59,17 @@ class FrontierScorer(private val config: NavigationConfig) {
                 val normalizedDistance =
                     GeometryUtils.clamp(distance / normalizer, 0f, 2f)
 
+                val along = axis?.let { it.elongation * SpaceShape.alignment(it, frontier.centroid - userPosition) } ?: 0f
+                val clutter = if (config.weightClutter != 0f) {
+                    SpaceShape.clutter(inflated, frontier.centroid, config.clutterRadiusMeters, config.gridResolutionMeters)
+                } else {
+                    0f
+                }
+
                 val total =
-                    config.weightInformation * frontier.estimatedInformationGain +
+                    config.weightAxis * along +
+                        config.weightClutter * clutter +
+                        config.weightInformation * frontier.estimatedInformationGain +
                         config.weightSemantic * semanticScore +
                         config.weightDistance * normalizedDistance +
                         config.weightRevisit * revisit +

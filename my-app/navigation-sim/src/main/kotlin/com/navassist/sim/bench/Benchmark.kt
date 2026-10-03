@@ -65,6 +65,10 @@ data class RunRecord(
     val closestMeters: Float? = null,
     /** Seconds spent in each engine state, as STATUS or STATUS/STOP_REASON (diagnostic). */
     val secondsByState: Map<String, Double> = emptyMap(),
+    /** How often the spoken instruction changed, per minute: what a listener has to keep up with. */
+    val changesPerMinute: Double? = null,
+    /** Smallest gap between the user's body and anything solid, in metres. */
+    val minClearanceMeters: Float? = null,
 )
 
 /** Averages over a set of runs. */
@@ -76,10 +80,13 @@ data class Summary(
     val collisionRunRate: Double,
     val fallRate: Double,
     val meanSecondsToSuccess: Double?,
+    /** Mean instruction changes per minute, over runs that recorded it; null for older results. */
+    val meanChangesPerMinute: Double? = null,
 ) {
-    fun line(): String = "success %.1f%%  SPL %.3f  false-arrival %.1f%%  runs-with-collision %.1f%%  falls %.1f%%  n=%d%s".format(
+    fun line(): String = "success %.1f%%  SPL %.3f  false-arrival %.1f%%  runs-with-collision %.1f%%  falls %.1f%%  n=%d%s%s".format(
         successRate * 100, spl, falseArrivalRate * 100, collisionRunRate * 100, fallRate * 100, runs,
         meanSecondsToSuccess?.let { "  mean time-to-goal %.0f s".format(it) } ?: "",
+        meanChangesPerMinute?.let { "  changes/min %.0f".format(it) } ?: "",
     )
 
     companion object {
@@ -94,6 +101,7 @@ data class Summary(
                 collisionRunRate = runs.count { it.collisions > 0 }.toDouble() / n,
                 fallRate = runs.count { it.fell }.toDouble() / n,
                 meanSecondsToSuccess = if (successes.isEmpty()) null else successes.sumOf { it.seconds } / successes.size,
+                meanChangesPerMinute = runs.mapNotNull { it.changesPerMinute }.takeIf { it.isNotEmpty() }?.average(),
             )
         }
     }
@@ -304,6 +312,8 @@ object Benchmark {
             locatedSeconds = located,
             closestMeters = closest.takeIf { it < Float.MAX_VALUE },
             secondsByState = byState,
+            changesPerMinute = result.instructionChangesPerMinute,
+            minClearanceMeters = result.minClearanceMeters.takeIf { it < Float.MAX_VALUE },
         )
     }
 
@@ -315,6 +325,7 @@ object Benchmark {
         file.writeText(
             json {
                 "name" to name
+                gitCommit()?.let { "commit" to it }
                 "seeds" to seeds
                 "successRadius" to SUCCESS_RADIUS
                 "summary" to summaryJson(Summary.of(runs))
@@ -346,6 +357,8 @@ object Benchmark {
                                 r.locatedSeconds?.let { "locatedSeconds" to it }
                                 r.closestMeters?.let { "closestMeters" to it }
                                 if (r.secondsByState.isNotEmpty()) "secondsByState" to obj { r.secondsByState.forEach { (k, v) -> k to v } }
+                                r.changesPerMinute?.let { "changesPerMinute" to it }
+                                r.minClearanceMeters?.let { "minClearanceMeters" to it }
                             })
                         }
                     })
@@ -362,7 +375,23 @@ object Benchmark {
         "collisionRunRate" to s.collisionRunRate
         "fallRate" to s.fallRate
         s.meanSecondsToSuccess?.let { "meanSecondsToSuccess" to it }
+        s.meanChangesPerMinute?.let { "meanChangesPerMinute" to it }
     }
+
+    /**
+     * The commit the engine and simulator were built from, so a result can be reproduced; "+dirty"
+     * when their sources had uncommitted changes. Null outside a git checkout.
+     */
+    private fun gitCommit(): String? = runCatching {
+        fun git(vararg args: String): String {
+            val process = ProcessBuilder("git", *args).redirectErrorStream(true).start()
+            val out = process.inputStream.bufferedReader().readText().trim()
+            return if (process.waitFor() == 0) out else error(out)
+        }
+        val head = git("rev-parse", "--short", "HEAD")
+        val dirty = git("status", "--porcelain", "--", "src", "../navigation-core/src").isNotEmpty()
+        if (dirty) "$head+dirty" else head
+    }.getOrNull()
 
     /** Reads a results file back as run records. */
     @Suppress("UNCHECKED_CAST")
@@ -388,6 +417,8 @@ object Benchmark {
                     finalStatus = r["finalStatus"] as String,
                     hits = (r["hits"] as List<*>?)?.map { it as String }.orEmpty(),
                     locatedSeconds = (r["locatedSeconds"] as Number?)?.toDouble(),
+                    changesPerMinute = (r["changesPerMinute"] as Number?)?.toDouble(),
+                    minClearanceMeters = (r["minClearanceMeters"] as Number?)?.toFloat(),
                 )
             }
         }
@@ -412,9 +443,19 @@ object Benchmark {
     ) {
         val verdict: String get() = when {
             candidateSummary.fallRate > baselineSummary.fallRate -> "REJECT: more falls"
+            candidateSummary.falseArrivalRate > baselineSummary.falseArrivalRate + FALSE_ARRIVAL_TOLERANCE ->
+                "REJECT: more false arrivals"
+            moreChurn -> "REJECT: more instruction churn"
             low > 0.0 -> "IMPROVEMENT"
             high < 0.0 -> "REGRESSION"
             else -> "NO SIGNIFICANT CHANGE"
+        }
+
+        /** Instruction changes per minute up by more than [CHURN_TOLERANCE]; unknown for older results. */
+        private val moreChurn: Boolean get() {
+            val before = baselineSummary.meanChangesPerMinute ?: return false
+            val after = candidateSummary.meanChangesPerMinute ?: return false
+            return after > before * (1 + CHURN_TOLERANCE)
         }
 
         fun report(): String = buildString {
@@ -427,6 +468,12 @@ object Benchmark {
             if (lost.isNotEmpty()) appendLine("episodes that got worse: ${lost.joinToString()}")
         }
     }
+
+    /** A design may raise the false-arrival rate by at most this much (absolute) before it is rejected. */
+    const val FALSE_ARRIVAL_TOLERANCE = 0.01
+
+    /** A design may raise instruction changes per minute by at most this fraction before it is rejected. */
+    const val CHURN_TOLERANCE = 0.05
 
     fun compare(baselineName: String, baseline: List<RunRecord>, candidateName: String, candidate: List<RunRecord>): Comparison {
         val a = baseline.associateBy { it.episode to it.seed }

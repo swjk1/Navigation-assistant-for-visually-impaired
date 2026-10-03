@@ -371,9 +371,14 @@ class SemanticHintStore(private val config: NavigationConfig) {
                 target is NavigationTarget.Room -> 0.3f
                 else -> 0f
             }
-            is SemanticObservation.Room ->
+            is SemanticObservation.Room -> when {
+                // A facility's sign is the way to it. Hung high over a corridor mouth it is not
+                // the destination itself (see submit), but it is the strongest hint there is:
+                // without this, a washroom pointer had no pull at all, since it has no number.
+                isFacility(target) && TargetMatcher.matches(observation, target) -> 1f
                 // A near-miss room number is mild evidence that the right corridor is this way.
-                nearMissRelevance(observation, target)
+                else -> nearMissRelevance(observation, target)
+            }
             is SemanticObservation.Floor -> 0f
         }
 
