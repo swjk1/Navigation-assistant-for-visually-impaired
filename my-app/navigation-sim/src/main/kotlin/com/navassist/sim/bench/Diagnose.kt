@@ -30,7 +30,7 @@ object Diagnose {
 
     fun run(filter: String?, seeds: List<Long>, design: String) {
         val configure = Designs.named(design)
-        val prepared = Benchmark.prepare(Benchmark.episodes.filter { filter == null || filter in it.id })
+        val prepared = Benchmark.prepare(Benchmark.select(filter))
         val total = java.util.concurrent.ConcurrentHashMap<String, Int>()
         val pool = java.util.concurrent.Executors.newFixedThreadPool(maxOf(1, Runtime.getRuntime().availableProcessors() - 1))
         val jobs = prepared.flatMap { p -> seeds.map { seed -> p to seed } }.map { (p, seed) -> pool.submit<String> {

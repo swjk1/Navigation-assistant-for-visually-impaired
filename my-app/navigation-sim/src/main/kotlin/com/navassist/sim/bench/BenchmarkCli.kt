@@ -6,7 +6,10 @@ import com.navassist.sim.advice.LlmClient
 import com.navassist.sim.advice.NoisyOracleAdviser
 import com.navassist.sim.advice.OracleAdviser
 import com.navassist.sim.advice.OutageAdviser
+import com.navassist.sim.advice.SituationRecorder
 import com.navassist.sim.perception.PerceptionProfile
+import com.navassist.sim.sensor.DriftModel
+import com.navassist.sim.sensor.SensorRig
 import java.io.File
 
 /**
@@ -98,6 +101,21 @@ object Designs {
         // The oracle behind a connection that drops out for 30-60 s at a time: the engine must
         // carry on, and stale advice must expire.
         "oracle-outage" to { s -> s.copy(adviser = OutageAdviser(OracleAdviser(s.scene, s.target), s.seed)) },
+        // Candidate sensor rigs (sensor/SensorRig.kt), alone and with the oracle.
+        "rig-wide-phone" to { s -> SensorRig.WIDE_PHONE.applyTo(s) },
+        "rig-stereo-chest" to { s -> SensorRig.STEREO_CHEST.applyTo(s) },
+        "rig-stereo-chest-glass" to { s -> SensorRig.STEREO_CHEST_GLASS.applyTo(s) },
+        "rig-lidar-chest" to { s -> SensorRig.LIDAR_CHEST.applyTo(s) },
+        "oracle-rig-stereo-chest" to { s -> SensorRig.STEREO_CHEST.applyTo(s).copy(adviser = OracleAdviser(s.scene, s.target)) },
+        "oracle-rig-lidar-chest" to { s -> SensorRig.LIDAR_CHEST.applyTo(s).copy(adviser = OracleAdviser(s.scene, s.target)) },
+        // Record every question an adviser would be asked, labelled with the truth (SITUATIONS_OUT).
+        "record" to { s -> s.copy(adviser = SituationRecorder(s.scene, s.target, s.start, s.seed)) },
+        "record-oracle" to { s -> s.copy(adviser = SituationRecorder(s.scene, s.target, s.start, s.seed, OracleAdviser(s.scene, s.target))) },
+        // A tracker that drifts: the engine's map no longer lines up with itself over a long walk.
+        "drift-mild" to { s -> s.copy(drift = DriftModel.MILD) },
+        "drift-strong" to { s -> s.copy(drift = DriftModel.STRONG) },
+        "oracle-drift-mild" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), drift = DriftModel.MILD) },
+        "oracle-drift-strong" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), drift = DriftModel.STRONG) },
         // Shape cues for exploration, no adviser: favour the space's long axis, avoid clutter.
         "axis-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 1f)) },
         "axis-2" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 2f)) },
@@ -124,7 +142,7 @@ object BenchmarkCli {
     private val resultsDir = File("benchmarks")
 
     fun list(filter: String?) {
-        val prepared = Benchmark.prepare(Benchmark.episodes.filter { filter == null || filter in it.id })
+        val prepared = Benchmark.prepare(Benchmark.select(filter))
         for (p in prepared) {
             println("%-38s %-8s shortest %5.1f m  limit %3.0f s  %d destination(s)".format(
                 p.episode.id, p.episode.target.description, p.shortest, p.maxSeconds, p.goals.size,
@@ -136,7 +154,7 @@ object BenchmarkCli {
     fun run(name: String, seeds: Int, filter: String?, design: String, pictures: File? = null) {
         val configure = Designs.named(design)
         val started = System.currentTimeMillis()
-        val prepared = Benchmark.prepare(Benchmark.episodes.filter { filter == null || filter in it.id })
+        val prepared = Benchmark.prepare(Benchmark.select(filter))
         val total = prepared.size * seeds
         println("benchmark '$name': design '$design', ${prepared.size} episodes x $seeds seeds = $total runs")
         var done = 0

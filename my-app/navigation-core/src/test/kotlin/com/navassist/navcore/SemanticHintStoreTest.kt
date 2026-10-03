@@ -288,6 +288,21 @@ class SemanticHintStoreTest {
     }
 
     @Test
+    fun `a sign read beyond depth range steers along the direction it was seen in`() {
+        val store = SemanticHintStore(config)
+        val target = NavigationTarget.Room("washroom")
+        // No position, only a bearing: straight along +x from the origin.
+        store.submit(
+            listOf(SemanticObservation.Room("washroom", 0.9f)), nowMillis = 1_000, observerPose = origin, target = target,
+            bearings = listOf(Vec2(1f, 0f)),
+        )
+        val along = store.semanticScoreFor(Vec2(5f, 0f), origin, target, 1_000)
+        val opposite = store.semanticScoreFor(Vec2(-5f, 0f), origin, target, 1_000)
+        assertTrue(along > 0.5f, "a frontier along the bearing should be pulled: $along")
+        assertEquals(0f, opposite)
+    }
+
+    @Test
     fun `a sighting measured from nearer replaces one from farther, whatever its confidence`() {
         val store = SemanticHintStore(config)
         val target = NavigationTarget.Room("314")

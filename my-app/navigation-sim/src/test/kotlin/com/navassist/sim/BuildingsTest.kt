@@ -61,3 +61,18 @@ class BuildingsTest {
         }
     }
 }
+
+class HeldOutMallTest {
+    @Test
+    fun `every held-out trip starts on open floor and has a reachable destination`() {
+        val prepared = com.navassist.sim.bench.Benchmark.prepare(com.navassist.sim.bench.Benchmark.heldOut)
+        assertEquals(15, prepared.size)
+        for (p in prepared) assertTrue(p.shortest > 5f, "${p.episode.id}: shortest walk ${p.shortest} m")
+    }
+
+    @Test
+    fun `held-out trips stay out of the main episode set`() {
+        assertTrue(com.navassist.sim.bench.Benchmark.select("mall").none { "heldout" in it.id })
+        assertEquals(15, com.navassist.sim.bench.Benchmark.select("heldout").size)
+    }
+}

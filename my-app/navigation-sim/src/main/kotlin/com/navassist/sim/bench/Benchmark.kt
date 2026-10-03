@@ -14,6 +14,7 @@ import com.navassist.sim.report.TopDownRenderer
 import com.navassist.sim.sensor.BodyPose
 import com.navassist.sim.world.Buildings
 import com.navassist.sim.world.Mall
+import com.navassist.sim.world.MallVariant
 import com.navassist.sim.world.Scene
 import com.navassist.sim.world.School
 import com.navassist.sim.world.Sign
@@ -192,6 +193,37 @@ object Benchmark {
         mall(2, "foodcourt", 81.5f, 7f, W, room("Pet Shop"), "petshop")
         list
     }
+
+    /**
+     * Trips in malls nothing was tuned on ([MallVariant.heldOut]). Kept out of [episodes] so the
+     * reference totals stay comparable; run only when a filter names "heldout".
+     */
+    val heldOut: List<Episode> by lazy {
+        val list = ArrayList<Episode>()
+        for (mall in MallVariant.heldOut) {
+            fun add(what: String, start: Pair<Float, Float>, heading: Float, target: NavigationTarget) {
+                list += Episode(
+                    "heldout-mall-${mall.name}-$what", "heldout-mall", { mall.build() },
+                    BodyPose(start.first, start.second, heading), target,
+                )
+            }
+            val names = mall.shopNames
+            add("west-elevator", mall.westStart, E, NavigationTarget.Elevator)
+            add("west-washroom", mall.westStart, E, room("washroom"))
+            add("west-shop", mall.westStart, E, room(names[names.size / 2]))
+            add("mid-exit", mall.concoursePoint(0.45f, -2f), E, NavigationTarget.Exit)
+            add("mid-shop", mall.concoursePoint(0.45f, -2f), W, room(names.last()))
+        }
+        list
+    }
+
+    /** The episodes a filter picks: the main set, or the held-out set when the filter names it. */
+    fun select(filter: String?): List<Episode> =
+        if (filter != null && "heldout" in filter) {
+            heldOut.filter { filter == "heldout" || filter in it.id }
+        } else {
+            episodes.filter { filter == null || filter in it.id }
+        }
 
     /** The places that satisfy [target] in [scene]: in front of each sign that names it. */
     fun goals(scene: Scene, target: NavigationTarget): List<Pair<Float, Float>> =

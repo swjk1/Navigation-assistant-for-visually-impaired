@@ -403,6 +403,9 @@ class SemanticHintStore(private val config: NavigationConfig) {
             val delta = world.toVec2() - hint.observerPose.position2D
             if (delta.lengthSquared() > 1e-4f) return delta.yawRadians()
         }
+        // Read beyond depth range: no position, but the direction it was seen in. Without this a
+        // sign seen from afar - a washroom pointer, a shop name across the concourse - had no pull.
+        hint.bearing?.let { if (it.lengthSquared() > 1e-6f) return it.yawRadians() }
         val direction = when (val o = hint.observation) {
             is SemanticObservation.RoomRange -> o.direction
             is SemanticObservation.Exit -> o.direction

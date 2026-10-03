@@ -49,6 +49,10 @@ data class SimSettings(
     /** How often the adviser is asked while exploring, and how long its answer takes to arrive. */
     val adviceIntervalSeconds: Double = 8.0,
     val adviceLatencySeconds: Double = 2.0,
+    /** The camera: field of view and resolution, shared by depth and perception. */
+    val cameraIntrinsics: com.navassist.navcore.sensing.CameraIntrinsics = com.navassist.sim.sensor.DepthCamera.DEFAULT_RGB,
+    /** How the tracker's reported pose wanders from the truth; null for perfect tracking. */
+    val drift: com.navassist.sim.sensor.DriftModel? = null,
 )
 
 enum class Outcome { ARRIVED, TIMEOUT, FELL }
@@ -107,7 +111,12 @@ class Simulation(val settings: SimSettings) {
     val scene: Scene = settings.scene
     val engine = NavigationEngine(settings.engineConfig)
     private val assembler = SensorFrameAssembler(settings.engineConfig)
-    private val camera = DepthCamera(noise = settings.depthNoise, renderStride = settings.engineConfig.depthSampleStride, random = random)
+    private val camera = DepthCamera(
+        rgbIntrinsics = settings.cameraIntrinsics,
+        noise = settings.depthNoise,
+        renderStride = settings.engineConfig.depthSampleStride,
+        random = random,
+    )
     val perception = PerceptionModel(settings.perception, camera.rgbIntrinsics, random)
     val user = VirtualUser(settings.start, settings.user, scene)
 
@@ -124,6 +133,10 @@ class Simulation(val settings: SimSettings) {
     val deliveredDepth: DepthImage? get() = if (hasDelivered) delivered else null
 
     private val cameraMatrix = FloatArray(16)
+    private val driftedMatrix = FloatArray(16)
+
+    /** The tracker's drift, when the settings ask for one; the engine sees only the drifted pose. */
+    val poseDrift: com.navassist.sim.sensor.PoseDrift? = settings.drift?.let { com.navassist.sim.sensor.PoseDrift(it, settings.seed) }
     private val rendered = DepthImage()
     private val delivered = DepthImage()
     private var renderedAtFrame = -1L
@@ -182,10 +195,11 @@ class Simulation(val settings: SimSettings) {
         }
 
         val wasEstablished = assembler.canonical.isEstablished
+        val reported = poseDrift?.apply(seconds, dt, cameraMatrix, driftedMatrix) ?: cameraMatrix
         val frame = assembler.assemble(
             timestampNanos = timestampNanos,
             tracking = tracking,
-            cameraToWorld = cameraMatrix,
+            cameraToWorld = reported,
             depth = if (hasDelivered) delivered else null,
             depthIntrinsics = camera.depthIntrinsics,
             planes = camera.trackedPlanes(),
