@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Sim as Simulation / Perception
+    participant Mem as Belief Graph
+    participant LLM as Hypothesis Generator
+    participant DM as Multimodal Decision Model
+    participant Nav as Local Executor
+    User->>LLM: Find room 501
+    Sim->>Mem: room 112 visible, elevator sign partially visible
+    Mem->>LLM: floor = unknown; H1: leading digit indicates floor; H2: indicates wing
+    LLM->>DM: Candidate: look at sign, inspect door, explore branch, go to lift
+    DM-->>Nav: Inspect directory: best feasible expected search cost
+    Nav-->>User: Turn slightly left / approach safely
+    Sim->>Mem: Directory confirms 500-range on floor 6
+    Mem->>Mem: Reject floor-5 inference, retain original room-112 evidence
+    Mem->>LLM: Corrected world state and progress outcome
+    LLM->>Nav: Navigate toward validated floor-6 elevator connection
+    Sim->>Mem: Door label 501 associated with physical door
+    Mem-->>User: Destination verified (or request confirmation)

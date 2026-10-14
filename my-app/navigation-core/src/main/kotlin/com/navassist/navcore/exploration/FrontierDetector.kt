@@ -61,7 +61,7 @@ class FrontierDetector(private val config: NavigationConfig) {
         // shorter than half the window.
         for (gz in 1 until n - 1) {
             for (gx in 1 until n - 1) {
-                if (grid.stateAt(gx, gz) != CellState.FREE) continue
+                if (stateOf(grid, gx, gz) != CellState.FREE) continue
                 if (hasUnknownNeighbour(grid, gx, gz)) isFrontier[gz * n + gx] = true
             }
         }
@@ -198,11 +198,15 @@ class FrontierDetector(private val config: NavigationConfig) {
         return if (best < 0) null else GridCoordinate(best % n, best / n)
     }
 
+    /** See NavigationConfig.frontiersFromCamera. */
+    private fun stateOf(grid: OccupancyGrid, gx: Int, gz: Int): CellState =
+        if (config.frontiersFromCamera) grid.cameraStateAt(gx, gz) else grid.stateAt(gx, gz)
+
     private fun hasUnknownNeighbour(grid: OccupancyGrid, gx: Int, gz: Int): Boolean =
-        grid.stateAt(gx + 1, gz) == CellState.UNKNOWN ||
-            grid.stateAt(gx - 1, gz) == CellState.UNKNOWN ||
-            grid.stateAt(gx, gz + 1) == CellState.UNKNOWN ||
-            grid.stateAt(gx, gz - 1) == CellState.UNKNOWN
+        stateOf(grid, gx + 1, gz) == CellState.UNKNOWN ||
+            stateOf(grid, gx - 1, gz) == CellState.UNKNOWN ||
+            stateOf(grid, gx, gz + 1) == CellState.UNKNOWN ||
+            stateOf(grid, gx, gz - 1) == CellState.UNKNOWN
 
     /** Fraction of cells around the frontier that are still unknown, normalised to 0..1. */
     private fun informationGain(grid: OccupancyGrid, cell: GridCoordinate): Float {
@@ -215,7 +219,7 @@ class FrontierDetector(private val config: NavigationConfig) {
                 val gz = cell.gz + dz
                 if (!grid.inBounds(gx, gz)) continue
                 total++
-                if (grid.stateAt(gx, gz) == CellState.UNKNOWN) unknown++
+                if (stateOf(grid, gx, gz) == CellState.UNKNOWN) unknown++
             }
         }
         if (total == 0) return 0f

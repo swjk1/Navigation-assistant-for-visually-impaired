@@ -32,9 +32,36 @@ data class UserProfile(
     val swayDegrees: Float = 3f,
     val hold: PhoneHold = PhoneHold(),
     val bodyRadiusMeters: Float = 0.25f,
+    /**
+     * A robot rather than a person: it reads the engine's heading error to the next waypoint and
+     * steers along the path continuously, instead of acting on the coarse spoken commands alone.
+     * The commands still gate it - it only moves forward on STRAIGHT, and stops and scans as told.
+     */
+    val followsPath: Boolean = false,
+    /** Turn rate per unit of heading error when following the path, per second. */
+    val steerGain: Float = 3f,
+    /** Slowest in-place turn while the engine says turn, so a small error still closes. */
+    val minTurnDegreesPerSecond: Float = 15f,
+    /**
+     * The camera is strapped to the chest: it points where the body points, at a fixed pitch. Aim
+     * requests (tilt, pan, sweep) cannot be carried out, and scanning turns the whole body.
+     */
+    val chestMounted: Boolean = false,
 ) {
     companion object {
         val TYPICAL = UserProfile()
+
+        /** A wheeled robot carrying the phone: acts on the next frame, follows the path, no sway. */
+        val ROBOT = UserProfile(
+            name = "robot",
+            reactionSeconds = 0f,
+            turnDegreesPerSecond = 90f,
+            swayDegrees = 0f,
+            // One side-to-side every 4 s. Not 2 s: with a capture every second, a 2 s sweep caught
+            // the camera at the same two angles every time.
+            scanPeriodSeconds = 4f,
+            followsPath = true,
+        )
         val CAUTIOUS = UserProfile(name = "cautious", reactionSeconds = 0.8f, walkMetersPerSecond = 0.6f, turnDegreesPerSecond = 40f)
 
         /** Sweeps side to side but never tilts the phone at the floor: the near-field worst case. */
@@ -53,8 +80,16 @@ data class UserProfile(
 class VirtualUser(
     start: BodyPose,
     val profile: UserProfile,
-    private val scene: Scene,
+    scene: Scene,
 ) {
+    private var scene: Scene = scene
+
+    /** A lift ride ended: the same place on another floor. */
+    fun moveTo(scene: Scene) {
+        this.scene = scene
+        touching = null
+    }
+
     var body: BodyPose = start
         private set
 
@@ -105,6 +140,48 @@ class VirtualUser(
         heardAims.addLast(nowSeconds + profile.reactionSeconds to next)
     }
 
+    /** The engine's latest heading error to its next waypoint, relative to the phone; path followers only. */
+    private var headingErrorRadians: Float? = null
+
+    /**
+     * Called with every engine output; only a path-following robot reads it. With the engine's
+     * planned path (canonical frame) and its pose estimate, the robot aims at a point
+     * [PATH_LOOKAHEAD_METERS] along the path - close enough to follow its bends instead of cutting
+     * inside them, as steering at the engine's own 1.5 m lookahead does. Without a path, the
+     * engine's heading error to its lookahead is used.
+     */
+    fun hearHeading(
+        errorDegrees: Float?,
+        path: List<com.navassist.navcore.geometry.Vec2> = emptyList(),
+        pose: com.navassist.navcore.geometry.Pose3D? = null,
+    ) {
+        if (!profile.followsPath) return
+        headingErrorRadians = pathError(path, pose) ?: errorDegrees?.let { GeometryUtils.degreesToRadians(it) }
+    }
+
+    /** Heading error, relative to the phone as the engine sees it, to a point a little way along the path. */
+    private fun pathError(path: List<com.navassist.navcore.geometry.Vec2>, pose: com.navassist.navcore.geometry.Pose3D?): Float? {
+        if (pose == null || path.size < 2) return null
+        val here = pose.position2D
+        var nearest = 0
+        for (i in path.indices) if (path[i].distanceSquaredTo(here) < path[nearest].distanceSquaredTo(here)) nearest = i
+        var aim = path.last()
+        for (i in nearest + 1 until path.size) {
+            if (path[i].distanceTo(here) >= PATH_LOOKAHEAD_METERS) { aim = path[i]; break }
+        }
+        val toAim = aim - here
+        if (toAim.lengthSquared() < 1e-4f) return null
+        return GeometryUtils.angleDifference(pose.yawRadians, toAim.yawRadians())
+    }
+
+    /**
+     * The heading error relative to the BODY: the engine measures it from the phone, which a robot
+     * knows it has panned by (phone yaw - body heading).
+     */
+    private fun bodyHeadingError(): Float? = headingErrorRadians?.let {
+        GeometryUtils.normalizeAngle(it + GeometryUtils.angleDifference(body.heading, phoneYaw))
+    }
+
     private val heard = ArrayDeque<Heard>()
     private var lastHeard: Pair<NavigationCommand, StopReason?>? = null
     private var scanClock = 0f
@@ -130,13 +207,26 @@ class VirtualUser(
 
         while (heardAims.isNotEmpty() && heardAims.first().first <= nowSeconds) aim = heardAims.removeFirst().second
 
+        if (profile.chestMounted) {
+            updateChestMounted(dt)
+            return
+        }
         val usualPitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
         // Pitch is stored as degrees DOWN; an aim is given as degrees above horizontal.
         val holdPitch = aim?.pitchDegrees?.let { GeometryUtils.degreesToRadians(-it) } ?: usualPitch
         val aimYaw = GeometryUtils.degreesToRadians(aim?.yawDegrees ?: 0f)
         when (acting) {
             NavigationCommand.STRAIGHT -> {
-                walk(profile.walkMetersPerSecond * dt)
+                val error = if (profile.followsPath) bodyHeadingError() else null
+                if (error != null) {
+                    // Steer onto the path while driving, slowing as the error grows.
+                    val maxTurn = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond)
+                    val turn = (profile.steerGain * error).coerceIn(-maxTurn, maxTurn) * dt
+                    body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
+                    walk(profile.walkMetersPerSecond * cos(error).coerceAtLeast(0f) * dt)
+                } else {
+                    walk(profile.walkMetersPerSecond * dt)
+                }
                 strideClock += dt
                 val sway = GeometryUtils.degreesToRadians(profile.swayDegrees) * sin(strideClock * 2f * PI.toFloat() * 0.9f)
                 val sweepDegrees = aim?.sweepDegrees ?: 0f
@@ -149,7 +239,13 @@ class VirtualUser(
             }
             NavigationCommand.TURN_LEFT, NavigationCommand.TURN_RIGHT -> {
                 val direction = if (acting == NavigationCommand.TURN_RIGHT) 1f else -1f
-                val turn = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond) * dt * direction
+                val maxRate = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond)
+                // A robot eases into the path's heading instead of turning at full rate until told to stop.
+                val rate = bodyHeadingError()?.let {
+                    (profile.steerGain * kotlin.math.abs(it))
+                        .coerceIn(GeometryUtils.degreesToRadians(profile.minTurnDegreesPerSecond), maxRate)
+                } ?: maxRate
+                val turn = rate * dt * direction
                 body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
                 if (profile.walkWhileTurningMetersPerSecond > 0f) walk(profile.walkWhileTurningMetersPerSecond * dt)
                 phoneYaw = GeometryUtils.normalizeAngle(body.heading + aimYaw)
@@ -177,6 +273,57 @@ class VirtualUser(
                 phonePitch = holdPitch
             }
         }
+    }
+
+    /** Heading the body sweeps about while scanning with a chest mount; set when a scan starts. */
+    private var scanCentre: Float? = null
+
+    /** As [update], for a camera fixed to the body: every look is a turn of the whole body. */
+    private fun updateChestMounted(dt: Float) {
+        val maxRate = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond)
+        if (acting != NavigationCommand.SCAN) scanCentre = null
+        when (acting) {
+            NavigationCommand.STRAIGHT -> {
+                val error = if (profile.followsPath) bodyHeadingError() else null
+                if (error != null) {
+                    val turn = (profile.steerGain * error).coerceIn(-maxRate, maxRate) * dt
+                    body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
+                    walk(profile.walkMetersPerSecond * cos(error).coerceAtLeast(0f) * dt)
+                } else {
+                    walk(profile.walkMetersPerSecond * dt)
+                }
+            }
+            NavigationCommand.TURN_LEFT, NavigationCommand.TURN_RIGHT -> {
+                val direction = if (acting == NavigationCommand.TURN_RIGHT) 1f else -1f
+                val rate = bodyHeadingError()?.let {
+                    (profile.steerGain * kotlin.math.abs(it))
+                        .coerceIn(GeometryUtils.degreesToRadians(profile.minTurnDegreesPerSecond), maxRate)
+                } ?: maxRate
+                body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + rate * dt * direction))
+            }
+            NavigationCommand.SCAN -> {
+                scanClock += dt
+                // "Look down ahead" cannot be done with a fixed camera. Holding still is the nearest
+                // thing: the floor in front is usually there to be bridged to (see the chest rigs'
+                // blindZoneMeters), and turning away would only point the camera elsewhere. Sweep
+                // only if it stays unknown.
+                if (actingReason == StopReason.UNKNOWN_AHEAD && scanClock < CHEST_LOOK_AHEAD_HOLD_SECONDS) {
+                    phoneYaw = body.heading
+                    phonePitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
+                    return
+                }
+                // Sweep the body either side of where the scan began, never faster than it can turn.
+                val centre = scanCentre ?: body.heading.also { scanCentre = it }
+                val phase = 2f * PI.toFloat() * scanClock / profile.scanPeriodSeconds
+                val wanted = GeometryUtils.normalizeAngle(centre + GeometryUtils.degreesToRadians(profile.scanSweepDegrees) * sin(phase))
+                val error = GeometryUtils.angleDifference(body.heading, wanted)
+                val turn = error.coerceIn(-maxRate * dt, maxRate * dt)
+                body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
+            }
+            NavigationCommand.STOP, NavigationCommand.ARRIVED -> Unit
+        }
+        phoneYaw = body.heading
+        phonePitch = GeometryUtils.degreesToRadians(profile.holdPitchDegrees)
     }
 
     /**
@@ -208,5 +355,13 @@ class VirtualUser(
         body = body.copy(x = nx, y = ny)
         distanceWalked += meters
         if (!scene.hasFloorAt(nx, -ny)) fell = true
+    }
+
+    private companion object {
+        /** How far along the engine's path a robot aims: short, so it follows bends, not cuts them. */
+        const val PATH_LOOKAHEAD_METERS = 0.6f
+
+        /** How long a chest-mounted robot holds still when asked to look at the floor ahead. */
+        const val CHEST_LOOK_AHEAD_HOLD_SECONDS = 2f
     }
 }

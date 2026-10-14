@@ -1,0 +1,17 @@
+flowchart TD
+  START["Navigation goal or new meaningful observation"] --> SNAP["Retrieve relevant graph / hypotheses / map crops"]
+  SNAP --> UPDATE["Verify observations and update belief state"]
+  UPDATE --> HYP["Generate structural hypotheses and information needs"]
+  HYP --> CAND["Generate bounded actions: look / inspect / move / ask"]
+  CAND --> VALID["Ground targets and validate preconditions"]
+  VALID --> EST["Text + Image decision model estimates outcomes"]
+  EST --> SCORE["Score action: cost + expected remaining search cost"]
+  SCORE --> SELECT{"Any feasible and safe action?"}
+  SELECT -->|Yes| EXEC["Execute chosen subgoal with local supervisor"]
+  SELECT -->|No| HELP["Pause / request assistance"]
+  EXEC --> OUT["ActionOutcome + new observation evidence"]
+  OUT --> VERIFY{"Target destination verified?"}
+  VERIFY -->|No| UPDATE
+  VERIFY -->|Yes| DONE["Confirm arrival"]
+  classDef research fill:#e8e5ff,stroke:#6e5aca,color:#27205d
+  class EST,SCORE,HYP research

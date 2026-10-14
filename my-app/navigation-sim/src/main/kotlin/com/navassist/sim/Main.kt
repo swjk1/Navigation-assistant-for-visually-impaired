@@ -13,10 +13,13 @@ Navigation simulator
   --snapshots all|fail   picture every run, or only failures (default fail)
   --trace                print every change of engine status / instruction
   --mcap DIR             record every run to DIR/<scenario>-seed<N>.mcap for Foxglove
+  --ledger DIR           write every run's evidence ledger to DIR/<scenario>-seed<N>.ledger.jsonl
   --webots DIR           export every run as a Webots project, DIR/<scenario>-seed<N>/worlds/scene.wbt
   --live PORT            run the first scenario in real time, streaming to Foxglove at
                          ws://localhost:PORT; publish a Twist on /cmd_vel to drive it yourself
   --list                 list scenarios and exit
+  --episode ID           run one benchmark trip as a scenario (repeatable), with --design; works
+                         with --live, --mcap, --webots, --trace and --snapshots
 
 Benchmark (start -> destination episodes, success rate, paired comparison):
   --benchmark            run the episode set on --seeds seeds (default 5 here)
@@ -30,11 +33,13 @@ Benchmark (start -> destination episodes, success rate, paired comparison):
 
 fun main(args: Array<String>) {
     val names = ArrayList<String>()
+    val episodeIds = ArrayList<String>()
     var seeds = 3
     var reportDir = File("sim-reports")
     var snapshotAll = false
     var trace = false
     var mcapDir: File? = null
+    var ledgerDir: File? = null
     var livePort: Int? = null
     var webotsDir: File? = null
     var benchmark = false
@@ -48,6 +53,7 @@ fun main(args: Array<String>) {
         when (args[i]) {
             "--all" -> Unit
             "--scenario" -> names += args[++i]
+            "--episode" -> episodeIds += args[++i]
             "--seeds" -> { seeds = args[++i].toInt(); seedsGiven = true }
             "--benchmark" -> benchmark = true
             "--name" -> benchName = args[++i]
@@ -59,6 +65,17 @@ fun main(args: Array<String>) {
                 return
             }
             "--episodes" -> { BenchmarkCli.list(filter); return }
+            "--train-scorer" -> {
+                // --train-scorer DATA.jsonl MODEL.json: fit the cost-to-go scorer (bench/TrainScorer.kt).
+                com.navassist.sim.bench.TrainScorer.train(File(args[i + 1]), File(args[i + 2]))
+                return
+            }
+            "--fork-data" -> {
+                // Training data for the cost-to-go scorer: --fork-data FILE [--filter F --seeds N --design D] (flags before it).
+                val file = File(args[++i])
+                com.navassist.sim.bench.ForkData.generate(filter, (1..seeds).map { it.toLong() }, if (design == "current") "robot-rig-chest-c1+b4" else design, file)
+                return
+            }
             "--diagnose" -> {
                 val seedList = args[++i].split(',').map { it.toLong() }
                 com.navassist.sim.bench.Diagnose.run(filter, seedList, design)
@@ -68,6 +85,7 @@ fun main(args: Array<String>) {
             "--snapshots" -> snapshotAll = args[++i] == "all"
             "--trace" -> trace = true
             "--mcap" -> mcapDir = File(args[++i])
+            "--ledger" -> ledgerDir = File(args[++i])
             "--live" -> livePort = args[++i].toInt()
             "--webots" -> webotsDir = File(args[++i])
             "--list" -> {
@@ -83,7 +101,16 @@ fun main(args: Array<String>) {
         BenchmarkCli.run(benchName, if (seedsGiven) seeds else 5, filter, design, pictures)
         return
     }
-    val scenarios = if (names.isEmpty()) Scenarios.all else names.map { Scenarios.named(it) }
+    val trips = episodeIds.map { id ->
+        com.navassist.sim.bench.Benchmark.asScenario(
+            com.navassist.sim.bench.Benchmark.episodeNamed(id), design, com.navassist.sim.bench.Designs.named(design),
+        )
+    }
+    val scenarios = when {
+        names.isEmpty() && trips.isNotEmpty() -> trips
+        names.isEmpty() -> Scenarios.all
+        else -> names.map { Scenarios.named(it) } + trips
+    }
     livePort?.let { port ->
         LiveRunner.run(scenarios.first(), seed = 1, port = port)
         return
@@ -97,6 +124,11 @@ fun main(args: Array<String>) {
             Runner.run(scenario, seed.toLong(), if (trace) ::printTransition else null, recording, project).also {
                 if (recording != null) println("   recording: ${recording.path}")
                 if (project != null) println("   webots: ${File(project, "worlds/scene.wbt").path}")
+                ledgerDir?.let { dir ->
+                    val file = File(dir, "${scenario.name}-seed$seed.ledger.jsonl")
+                    com.navassist.sim.report.LedgerWriter.write(it.simulation, file)
+                    println("   ledger: ${file.path} (replay ${if (com.navassist.sim.report.LedgerWriter.replayMatches(it.simulation.engine.world)) "matches" else "DIFFERS"})")
+                }
             }
         }
         val passed = runs.count { it.passed }

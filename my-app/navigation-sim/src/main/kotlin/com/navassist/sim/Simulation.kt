@@ -49,10 +49,22 @@ data class SimSettings(
     /** How often the adviser is asked while exploring, and how long its answer takes to arrive. */
     val adviceIntervalSeconds: Double = 8.0,
     val adviceLatencySeconds: Double = 2.0,
+    /** A long-term planner asked where the destination is; null for none. */
+    val planner: com.navassist.sim.advice.Planner? = null,
+    /** The planner is asked far less often than the adviser, and thinks for longer. */
+    val plannerIntervalSeconds: Double = 45.0,
+    val plannerLatencySeconds: Double = 5.0,
     /** The camera: field of view and resolution, shared by depth and perception. */
     val cameraIntrinsics: com.navassist.navcore.sensing.CameraIntrinsics = com.navassist.sim.sensor.DepthCamera.DEFAULT_RGB,
     /** How the tracker's reported pose wanders from the truth; null for perfect tracking. */
     val drift: com.navassist.sim.sensor.DriftModel? = null,
+    /** A 2D LiDAR on the camera's mount; null for none. */
+    val lidar: com.navassist.sim.sensor.PlanarLidarSpec? = null,
+    /** Floors joined by a lift, when the run may change floor; [scene] is then floor [startFloor]. */
+    val building: com.navassist.sim.world.Building? = null,
+    val startFloor: Int = 0,
+    /** The engine's long-term planner, made fresh for each run (planners keep state); null for none. */
+    val longTermPlanner: (() -> com.navassist.navcore.strategy.LongTermPlanner)? = null,
 )
 
 enum class Outcome { ARRIVED, TIMEOUT, FELL }
@@ -88,6 +100,8 @@ data class SimResult(
     val detections: Int,
     val finalBody: BodyPose,
     val finalStatus: NavigationStatus,
+    /** The floor the run ended on (0 without a building). */
+    val finalFloor: Int = 0,
 ) {
     fun summary(): String = buildString {
         append("$outcome in ${"%.1f".format(seconds)} s, walked ${"%.1f".format(distanceWalked)} m, ")
@@ -107,9 +121,22 @@ data class SimResult(
  */
 class Simulation(val settings: SimSettings) {
 
-    private val random = Random(settings.seed)
-    val scene: Scene = settings.scene
-    val engine = NavigationEngine(settings.engineConfig)
+    private val random = SwitchableRandom(settings.seed)
+    /** The floor being walked; swapped when a lift ride ends. */
+    var scene: Scene = settings.scene
+        private set
+
+    /** Which floor of [SimSettings.building] the user is on. */
+    var floor: Int = settings.startFloor
+        private set
+
+    /** A lift ride under way: the floor it goes to (-1: nowhere, the button does nothing) and when it ends. */
+    private var ride: Pair<Int, Double>? = null
+
+    /** Lift rides taken, for diagnostics. */
+    var rides = 0
+        private set
+    val engine = NavigationEngine(settings.engineConfig).also { e -> settings.longTermPlanner?.let { e.longTermPlanner = it() } }
     private val assembler = SensorFrameAssembler(settings.engineConfig)
     private val camera = DepthCamera(
         rgbIntrinsics = settings.cameraIntrinsics,
@@ -119,6 +146,21 @@ class Simulation(val settings: SimSettings) {
     )
     val perception = PerceptionModel(settings.perception, camera.rgbIntrinsics, random)
     val user = VirtualUser(settings.start, settings.user, scene)
+
+    /** Its own random stream, so adding a LiDAR leaves the camera's noise as it was. */
+    private val lidarRandom = SwitchableRandom(settings.seed * 7919 + 17)
+    val lidar: com.navassist.sim.sensor.PlanarLidar? =
+        settings.lidar?.let { com.navassist.sim.sensor.PlanarLidar(it, lidarRandom) }
+
+    /**
+     * Swaps the simulator's noise streams (sensors, perception, the LiDAR) for fresh ones from
+     * [seed], from this frame on. Used to fork a run: everything before is replayed exactly, after
+     * this the world's randomness differs between continuations.
+     */
+    fun reseedNoise(seed: Long) {
+        random.reseed(seed)
+        lidarRandom.reseed(seed * 7919 + 17)
+    }
 
     val trace = ArrayList<TraceSample>()
 
@@ -154,6 +196,20 @@ class Simulation(val settings: SimSettings) {
     /** Diagnostics: every batch of observations as placed, before the engine gets it. */
     var onLocated: ((List<SemanticLocator.Located>) -> Unit)? = null
 
+    /**
+     * One observation as it reached the engine, with the sign it really came from: where depth put
+     * it on the floor plan (null when depth could not), and how far that is from the truth.
+     */
+    class Placement(
+        val sign: com.navassist.sim.world.Sign,
+        val located: SemanticLocator.Located,
+        val planPosition: Pair<Float, Float>?,
+        val errorMeters: Float?,
+    )
+
+    /** Observability: every batch of observations as delivered, with their true signs. */
+    var onPlaced: ((Double, List<Placement>) -> Unit)? = null
+
     /** How many times the adviser was asked. */
     var adviceRequests = 0
         private set
@@ -179,10 +235,16 @@ class Simulation(val settings: SimSettings) {
         if (frameIndex == 0L && engine.status == NavigationStatus.IDLE) engine.start(settings.target)
         frameIndex++
         val dt = FRAME_SECONDS.toFloat()
-        if (driver != null) driver(user) else user.update(seconds, dt)
+        val riding = ride != null
+        when {
+            riding -> Unit // in the lift: going nowhere on foot
+            driver != null -> driver(user)
+            else -> user.update(seconds, dt)
+        }
 
         PhoneRig.cameraToWorld(user.body, user.phoneYaw, user.phonePitch, settings.user.hold, cameraMatrix)
-        val tracking = settings.trackingLoss.none { seconds in it }
+        // A moving lift car is a dark box with nothing to track.
+        val tracking = !riding && settings.trackingLoss.none { seconds in it }
 
         // Depth: rendered every Nth frame from the pose at that moment, handed over late.
         if (frameIndex % settings.depthEveryNthFrame == 0L) {
@@ -212,10 +274,20 @@ class Simulation(val settings: SimSettings) {
                 user.phoneYaw,
             )
         }
-        val snapshot = engine.updateFrame(frame)
-        lastFrame = frame
+        // LiDAR: a revolution completes every few frames, centred on the camera, in its frame.
+        val scanned = lidar?.takeIf { frameIndex % it.spec.revolutionFrames == 0L }?.let { l ->
+            val reach = settings.user.hold.reachMeters
+            l.render(scene, user.body.x + sin(user.body.heading) * reach, user.body.y + cos(user.body.heading) * reach, user.phoneYaw)
+            l.scan
+        }
+        val fed = if (scanned != null) frame.copy(lidar = scanned) else frame
+        val snapshot = engine.updateFrame(fed)
+        lastFrame = fed
         lastSnapshot = snapshot
         user.hear(snapshot.command, snapshot.stopReason, seconds)
+        if (settings.user.followsPath) {
+            user.hearHeading(snapshot.headingErrorDegrees, engine.currentPathWorld(), engine.currentPose())
+        }
         user.hearAim(snapshot.aim, seconds)
 
         // Perception, on the app's cadence: observations placed with the depth of THEIR frame.
@@ -223,6 +295,12 @@ class Simulation(val settings: SimSettings) {
         if (arrived.isNotEmpty()) {
             val located = SemanticLocator.locate(arrived, assembler)
             onLocated?.invoke(located)
+            onPlaced?.let { listener ->
+                listener(seconds, located.zip(perception.lastDeliveredSigns) { l, sign ->
+                    val plan = l.observation.worldPosition?.let { canonicalToPlan(it.toVec2()) }
+                    Placement(sign, l, plan, plan?.let { (x, y) -> kotlin.math.hypot(x - sign.x, y + sign.z) })
+                })
+            }
             SemanticLocator.submit(engine, located)
         }
         if (tracking && perception.wantsCapture(seconds)) {
@@ -230,7 +308,9 @@ class Simulation(val settings: SimSettings) {
             perception.capture(seconds, timestampNanos, scene, cameraMatrix)
         }
 
+        settings.building?.let { liftStep(it) }
         settings.adviser?.let { consult(it) }
+        settings.planner?.let { consultPlanner(it) }
 
         val sample = TraceSample(
             seconds, user.body, user.phoneYaw, snapshot.command, snapshot.status, snapshot.stopReason,
@@ -239,6 +319,38 @@ class Simulation(val settings: SimSettings) {
         trace.add(sample)
         for (listener in listeners) listener(this, sample, snapshot)
         return snapshot
+    }
+
+    /**
+     * The lift: when the engine asks for a floor at a lift door, the ride takes [LIFT_RIDE_SECONDS]
+     * plus [LIFT_SECONDS_PER_FLOOR] per floor; on arrival the scene becomes that floor and the
+     * display is read - the engine gets the floor's label. A button for a floor the building does not
+     * have does nothing, and the display goes on showing where the user is.
+     */
+    private fun liftStep(b: com.navassist.sim.world.Building) {
+        val current = ride
+        if (current == null) {
+            val wanted = engine.liftRequest() ?: return
+            val (lx, ly) = b.liftDoor
+            if (kotlin.math.hypot(user.body.x - lx, user.body.y - ly) > LIFT_REACH_METERS) return
+            val to = b.liftLabels.indexOf(wanted)
+            val duration = if (to < 0 || to == floor) LIFT_NO_RIDE_SECONDS else LIFT_RIDE_SECONDS + LIFT_SECONDS_PER_FLOOR * kotlin.math.abs(to - floor)
+            ride = to to seconds + duration
+            return
+        }
+        val (to, until) = current
+        if (seconds < until) return
+        if (to >= 0 && to != floor) {
+            floor = to
+            scene = b.scene(to)
+            user.moveTo(scene)
+            rides++
+        }
+        ride = null
+        engine.submitSemanticObservations(
+            listOf(com.navassist.navcore.semantic.SemanticObservation.Floor(b.liftLabels[floor], 0.95f)),
+            engine.clockMillis, engine.currentPose(),
+        )
     }
 
     /**
@@ -256,6 +368,33 @@ class Simulation(val settings: SimSettings) {
         adviceRequests++
         val advice = adviser.advise(engine.situation(), this) ?: return
         pendingAdvice = (seconds + settings.adviceLatencySeconds) to advice
+    }
+
+    private var nextPlanSeconds = 0.0
+    private var pendingPlan: Pair<Double, List<com.navassist.navcore.semantic.PlannerHypothesis>>? = null
+
+    /** How many times the planner was asked. */
+    var planRequests = 0
+        private set
+
+    /** As [consult], at the planner's slower cadence and longer latency. */
+    private fun consultPlanner(planner: com.navassist.sim.advice.Planner) {
+        pendingPlan?.let { (due, plan) ->
+            if (seconds < due) return
+            engine.submitPlan(plan)
+            pendingPlan = null
+        }
+        if (seconds < nextPlanSeconds || engine.status != NavigationStatus.EXPLORING) return
+        nextPlanSeconds = seconds + settings.plannerIntervalSeconds
+        planRequests++
+        val plan = planner.plan(engine.situation(), this) ?: return
+        pendingPlan = (seconds + settings.plannerLatencySeconds) to plan
+    }
+
+    /** Floor-plan point (x, y) -> engine canonical (x, z). Null until the frame is established. */
+    fun planToCanonical(x: Float, y: Float): Vec2? {
+        val (ox, oy, _) = canonicalOrigin ?: return null
+        return planDirectionToCanonical(x - ox, y - oy)
     }
 
     /** Plan position and yaw of the phone where the engine fixed its canonical frame. */
@@ -314,11 +453,17 @@ class Simulation(val settings: SimSettings) {
             detections = perception.detections,
             finalBody = user.body,
             finalStatus = engine.status,
+            finalFloor = floor,
         )
     }
 
     companion object {
         const val FRAME_SECONDS = 1.0 / 30.0
+        const val LIFT_RIDE_SECONDS = 6.0
+        const val LIFT_SECONDS_PER_FLOOR = 3.0
+        const val LIFT_NO_RIDE_SECONDS = 3.0
+        /** How close to the lift door the user must stand for the button to be pressed. */
+        const val LIFT_REACH_METERS = 3.0
         const val FRAME_NANOS = 33_333_333L
 
         /** Platform timestamps start well above zero, like nanoseconds since boot. */

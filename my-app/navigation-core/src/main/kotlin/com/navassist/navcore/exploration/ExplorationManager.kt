@@ -42,6 +42,9 @@ class ExplorationManager(
 
     private val blacklist = ArrayList<Blacklisted>()
 
+    /** Areas currently ruled out for exploration, with their failure counts. For observability. */
+    fun blacklistedAreas(): List<Pair<Vec2, Int>> = blacklist.map { it.position to it.failures }
+
     private var selectedCentroid: Vec2? = null
     private var lastProgressMillis: Long = 0
     private var bestDistanceMeters = Float.POSITIVE_INFINITY

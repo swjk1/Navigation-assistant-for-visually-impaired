@@ -1,7 +1,10 @@
 package com.navassist.sim.bench
 
 import com.navassist.sim.SimSettings
+import com.navassist.sim.advice.FollowTheSignsAdviser
 import com.navassist.sim.advice.LlmAdviser
+import com.navassist.sim.advice.NoisyPlanner
+import com.navassist.sim.advice.OraclePlanner
 import com.navassist.sim.advice.LlmClient
 import com.navassist.sim.advice.NoisyOracleAdviser
 import com.navassist.sim.advice.OracleAdviser
@@ -10,6 +13,7 @@ import com.navassist.sim.advice.SituationRecorder
 import com.navassist.sim.perception.PerceptionProfile
 import com.navassist.sim.sensor.DriftModel
 import com.navassist.sim.sensor.SensorRig
+import com.navassist.sim.user.UserProfile
 import java.io.File
 
 /**
@@ -80,14 +84,32 @@ object Designs {
         // A full turn on the spot before setting off (off by default).
         "look-around" to { s -> s.copy(engineConfig = s.engineConfig.copy(initialLookAroundDegrees = 330f)) },
         "oracle-look-around" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(initialLookAroundDegrees = 330f)) },
+        // Sweep the camera side to side while hunting a numbered room: plates sit on the side walls.
+        "sweep-25" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 25f)) },
+        "sweep-40" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 40f)) },
+        // Walking or driving speed, and how fast a requested sweep goes (period of one side-to-side).
+        "speed-0.7" to { s -> s.copy(user = s.user.copy(walkMetersPerSecond = 0.7f)) },
+        "speed-0.5" to { s -> s.copy(user = s.user.copy(walkMetersPerSecond = 0.5f)) },
+        "pan-2.6" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 2.6f)) },
+        "pan-3.3" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 3.3f)) },
+        "pan-4" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 4f)) },
+        "sweep-40-fast" to { s ->
+            s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 40f), user = s.user.copy(scanPeriodSeconds = 2f))
+        },
         "oracle-sweep-25" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 25f)) },
         // Plates read without depth are not followed up.
         "oracle-no-glimpse" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(glimpseMaxAgeMillis = 0)) },
-        "oracle-no-advice-turn" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = false)) },
-        "oracle-no-advice-release" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceReleasesCommitment = false)) },
-        "oracle-no-advice-either" to { s ->
-            s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = false, adviceReleasesCommitment = false))
+        // Advice acting outside the frontier score (both off by default): turning to look where it
+        // points, and dropping a committed frontier it does not point at.
+        "oracle-advice-turn" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = true)) },
+        "oracle-advice-release" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceReleasesCommitment = true)) },
+        "oracle-advice-either" to { s ->
+            s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = true, adviceReleasesCommitment = true))
         },
+        // Room numbers judged from the first and last plate only, as before the numbering model.
+        "numbering-off" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomNumberModel = false)) },
+        // Classic frontier exploration: signs never steer, only a sighting of the goal itself does.
+        "frontier-only" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightSemantic = 0f)) },
         // Floor ahead seen from any range counts as walkable (no close-range check).
         "oracle-no-near-check" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(nearFloorVerifyMeters = 100f)) },
         "no-near-check" to { s -> s.copy(engineConfig = s.engineConfig.copy(nearFloorVerifyMeters = 100f)) },
@@ -106,6 +128,18 @@ object Designs {
         "rig-stereo-chest" to { s -> SensorRig.STEREO_CHEST.applyTo(s) },
         "rig-stereo-chest-glass" to { s -> SensorRig.STEREO_CHEST_GLASS.applyTo(s) },
         "rig-lidar-chest" to { s -> SensorRig.LIDAR_CHEST.applyTo(s) },
+        // The chest harness (LAYERED_NAVIGATION_DESIGN.md section 2): phone alone, then with the LiDAR.
+        "rig-chest-phone" to { s -> SensorRig.CHEST_PHONE.applyTo(s) },
+        "rig-chest-c1" to { s -> SensorRig.CHEST_C1.applyTo(s) },
+        "rig-chest-c1-noclear" to { s -> SensorRig.CHEST_C1.applyTo(s).let { r -> r.copy(engineConfig = r.engineConfig.copy(lidarClearsPlane = false)) } },
+        "rig-chest-phone-grid28" to { s -> SensorRig.CHEST_PHONE.applyTo(s).let { r -> r.copy(engineConfig = r.engineConfig.copy(gridSizeMeters = 28f)) } },
+        "rig-chest-phone-grid28-d48" to { s -> SensorRig.CHEST_PHONE.applyTo(s).let { r -> r.copy(engineConfig = r.engineConfig.copy(gridSizeMeters = 28f, maxDepthMeters = 4.8f)) } },
+        "rig-chest-c1-lidarfrontiers" to { s -> SensorRig.CHEST_C1.applyTo(s).let { r -> r.copy(engineConfig = r.engineConfig.copy(frontiersFromCamera = false)) } },
+
+        "rig-chest-c1-grid28" to { s -> SensorRig.CHEST_C1.applyTo(s).let { r -> r.copy(engineConfig = r.engineConfig.copy(gridSizeMeters = 28f)) } },
+        "rig-chest-c1-pitch20" to { s -> SensorRig.CHEST_C1.copy(pitchDegrees = 20f).applyTo(s) },
+        "rig-chest-c1-landscape" to { s -> SensorRig.CHEST_C1.copy(hold = SensorRig.CHEST_C1.hold.copy(portrait = false)).applyTo(s) },
+        "oracle-rig-chest-c1" to { s -> SensorRig.CHEST_C1.applyTo(s).copy(adviser = OracleAdviser(s.scene, s.target)) },
         "oracle-rig-stereo-chest" to { s -> SensorRig.STEREO_CHEST.applyTo(s).copy(adviser = OracleAdviser(s.scene, s.target)) },
         "oracle-rig-lidar-chest" to { s -> SensorRig.LIDAR_CHEST.applyTo(s).copy(adviser = OracleAdviser(s.scene, s.target)) },
         // Record every question an adviser would be asked, labelled with the truth (SITUATIONS_OUT).
@@ -122,7 +156,34 @@ object Designs {
         "clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -1f)) },
         "clutter-3" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -3f)) },
         "axis-1-clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 1f, weightClutter = -1f)) },
+        // The long-term planner alone: the ceiling, then guesses of known accuracy.
+        "planner-oracle" to { s -> s.copy(planner = OraclePlanner(s.scene, s.target)) },
     ).apply {
+        for (accuracy in listOf(40, 60, 80)) {
+            put("planner-noisy-a$accuracy") { s -> s.copy(planner = NoisyPlanner(s.scene, s.target, accuracy / 100f, 1f, s.seed)) }
+            // Both tiers at the same accuracy: openings scored at half weight, plus the planner.
+            put("two-tier-a$accuracy") { s ->
+                s.copy(
+                    adviser = NoisyOracleAdviser(s.scene, s.target, accuracy / 100f, 0.5f, s.seed),
+                    planner = NoisyPlanner(s.scene, s.target, accuracy / 100f, 1f, s.seed),
+                )
+            }
+        }
+        // Follow the Signs' mechanism at a given accuracy (see FollowTheSignsAdviser): asked every
+        // 2 s. "fts" lets the subgoal decide the frontier, as in their method; "fts-soft" fuses it
+        // with the usual advice weight, so the two differ only in how much authority it has.
+        for (accuracy in listOf(60, 80, 100)) {
+            put("fts-a$accuracy") { s ->
+                s.copy(
+                    adviser = FollowTheSignsAdviser(s.scene, s.target, accuracy / 100f, s.seed),
+                    adviceIntervalSeconds = 2.0,
+                    engineConfig = s.engineConfig.copy(weightAdvice = FTS_DOMINANT_WEIGHT),
+                )
+            }
+            put("fts-soft-a$accuracy") { s ->
+                s.copy(adviser = FollowTheSignsAdviser(s.scene, s.target, accuracy / 100f, s.seed), adviceIntervalSeconds = 2.0)
+            }
+        }
         // An adviser of known quality, for free: right a given share of the time, each answer at a
         // given weight. noisy-a60-w50 is right 60% of the time, at half weight.
         for (accuracy in listOf(40, 50, 60, 70, 80, 90)) {
@@ -134,7 +195,80 @@ object Designs {
         }
     }
 
-    fun named(name: String) = all[name] ?: error("no design '$name'; known: ${all.keys.joinToString()}")
+    /**
+     * A design by name. "robot-<design>" runs that design with a path-following robot in place of
+     * the person (UserProfile.ROBOT): "robot-current", "robot-noisy-a60-w50".
+     */
+    fun named(name: String): (SimSettings) -> SimSettings {
+        // "a+b+c": design a, then modifiers b and c applied in order (see [modifiers]).
+        if ('+' in name) {
+            val parts = name.split('+')
+            val base = named(parts.first())
+            val mods = parts.drop(1).map { m -> modifiers[m] ?: error("no modifier '$m'; known: ${modifiers.keys.joinToString()}") }
+            return { s -> mods.fold(base(s)) { acc, mod -> mod(acc) } }
+        }
+        if (name.startsWith(ROBOT_PREFIX)) {
+            val base = named(name.removePrefix(ROBOT_PREFIX))
+            // The robot first, so the design can still adjust it (its speed, say). A robot drives
+            // past plates without the sway and pauses that let a person read them, so it sweeps its
+            // camera across the walls while hunting a room (measured: school 52.9% -> 62.5%).
+            return { s ->
+                base(s.copy(user = UserProfile.ROBOT, engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = ROBOT_SWEEP_DEGREES)))
+            }
+        }
+        return all[name] ?: error("no design '$name'; known: ${all.keys.joinToString()}, each also as $ROBOT_PREFIX<design>")
+    }
+
+    /** The trained scorer, loaded once. */
+    val learned: com.navassist.navcore.strategy.LearnedScorer by lazy {
+        TrainScorer.load(File(System.getenv("NAV_SCORER_MODEL") ?: "datasets/scorer-v1.json"))
+    }
+
+    /** One OpenAI client for every run in this process: one cache, one budget, one set of counts. */
+    val openAi: com.navassist.sim.advice.OpenAiClient by lazy { com.navassist.sim.advice.OpenAiClient() }
+
+    /** A long-term planner with unread signs reported and arrival verified at the door, as b4 has. */
+    private fun withPlanner(s: SimSettings, planner: () -> com.navassist.navcore.strategy.LongTermPlanner) = s.copy(
+        longTermPlanner = planner,
+        perception = s.perception.copy(reportUnreadable = true),
+        engineConfig = s.engineConfig.copy(arrivalRequiresVerification = true),
+    )
+
+    /** Changes that stack on any design: "robot-rig-chest-c1+unread". */
+    val modifiers: Map<String, (SimSettings) -> SimSettings> = mapOf(
+        // Perception reports text seen but not read (SemanticObservation.UnreadSign).
+        "unread" to { s -> s.copy(perception = s.perception.copy(reportUnreadable = true)) },
+        // Perfect-if-visible perception: every sign in view and big enough is read, correctly, at once.
+        "perfect" to { s -> s.copy(perception = com.navassist.sim.perception.PerceptionProfile.PERFECT.copy(reportUnreadable = s.perception.reportUnreadable)) },
+        // The tactical fixes made for the chest rigs (forward gate to the waypoint, halo escape only
+        // from inside a halo, a 0.35 m margin), on any design.
+        "tactics" to { s -> s.copy(engineConfig = s.engineConfig.copy(forwardGateToWaypoint = true, haloEscapeOnlyFromHalo = true, inflationRadiusMeters = 0.35f)) },
+        // Arrival only once the destination's plate is read at its door.
+        "verify" to { s -> s.copy(engineConfig = s.engineConfig.copy(arrivalRequiresVerification = true)) },
+        // B1 through the subgoal machinery: a planner that always leaves the choice to the tactics.
+        "b1" to { s -> s.copy(longTermPlanner = { com.navassist.navcore.strategy.DefaultTacticsPlanner }) },
+        // The model baselines (paid; see advice/OpenAiClient.kt for the gates). Same candidates,
+        // skills, perception and verification as b4; only the scorer differs.
+        "b5" to { s -> withPlanner(s) { com.navassist.navcore.strategy.CandidatePlanner(com.navassist.sim.advice.DecisionsScorer(openAi)) } },
+        "b3" to { s -> withPlanner(s) { com.navassist.navcore.strategy.CandidatePlanner(com.navassist.sim.advice.ChooserScorer(openAi, withBeliefs = true)) } },
+        // P: the cost-to-go scorer trained on fork data (NAV_SCORER_MODEL, default datasets/scorer-v1.json).
+        "p" to { s -> withPlanner(s) { com.navassist.navcore.strategy.CandidatePlanner(learned) } },
+        "b2" to { s -> withPlanner(s) { com.navassist.navcore.strategy.CandidatePlanner(com.navassist.sim.advice.ChooserScorer(openAi, withBeliefs = false)) } },
+        // B4: hypotheses + one-step information gain; sees unread signs and verifies at the door.
+        "b4" to { s ->
+            s.copy(
+                longTermPlanner = { com.navassist.navcore.strategy.HypothesisPlanner() },
+                perception = s.perception.copy(reportUnreadable = true),
+                engineConfig = s.engineConfig.copy(arrivalRequiresVerification = true),
+            )
+        },
+    )
+
+    private const val ROBOT_PREFIX = "robot-"
+    private const val ROBOT_SWEEP_DEGREES = 40f
+
+    /** Advice weight at which the subgoal outweighs every other frontier term combined. */
+    private const val FTS_DOMINANT_WEIGHT = 10f
 }
 
 object BenchmarkCli {
@@ -166,7 +300,7 @@ object BenchmarkCli {
             }
         }
         val file = File(resultsDir, "$name.json")
-        Benchmark.write(file, name, seeds, prepared, runs)
+        Benchmark.write(file, name, seeds, prepared, runs, design)
         println()
         println("overall   ${Summary.of(runs).line()}")
         val building = prepared.associate { it.episode.id to it.episode.building }
@@ -191,11 +325,24 @@ object BenchmarkCli {
             failed.count { !it.fell && !it.falseArrival && it.locatedSeconds != null },
             failed.count { it.falseArrival }, failed.count { it.fell },
         ))
+        val planned = runs.mapNotNull { it.planner }
+        if (planned.isNotEmpty()) {
+            val inspections = planned.sumOf { it.inspections }
+            val judged = planned.sumOf { it.hypothesesJudged }
+            println("planner: %.1f subgoals/run, %d inspections (%d read), verified in %d of %d runs, %d rejected subgoals".format(
+                planned.sumOf { it.subgoals }.toDouble() / planned.size, inspections, planned.sumOf { it.inspectionsRead },
+                planned.count { it.verified }, planned.size, planned.sumOf { it.rejections },
+            ))
+            println("hypotheses: %d confirmed, %d judged against the truth, %d of those wrong".format(
+                planned.sumOf { it.hypothesesConfirmed }, judged, planned.sumOf { it.hypothesesConfirmedWrong ?: 0 },
+            ))
+        }
         val hits = runs.flatMap { it.hits }.groupingBy { it }.eachCount()
         if (hits.isNotEmpty()) {
             println()
             println("walked into: " + hits.entries.sortedByDescending { it.value }.joinToString { "${it.key} x${it.value}" })
         }
+        if (listOf("+b2", "+b3", "+b5").any { it in design }) println(Designs.openAi.report())
         if (design.startsWith("llm-advice")) {
             val llm = Designs.llm
             println()
@@ -216,6 +363,7 @@ object BenchmarkCli {
     fun compare(baseline: File, candidate: File) {
         val (a, runsA) = Benchmark.read(baseline)
         val (b, runsB) = Benchmark.read(candidate)
-        print(Benchmark.compare(a, runsA, b, runsB).report())
+        val robots = Benchmark.agentOf(baseline) == "robot" && Benchmark.agentOf(candidate) == "robot"
+        print(Benchmark.compare(a, runsA, b, runsB, judgeChurn = !robots).report())
     }
 }

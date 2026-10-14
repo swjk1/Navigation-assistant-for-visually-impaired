@@ -38,6 +38,15 @@ data class PerceptionProfile(
     /** Smallest apparent size, in RGB pixels, at which a detector / OCR can work. */
     val minDetectPixels: Float = 14f,
     val minReadPixels: Float = 12f,
+    /**
+     * Report text that was seen but not read (SemanticObservation.UnreadSign): a plate or sign too
+     * small to read yet big enough to notice, one at too steep an angle, one OCR failed on. Off by
+     * default, so runs that predate it are unchanged.
+     */
+    val reportUnreadable: Boolean = false,
+    /** Smallest apparent size at which text is noticed as text, though not read. */
+    val minNoticePixels: Float = 6f,
+
 ) {
     companion object {
         /** The app before on-device capture ran every second: one pipeline, Gemini included, every 2.5 s. */
@@ -72,7 +81,41 @@ class PerceptionModel(
     private val intrinsics: CameraIntrinsics,
     private val random: Random,
 ) {
-    private class Pending(val dueSeconds: Double, val observations: List<SemanticObservation>)
+    /**
+     * What happened to one sign at one capture, for observability: every sign in front of the
+     * camera and inside the frame, read or not, and why.
+     *
+     * @param fate `seen` (detected, or read and parsed), or why not: `too-close`, `behind-or-oblique`,
+     *        `occluded`, `too-small`, `not-detected`, `ocr-failed`, `unparsed`.
+     * @param box the sign's bounding box in the SENSOR image, 0..1: left, top, right, bottom.
+     * @param apparentPixels its smaller side in image pixels, as the size gates judge it.
+     * @param reported what perception reported: the text read, or the class detected.
+     */
+    class SignSighting(
+        val sign: Sign,
+        val fate: String,
+        val distanceMeters: Float,
+        val box: FloatArray,
+        val apparentPixels: Float,
+        val reported: String? = null,
+        val misread: Boolean = false,
+    )
+
+    /** One capture: when, from where (camera-to-world, column-major), and every sign in frame. */
+    class Capture(val seconds: Double, val timestampNanos: Long, val cameraToWorld: FloatArray, val sightings: List<SignSighting>)
+
+    /** Observability: told about every capture. Null (the default) records nothing. */
+    var onCapture: ((Capture) -> Unit)? = null
+
+    private class Pending(val dueSeconds: Double, val observations: List<SemanticObservation>, val signs: List<Sign>)
+
+    /** The sign each observation in the last [deliver] came from, in the same order. */
+    var lastDeliveredSigns: List<Sign> = emptyList()
+        private set
+
+    private var sightings: ArrayList<SignSighting>? = null
+    private var lastRead: String? = null
+    private var lastMisread = false
 
     private var pending: Pending? = null
     private var nextCaptureSeconds = profile.captureIntervalSeconds
@@ -100,7 +143,13 @@ class PerceptionModel(
     fun capture(nowSeconds: Double, timestampNanos: Long, scene: Scene, cameraToWorld: FloatArray) {
         captures++
         nextCaptureSeconds = nowSeconds + profile.captureIntervalSeconds
-        val observations = scene.signs.mapNotNull { observe(it, scene, cameraToWorld, timestampNanos) }
+        sightings = if (onCapture != null) ArrayList() else null
+        val sources = ArrayList<Sign>()
+        val observations = scene.signs.mapNotNull { sign ->
+            observe(sign, scene, cameraToWorld, timestampNanos)?.also { sources += sign }
+        }
+        sightings?.let { onCapture?.invoke(Capture(nowSeconds, timestampNanos, cameraToWorld.copyOf(), it)) }
+        sightings = null
         detections += observations.size
         val slow = profile.slowEveryNth > 0 && captures % profile.slowEveryNth == 0
         val latency = if (slow) {
@@ -108,7 +157,7 @@ class PerceptionModel(
         } else {
             profile.latencyMinSeconds + random.nextDouble() * (profile.latencyMaxSeconds - profile.latencyMinSeconds)
         }
-        pending = Pending(nowSeconds + latency, observations)
+        pending = Pending(nowSeconds + latency, observations, sources)
     }
 
     /** Observations whose analysis has finished by now. */
@@ -116,6 +165,7 @@ class PerceptionModel(
         val due = pending ?: return emptyList()
         if (due.dueSeconds > nowSeconds) return emptyList()
         pending = null
+        lastDeliveredSigns = due.signs
         return due.observations
     }
 
@@ -127,26 +177,51 @@ class PerceptionModel(
         val ty = sign.y - oy
         val tz = sign.z - oz
         val distance = sqrt(tx * tx + ty * ty + tz * tz)
-        if (distance < 0.3f) return miss(sign, "too-close")
 
-        // Only readable from in front.
-        if ((-tx * sign.normalX - tz * sign.normalZ) / distance < 0.3f) return miss(sign, "behind-or-oblique")
-
-        // Camera space: project onto the camera axes (columns of the rotation).
+        // Camera space: project onto the camera axes (columns of the rotation). Geometry only - no
+        // random draws - so the sightings record can say where in the frame a sign was, whatever
+        // its fate, without changing any run.
         val cx = tx * m[0] + ty * m[1] + tz * m[2]
         val cy = tx * m[4] + ty * m[5] + tz * m[6]
         val cz = tx * m[8] + ty * m[9] + tz * m[10]
-        if (cz >= -0.1f) return miss(sign, "behind-camera")
         val depth = -cz
-        val u = intrinsics.cx + intrinsics.fx * cx / depth
-        val v = intrinsics.cy - intrinsics.fy * cy / depth
-        if (u < 0f || v < 0f || u >= intrinsics.width || v >= intrinsics.height) return miss(sign, "out-of-frame")
+        val u = if (depth > 0.1f) intrinsics.cx + intrinsics.fx * cx / depth else Float.NaN
+        val v = if (depth > 0.1f) intrinsics.cy - intrinsics.fy * cy / depth else Float.NaN
+        val inFrame = depth > 0.1f && u >= 0f && v >= 0f && u < intrinsics.width && v < intrinsics.height
+        val apparent = if (depth > 0.1f) intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth else 0f
+
+        fun record(fate: String) {
+            val list = sightings ?: return
+            if (!inFrame) return
+            list += SignSighting(sign, fate, distance, boxOf(sign, m), apparent, lastRead, lastMisread)
+        }
+        fun missed(why: String): SemanticObservation? {
+            record(why)
+            return miss(sign, why)
+        }
+        lastRead = null
+        lastMisread = false
+
+        if (distance < 0.3f) return missed("too-close")
+        // Only readable from in front.
+        val facing = (-tx * sign.normalX - tz * sign.normalZ) / distance
+        if (facing < 0.3f) {
+            // Too steep to read, but a plate seen edge-on is still a plate.
+            if (profile.reportUnreadable && facing >= OBLIQUE_NOTICE && inFrame && isText(sign) && apparent >= profile.minNoticePixels &&
+                !occludedFrom(scene, ox, oy, oz, tx, ty, tz, distance)
+            ) {
+                record("behind-or-oblique")
+                return unread(sign, u, v, m, timestampNanos)
+            }
+            return missed("behind-or-oblique")
+        }
+        if (cz >= -0.1f) return miss(sign, "behind-camera")
+        if (!inFrame) return miss(sign, "out-of-frame")
 
         // Occluded? Glass does not block the view, only depth-like surfaces do.
         val hit = scene.raycast(ox, oy, oz, tx, ty, tz, 1f, skipGlass = true)
-        if (hit != null && hit.t < 1f - 0.12f / distance) return miss(sign, "occluded")
+        if (hit != null && hit.t < 1f - 0.12f / distance) return missed("occluded")
 
-        val apparent = intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth
         val sensorX = u / intrinsics.width
         val sensorY = v / intrinsics.height
         seenAt?.invoke(sign, sensorX, sensorY)
@@ -157,18 +232,74 @@ class PerceptionModel(
 
         return when (sign.kind) {
             SignKind.ROOM_PLATE, SignKind.ROOM_RANGE -> {
-                if (apparent < profile.minReadPixels) return miss(sign, "too-small")
-                if (random.nextFloat() >= profile.ocrReadRate) return miss(sign, "ocr-failed")
-                (text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight) ?: miss(sign, "unparsed"))
-                    ?.also { probe?.invoke(sign, "seen") }
+                if (apparent < profile.minReadPixels) {
+                    if (profile.reportUnreadable && apparent >= profile.minNoticePixels) {
+                        record("too-small")
+                        return unread(sign, u, v, m, timestampNanos)
+                    }
+                    return missed("too-small")
+                }
+                if (random.nextFloat() >= profile.ocrReadRate) {
+                    if (profile.reportUnreadable) {
+                        record("ocr-failed")
+                        return unread(sign, u, v, m, timestampNanos)
+                    }
+                    return missed("ocr-failed")
+                }
+                (text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight) ?: missed("unparsed"))
+                    ?.also { probe?.invoke(sign, "seen"); record("seen") }
             }
             else -> {
-                if (apparent < profile.minDetectPixels) return miss(sign, "too-small")
-                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return miss(sign, "not-detected")
+                if (apparent < profile.minDetectPixels) return missed("too-small")
+                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return missed("not-detected")
                 detected(sign.kind, confidence, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
-                    ?.also { probe?.invoke(sign, "seen") }
+                    ?.also { probe?.invoke(sign, "seen"); lastRead = sign.kind.name; record("seen") }
             }
         }
+    }
+
+    private fun isText(sign: Sign) = sign.kind == SignKind.ROOM_PLATE || sign.kind == SignKind.ROOM_RANGE
+
+    private fun occludedFrom(scene: Scene, ox: Float, oy: Float, oz: Float, tx: Float, ty: Float, tz: Float, distance: Float): Boolean {
+        val hit = scene.raycast(ox, oy, oz, tx, ty, tz, 1f, skipGlass = true)
+        return hit != null && hit.t < 1f - 0.12f / distance
+    }
+
+    /** Text seen but not read: where it was in the frame, so depth can place it. */
+    private fun unread(sign: Sign, u: Float, v: Float, m: FloatArray, timestampNanos: Long): SemanticObservation {
+        val (w, h) = boxSize(sign, m)
+        return SemanticObservation.UnreadSign(
+            plate = sign.kind == SignKind.ROOM_PLATE,
+            confidence = 0.6f,
+            normalizedX = u / intrinsics.width,
+            normalizedY = v / intrinsics.height,
+            timestampNanos = timestampNanos,
+            normalizedWidth = w,
+            normalizedHeight = h,
+        )
+    }
+
+    /** The sign's box in the SENSOR image, 0..1: left, top, right, bottom, clamped to the frame. */
+    private fun boxOf(sign: Sign, m: FloatArray): FloatArray {
+        val rightX = -sign.normalZ
+        val rightZ = sign.normalX
+        var minU = Float.MAX_VALUE; var maxU = -Float.MAX_VALUE
+        var minV = Float.MAX_VALUE; var maxV = -Float.MAX_VALUE
+        for (sx in listOf(-0.5f, 0.5f)) for (sy in listOf(-0.5f, 0.5f)) {
+            val px = sign.x + rightX * sign.widthMeters * sx - m[12]
+            val py = sign.y + sign.heightMeters * sy - m[13]
+            val pz = sign.z + rightZ * sign.widthMeters * sx - m[14]
+            val depth = -(px * m[8] + py * m[9] + pz * m[10])
+            if (depth <= 0.05f) continue
+            val u = intrinsics.cx + intrinsics.fx * (px * m[0] + py * m[1] + pz * m[2]) / depth
+            val v = intrinsics.cy - intrinsics.fy * (px * m[4] + py * m[5] + pz * m[6]) / depth
+            minU = minOf(minU, u); maxU = maxOf(maxU, u)
+            minV = minOf(minV, v); maxV = maxOf(maxV, v)
+        }
+        if (minU > maxU) return floatArrayOf(0f, 0f, 0f, 0f)
+        val w = intrinsics.width.toFloat()
+        val h = intrinsics.height.toFloat()
+        return floatArrayOf((minU / w).coerceIn(0f, 1f), (minV / h).coerceIn(0f, 1f), (maxU / w).coerceIn(0f, 1f), (maxV / h).coerceIn(0f, 1f))
     }
 
     /** The sign's bounding box in the SENSOR image, 0..1: its four corners, projected. */
@@ -228,6 +359,8 @@ class PerceptionModel(
     /** Mirrors `fromText` in perceptionToSemantic.ts. */
     private fun text(raw: String, x: Float, y: Float, uprightX: Float, timestampNanos: Long): SemanticObservation? {
         val read = if (random.nextFloat() < profile.ocrMisreadRate) misread(raw) else raw
+        lastRead = read
+        lastMisread = read != raw
         val direction = when {
             uprightX < 0.35f -> SemanticDirection.LEFT
             uprightX > 0.65f -> SemanticDirection.RIGHT
@@ -291,6 +424,9 @@ class PerceptionModel(
             "PRIVATE", "KEEP OUT", "KEEP CLEAR", "FIRE DOOR", "FIRE DOOR KEEP SHUT", "EMERGENCY",
             "DO NOT ENTER", "AUTHORIZED PERSONNEL ONLY", "WELCOME", "THANK YOU", "OFFICE HOURS",
         )
+
+        /** Seen at least this face-on (cosine), a sign too steep to read is still noticed. */
+        const val OBLIQUE_NOTICE = 0.1f
 
         val RANGE =Regex("(\\d{2,4})\\s*(?:-|–|—|to)\\s*(\\d{2,4})")
     }

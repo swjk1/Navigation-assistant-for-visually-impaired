@@ -10,6 +10,7 @@ import com.navassist.navcore.mapping.OccupancyGrid
 import com.navassist.navcore.state.NavigationCommand
 import com.navassist.navcore.state.StopReason
 import kotlin.math.abs
+import kotlin.math.min
 
 data class ControllerOutput(
     val command: NavigationCommand,
@@ -119,7 +120,15 @@ class NavigationController(private val config: NavigationConfig) {
         // Something solid ahead is a hazard (STOP). Floor that has simply never been seen is not:
         // the user is asked to look (SCAN), because standing still would never reveal it.
         val ahead = if (desired == NavigationCommand.STRAIGHT) {
-            forwardState(pose, inflated, remainingPathMeters(pose.position2D, path), grid)
+            // Obstacles only matter as far as the user goes before the path turns: past its next
+            // waypoint lies the wall the turn avoids. And a clear line to the waypoint - what a
+            // path follower drives along - is the authority on obstacles: sampling along the
+            // heading clips the corner cell of a wall the line passes, and with nothing to steer
+            // away from, that stopped a robot for good. Unknown floor is still checked throughout.
+            val gated = config.forwardGateToWaypoint
+            val reach = remainingPathMeters(pose.position2D, path).let { if (gated) min(it, distance + inflated.resolution) else it }
+            val lineClear = gated && escapingLineOfSight(inflated, inflated.worldToGrid(pose.position2D), inflated.worldToGrid(waypoint))
+            forwardState(pose, inflated, if (lineClear) 0f else reach, grid)
         } else {
             Ahead.CLEAR
         }
@@ -272,6 +281,37 @@ class NavigationController(private val config: NavigationConfig) {
 
     private fun hasLineOfSight(inflated: InflatedGrid, from: GridCoordinate, to: Vec2): Boolean =
         inflated.hasLineOfSight(from, inflated.worldToGrid(to))
+
+    /**
+     * Line of sight that, like the planner (AStarPlanner.isPassable), lets the user leave the
+     * inflation halo they are standing in: halo cells near the start are allowed while they are
+     * physically clear of the body ([NavigationConfig.haloEscapeMinClearanceMeters]) or clearance
+     * grows with every cell, and an occupied cell never is. Past the halo the line must be traversable.
+     * Without it, a user who drifted inside a wall's halo - easy, once a 360-degree LiDAR maps the
+     * walls beside them - had every line blocked and was stopped where they stood.
+     */
+    private fun escapingLineOfSight(inflated: InflatedGrid, from: GridCoordinate, to: GridCoordinate): Boolean {
+        val escapeCells = config.inflationRadiusCells + 1
+        var clear = true
+        var escaping = true
+        var lastClearance = inflated.clearanceCells(from.gx, from.gz)
+        OccupancyGrid.traceLine(from.gx, from.gz, to.gx, to.gz) { gx, gz, _ ->
+            if (!clear) return@traceLine
+            if (inflated.isTraversable(gx, gz)) {
+                escaping = false
+                return@traceLine
+            }
+            val clearance = inflated.clearanceCells(gx, gz)
+            // Far enough from the obstacle for the body (the halo adds a comfort margin on top), or
+            // getting further from it.
+            val bodySafe = clearance * inflated.resolution >= config.haloEscapeMinClearanceMeters
+            val inHalo = escaping && !inflated.isUnknown(gx, gz) && clearance > 0 &&
+                (bodySafe || clearance > lastClearance) && GridCoordinate(gx, gz).chebyshevTo(from) <= escapeCells
+            if (!inHalo) clear = false
+            lastClearance = clearance
+        }
+        return clear
+    }
 
     private enum class Ahead { CLEAR, UNKNOWN, BLOCKED }
 

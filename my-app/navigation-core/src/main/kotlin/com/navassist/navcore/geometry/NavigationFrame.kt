@@ -33,4 +33,9 @@ data class NavigationFrame(
      * start where the sensor actually was, not where the phone is now. Null means "at [pose]".
      */
     val sensorPosition: Vec3? = null,
+    /**
+     * A 2D LiDAR revolution completed since the previous frame, placed by [pose]; null when the
+     * rig has no LiDAR or no new revolution finished. Lives in a reused buffer, like [points].
+     */
+    val lidar: LidarScan? = null,
 )

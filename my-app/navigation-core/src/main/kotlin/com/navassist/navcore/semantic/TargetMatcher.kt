@@ -8,12 +8,26 @@ package com.navassist.navcore.semantic
  */
 object TargetMatcher {
 
-    /** Uppercases and strips everything that is not a letter or digit: "Rm. 314" -> "RM314". */
-    fun normalizeLabel(label: String): String = buildString {
-        for (ch in label) {
-            if (ch.isLetterOrDigit()) append(ch.uppercaseChar())
+    /**
+     * Uppercases and strips everything that is not a letter or digit: "Rm. 314" -> "RM314".
+     * Every name for a washroom becomes "WASHROOM": "Restrooms", "Men's toilets" and "WC" are the
+     * same place to someone looking for one.
+     */
+    fun normalizeLabel(label: String): String {
+        val plain = buildString {
+            for (ch in label) {
+                if (ch.isLetterOrDigit()) append(ch.uppercaseChar())
+            }
         }
+        return if (isWashroomName(plain)) WASHROOM else plain
     }
+
+    const val WASHROOM = "WASHROOM"
+
+    private val washroomWords = listOf("WASHROOM", "RESTROOM", "TOILET", "BATHROOM", "LAVATOR")
+
+    private fun isWashroomName(plain: String): Boolean =
+        plain == "WC" || washroomWords.any { plain.contains(it) }
 
     /** Extracts the leading run of digits anywhere in the label: "B314a" -> 314. */
     fun numericPart(label: String): Int? {
@@ -44,11 +58,7 @@ object TargetMatcher {
                 if (room == null) {
                     false
                 } else {
-                    val normalized = normalizeLabel(room.label)
-                    val numeric = numericPart(room.label)
-                    normalized == target.normalizedLabel ||
-                        (numeric != null && target.number != null && numeric == target.number) ||
-                        nameMatches(normalized, target)
+                    labelMatches(room.label, target)
                 }
             }
 
@@ -58,6 +68,25 @@ object TargetMatcher {
             NavigationTarget.Elevator -> observation is SemanticObservation.Elevator
             NavigationTarget.Explore -> false
         }
+
+    /** [matches] for a bare label: a landmark's agreed reading. */
+    fun labelMatches(label: String, target: NavigationTarget.Room): Boolean {
+        val normalized = normalizeLabel(label)
+        val numeric = numericPart(label)
+        return normalized == target.normalizedLabel ||
+            (numeric != null && target.number != null && numeric == target.number && lettersAgree(label, target.label)) ||
+            nameMatches(normalized, target)
+    }
+
+    /**
+     * A number alone matches ("314" for "Room 314"), but the letters around it must agree: "W-203"
+     * is not "E-203" (buildings that letter their halves repeat the digits), and "213A" is not 213
+     * (a suite beside it). "Room" and "Rm" do not count as letters of the label.
+     */
+    private fun lettersAgree(a: String, b: String): Boolean = letters(a) == letters(b)
+
+    private fun letters(label: String): String =
+        normalizeLabel(label).removePrefix("ROOM").removePrefix("RM").filter { it.isLetter() }
 
     /**
      * A named destination ("Pharmacy") read with one character wrong still matches: OCR misreads

@@ -1,0 +1,493 @@
+{
+  "configById": {
+    "3D!scene": {
+      "followMode": "follow-pose",
+      "followTf": "plan",
+      "scene": {},
+      "transforms": {},
+      "layers": {},
+      "publish": {},
+      "imageMode": {},
+      "topics": {
+        "/world": {
+          "visible": true
+        },
+        "/user": {
+          "visible": true
+        },
+        "/engine/grid": {
+          "visible": true,
+          "colorMode": "map",
+          "alpha": 0.6
+        },
+        "/engine/plan": {
+          "visible": true
+        },
+        "/engine/memory": {
+          "visible": true
+        },
+        "/perception/signs": {
+          "visible": false
+        },
+        "/perception/placements": {
+          "visible": true
+        },
+        "/engine/points": {
+          "visible": false
+        },
+        "/lidar/points": {
+          "visible": true,
+          "pointSize": 3,
+          "colorMode": "flat",
+          "flatColor": "#ff6b3dff"
+        },
+        "/engine/landmarks": {
+          "visible": false
+        }
+      }
+    },
+    "Image!camera": {
+      "imageMode": {
+        "imageTopic": "/perception/camera"
+      }
+    },
+    "Image!depth": {
+      "imageMode": {
+        "imageTopic": "/camera/depth",
+        "colorMode": "colormap",
+        "colorMap": "turbo",
+        "minValue": 300,
+        "maxValue": 8000,
+        "rotation": 90
+      }
+    },
+    "Table!frontiers": {
+      "topicPath": "/engine/frontiers.frontiers"
+    },
+    "Plot!engine": {
+      "paths": [
+        {
+          "value": "/engine/status.mapConfidence",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/status.scanProgress",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/status.floorConfidence",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!memory": {
+      "paths": [
+        {
+          "value": "/engine/memory_summary.signsHeld",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/memory_summary.platesRead",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/memory_summary.blacklisted",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/memory_summary.frontiers",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/memory_summary.signsRead",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "StateTransitions!states": {
+      "paths": [
+        {
+          "value": "/engine/status.status",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/status.command",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/memory_summary.sighting",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true
+    },
+    "RosOut!log": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/log"
+    },
+    "RosOut!perception": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/perception/log"
+    },
+    "RawMessages!summary": {
+      "topicPath": "/engine/memory_summary",
+      "diffEnabled": false,
+      "expansion": "all"
+    },
+    "3D!follow": {
+      "followTf": "body",
+      "followMode": "follow-heading",
+      "cameraState": {
+        "perspective": true,
+        "distance": 7,
+        "phi": 62,
+        "thetaOffset": 90,
+        "targetOffset": [
+          0,
+          0,
+          1.0
+        ],
+        "fovy": 50,
+        "near": 0.05,
+        "far": 500
+      },
+      "scene": {
+        "labelScaleFactor": 1.0
+      },
+      "topics": {
+        "/world": {
+          "visible": true
+        },
+        "/user": {
+          "visible": true
+        },
+        "/engine/grid": {
+          "visible": true,
+          "colorMode": "map",
+          "alpha": 0.5
+        },
+        "/engine/plan": {
+          "visible": true
+        },
+        "/engine/memory": {
+          "visible": true
+        },
+        "/perception/signs": {
+          "visible": false
+        },
+        "/perception/placements": {
+          "visible": false
+        },
+        "/engine/points": {
+          "visible": true
+        },
+        "/lidar/points": {
+          "visible": true,
+          "pointSize": 3,
+          "colorMode": "flat",
+          "flatColor": "#ff6b3dff"
+        },
+        "/engine/landmarks": {
+          "visible": false
+        }
+      }
+    },
+    "Image!camera2": {
+      "imageMode": {
+        "imageTopic": "/perception/camera"
+      }
+    },
+    "Image!depth2": {
+      "imageMode": {
+        "imageTopic": "/camera/depth",
+        "colorMode": "colormap",
+        "colorMap": "turbo",
+        "minValue": 300,
+        "maxValue": 8000,
+        "rotation": 90
+      }
+    },
+    "RosOut!log2": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/log"
+    },
+    "3D!memmap": {
+      "followTf": "body",
+      "followMode": "follow-position",
+      "cameraState": {
+        "perspective": false,
+        "phi": 0,
+        "thetaOffset": 0,
+        "distance": 30,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "scene": {
+        "labelScaleFactor": 1.0,
+        "backgroundColor": "#15171c"
+      },
+      "topics": {
+        "/world": {
+          "visible": false
+        },
+        "/user": {
+          "visible": true
+        },
+        "/engine/grid": {
+          "visible": true,
+          "colorMode": "map",
+          "alpha": 0.85
+        },
+        "/engine/plan": {
+          "visible": true
+        },
+        "/engine/memory": {
+          "visible": true
+        },
+        "/perception/placements": {
+          "visible": true
+        },
+        "/perception/signs": {
+          "visible": false
+        },
+        "/engine/points": {
+          "visible": false
+        },
+        "/lidar/points": {
+          "visible": true,
+          "pointSize": 3,
+          "colorMode": "flat",
+          "flatColor": "#ff6b3dff"
+        },
+        "/engine/landmarks": {
+          "visible": true
+        }
+      }
+    },
+    "RawMessages!summary2": {
+      "topicPath": "/engine/memory_summary",
+      "diffEnabled": false,
+      "expansion": "all"
+    },
+    "RosOut!perception2": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/perception/log"
+    },
+    "Tab!main": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "Overview",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 55,
+            "first": {
+              "direction": "column",
+              "splitPercentage": 70,
+              "first": "3D!scene",
+              "second": {
+                "direction": "row",
+                "splitPercentage": 50,
+                "first": "StateTransitions!states",
+                "second": "Plot!engine"
+              }
+            },
+            "second": {
+              "direction": "column",
+              "splitPercentage": 40,
+              "first": {
+                "direction": "row",
+                "splitPercentage": 55,
+                "first": "Image!camera",
+                "second": "Image!depth"
+              },
+              "second": {
+                "direction": "column",
+                "splitPercentage": 50,
+                "first": {
+                  "direction": "row",
+                  "splitPercentage": 60,
+                  "first": "Table!frontiers",
+                  "second": "RawMessages!summary"
+                },
+                "second": {
+                  "direction": "row",
+                  "splitPercentage": 34,
+                  "first": "Plot!memory",
+                  "second": {
+                    "direction": "row",
+                    "splitPercentage": 50,
+                    "first": "RosOut!log",
+                    "second": "RosOut!perception"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "title": "Follow",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 70,
+            "first": "3D!follow",
+            "second": {
+              "direction": "column",
+              "splitPercentage": 45,
+              "first": "Image!camera2",
+              "second": {
+                "direction": "column",
+                "splitPercentage": 50,
+                "first": "Image!depth2",
+                "second": "RosOut!log2"
+              }
+            }
+          }
+        },
+        {
+          "title": "Memory map",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 75,
+            "first": "3D!memmap",
+            "second": {
+              "direction": "column",
+              "splitPercentage": 50,
+              "first": "RawMessages!summary2",
+              "second": "RosOut!perception2"
+            }
+          }
+        },
+        {
+          "title": "Planner",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 55,
+            "first": {
+              "direction": "column",
+              "splitPercentage": 75,
+              "first": "3D!planner",
+              "second": "StateTransitions!skill"
+            },
+            "second": {
+              "direction": "column",
+              "splitPercentage": 45,
+              "first": "Table!hypotheses",
+              "second": {
+                "direction": "row",
+                "splitPercentage": 50,
+                "first": "RosOut!strategylog",
+                "second": "RawMessages!strategy"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "3D!planner": {
+      "followTf": "body",
+      "followMode": "follow-position",
+      "cameraState": {
+        "perspective": false,
+        "phi": 0,
+        "thetaOffset": 0,
+        "distance": 30,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "scene": {
+        "labelScaleFactor": 1.0,
+        "backgroundColor": "#15171c"
+      },
+      "topics": {
+        "/world": {
+          "visible": false
+        },
+        "/user": {
+          "visible": true
+        },
+        "/engine/grid": {
+          "visible": true,
+          "colorMode": "map",
+          "alpha": 0.85
+        },
+        "/engine/plan": {
+          "visible": true
+        },
+        "/engine/landmarks": {
+          "visible": true
+        },
+        "/lidar/points": {
+          "visible": true,
+          "pointSize": 2,
+          "colorMode": "flat",
+          "flatColor": "#ff6b3dff"
+        },
+        "/engine/memory": {
+          "visible": false
+        },
+        "/perception/placements": {
+          "visible": false
+        },
+        "/perception/signs": {
+          "visible": false
+        }
+      }
+    },
+    "Table!hypotheses": {
+      "topicPath": "/engine/strategy.hypotheses"
+    },
+    "RawMessages!strategy": {
+      "topicPath": "/engine/strategy",
+      "diffEnabled": false,
+      "expansion": "all"
+    },
+    "RosOut!strategylog": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/engine/strategy_log"
+    },
+    "StateTransitions!skill": {
+      "paths": [
+        {
+          "value": "/engine/strategy.skill",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/engine/strategy.target",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "layout": "Tab!main"
+}

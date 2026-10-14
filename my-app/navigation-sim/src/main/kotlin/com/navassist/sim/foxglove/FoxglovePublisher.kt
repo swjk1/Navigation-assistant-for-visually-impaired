@@ -35,7 +35,7 @@ interface FoxgloveSink : AutoCloseable {
  * Topics (all JSON, Foxglove well-known schemas unless noted):
  *   /world               SceneUpdate   walls, floors, glass, signs
  *   /user                SceneUpdate   body, phone direction, what they are being told
- *   /tf                  FrameTransform plan -> engine
+ *   /tf                  FrameTransform plan -> engine, plan -> body (the user, +x forward)
  *   /engine/grid         Grid          occupancy, int8: -1 unknown, 0 free, 100 occupied ("map" colours)
  *   /engine/plan         SceneUpdate   path, frontiers, goal
  *   /engine/points       PointCloud    the depth returns the engine integrated
@@ -52,6 +52,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
     private val plan = sink.channel("/engine/plan", "foxglove.SceneUpdate", schema("SceneUpdate"))
     private val points = sink.channel("/engine/points", "foxglove.PointCloud", schema("PointCloud"))
     private val depth = sink.channel("/camera/depth", "foxglove.RawImage", schema("RawImage"))
+    private val lidarPoints = sink.channel("/lidar/points", "foxglove.PointCloud", schema("PointCloud"))
     private val status = sink.channel("/engine/status", "navassist.EngineStatus", STATUS_SCHEMA)
     private val log = sink.channel("/log", "foxglove.Log", schema("Log"))
 
@@ -73,6 +74,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
             lastUserAt = sample.seconds
             sink.publish(user, t, userScene(sim, sample, t))
             frameTransform(sim, t)?.let { sink.publish(tf, t, it) }
+            sink.publish(tf, t, bodyTransform(sample, t))
             sink.publish(plan, t, planScene(sim, t))
         }
         if (sample.seconds - lastGridAt >= GRID_PERIOD) {
@@ -84,6 +86,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
             pointCloud(sim, t)?.let { sink.publish(points, t, it) }
             depthImage(sim, t)?.let { sink.publish(depth, t, it) }
         }
+        lidarCloud(sim, t)?.let { sink.publish(lidarPoints, t, it) }
         sink.publish(status, t, statusMessage(sample, snapshot, t))
 
         val said = "${snapshot.command}${snapshot.stopReason?.let { " ($it)" } ?: ""}"
@@ -114,7 +117,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
                     for (sign in sim.scene.signs) add(obj {
                         "pose" to pose(sign.x, -sign.z, sign.y + 0.25f)
                         "billboard" to true
-                        "font_size" to 14
+                        "font_size" to 22
                         "scale_invariant" to true
                         "color" to color(1f, 0.85f, 0.35f, 1f)
                         "text" to sign.text.ifEmpty { sign.kind.name.lowercase() }
@@ -187,7 +190,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
                     add(obj {
                         "pose" to pose(body.x, body.y, 2.1f)
                         "billboard" to true
-                        "font_size" to 16
+                        "font_size" to 24
                         "scale_invariant" to true
                         "color" to color(1f, 1f, 1f, 1f)
                         "text" to "${sample.command}${sample.stopReason?.let { "\n$it" } ?: ""}"
@@ -207,6 +210,18 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
             "parent_frame_id" to "plan"
             "child_frame_id" to "engine"
             "translation" to vec(ox, oy, sim.settings.user.hold.heightMeters)
+            "rotation" to obj { "x" to 0; "y" to 0; "z" to sin(half); "w" to cos(half) }
+        }
+    }
+
+    /** plan -> body: the user (or robot) at floor level, +x the way the body faces. For follow cameras. */
+    private fun bodyTransform(sample: TraceSample, t: Long): String {
+        val half = (PI / 2 - sample.body.heading).toFloat() / 2f
+        return json {
+            "timestamp" to time(t)
+            "parent_frame_id" to "plan"
+            "child_frame_id" to "body"
+            "translation" to vec(sample.body.x, sample.body.y, 0f)
             "rotation" to obj { "x" to 0; "y" to 0; "z" to sin(half); "w" to cos(half) }
         }
     }
@@ -302,6 +317,37 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
                 add(obj { "name" to "z"; "offset" to 8; "type" to 7 })
             }
             "data" bytes buffer.array()
+        }
+    }
+
+    /** A LiDAR revolution's returns, placed with the engine's pose estimate - as the engine placed them. */
+    private fun lidarCloud(sim: Simulation, t: Long): String? {
+        val frame = sim.lastFrame ?: return null
+        val scan = frame.lidar ?: return null
+        val pose = frame.pose
+        val buffer = ByteBuffer.allocate(scan.count * 12).order(ByteOrder.LITTLE_ENDIAN)
+        var n = 0
+        for (i in 0 until scan.count) {
+            val r = scan.rangeMeters[i]
+            if (r <= 0f) continue
+            val d = com.navassist.navcore.geometry.Vec2.fromYaw(pose.yawRadians + scan.angleRadians[i])
+            buffer.putFloat(pose.x + d.x * r)
+            buffer.putFloat(pose.z + d.z * r)
+            buffer.putFloat(pose.y - 0.1f)
+            n++
+        }
+        if (n == 0) return null
+        return json {
+            "timestamp" to time(t)
+            "frame_id" to "engine"
+            "pose" to pose(0f, 0f, 0f)
+            "point_stride" to 12
+            "fields" to arr {
+                add(obj { "name" to "x"; "offset" to 0; "type" to 7 })
+                add(obj { "name" to "y"; "offset" to 4; "type" to 7 })
+                add(obj { "name" to "z"; "offset" to 8; "type" to 7 })
+            }
+            "data" bytes buffer.array().copyOf(n * 12)
         }
     }
 

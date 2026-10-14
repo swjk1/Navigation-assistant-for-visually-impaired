@@ -3,3 +3,6 @@ https://github.com/foxglove/foxglove-sdk/tree/main/schemas/jsonschema (MIT, see 
 
 They are embedded in every MCAP file and advertised on the live WebSocket so Foxglove
 recognises the messages (it matches on the schema name, e.g. `foxglove.SceneUpdate`).
+
+`CompressedImage.json` was written to match the published `foxglove.CompressedImage` schema
+(timestamp, frame_id, base64 data, format); it is not a byte-for-byte copy.

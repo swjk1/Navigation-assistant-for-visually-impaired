@@ -73,6 +73,32 @@ data class NavigationConfig(
     val maxObstacleRangeMeters: Float = 4.0f,
     /** Upper bound on points fed into the engine per frame. */
     val maxPointsPerFrame: Int = 6000,
+
+    /** Distance at which a frontier's distance term reaches 1 (FrontierScorer). */
+    val frontierDistanceScaleMeters: Float = 6f,
+
+    // ---------------------------------------------------------------- 2D LiDAR (NavigationFrame.lidar)
+    /**
+     * Returns closer than this are dropped: the harness, the wearer's arms. Returns further than
+     * [lidarMaxRangeMeters], or past the edge of the rolling window, are dropped as well.
+     */
+    val lidarMinRangeMeters: Float = 0.15f,
+    val lidarMaxRangeMeters: Float = 12f,
+    /**
+     * A LiDAR return marks its cell occupied. The scan plane is at chest height, so this sees
+     * walls, door frames and columns, never anything entirely below or above the plane.
+     */
+    val lidarMarksObstacles: Boolean = true,
+    /**
+     * The cells a beam crossed before its return count as free for planning and frontier choice
+     * (OccupancyGrid.isPlaneClear), never as floor seen. False ignores everything but returns.
+     */
+    val lidarClearsPlane: Boolean = true,
+    /**
+     * Frontiers follow what the CAMERA has seen, not the LiDAR. A LiDAR maps a corridor's air in a
+     * second and leaves no frontier, so the user never walks up to its signs; the camera has to look.
+     */
+    val frontiersFromCamera: Boolean = false,
     /**
      * Depth samples that jump by more than this fraction of their range (and at least 5 cm) from
      * a neighbouring pixel are dropped as "flying pixels".
@@ -139,6 +165,11 @@ data class NavigationConfig(
      * continues directly beyond them - so an unseen edge is never bridged. See NavigationEngine.
      */
     val blindZoneMeters: Float = 0.5f,
+    /**
+     * Bridge the gap beyond already-free floor in front (the footprint), not only from the phone.
+     * Needed by a camera that cannot be tilted at the floor; see NavigationEngine.bridgeBlindZone.
+     */
+    val blindZoneSkipsFootprint: Boolean = false,
     /** Floor estimation histogram bin size. */
     val floorHistogramBinMeters: Float = 0.05f,
     /** Minimum points in the winning bin before a floor estimate is trusted at all. */
@@ -241,10 +272,23 @@ data class NavigationConfig(
     val adviceHalfAngleDegrees: Float = 60f,
     /** Advice older than this is ignored: the user has moved on from where it was given. */
     val adviceMaxAgeMillis: Long = 20_000,
-    /** New advice releases a committed frontier it does not point at, when it points at another. */
-    val adviceReleasesCommitment: Boolean = true,
-    /** Advice pointing where no frontier lies turns the user to look that way, once per answer. */
-    val adviceTurnsToLook: Boolean = true,
+    /**
+     * New advice releases a committed frontier it does not point at, when it points at another.
+     * Off by default: advice then reaches the engine only through the frontier score.
+     */
+    val adviceReleasesCommitment: Boolean = false,
+    /**
+     * Advice pointing where no frontier lies turns the user to look that way, once per answer.
+     * Off by default for the same reason: with it on, advice steers.
+     */
+    val adviceTurnsToLook: Boolean = false,
+    /**
+     * Weight of the long-term planner's guesses (see [com.navassist.navcore.semantic.PlannerHypothesis]):
+     * like advice, a nudge on frontier choice, never a path or a stop. No planner, no effect.
+     */
+    val weightPlanner: Float = 2.0f,
+    /** A plan's guesses fade to 1/e of their confidence over this long, until the next plan. */
+    val plannerFadeMillis: Long = 90_000,
     /** A frontier counts as reached within this distance. */
     val frontierReachedMeters: Float = 0.9f,
     /** Frontiers we failed to route to are blacklisted within this radius. */
@@ -343,6 +387,35 @@ data class NavigationConfig(
      * it by at least this much, the user is steered back onto the path instead of stopped.
      */
     val driftCorrectionDegrees: Float = 3f,
+    /**
+     * The forward gate stops for obstacles only up to the steering waypoint, not the full sweep: a
+     * map that knows the walls around a corner (a 360-degree LiDAR) otherwise stops the user in
+     * front of the corner the path turns at.
+     */
+    val forwardGateToWaypoint: Boolean = false,
+    /**
+     * Leaving an inflation halo, a cell at least this far from any obstacle may be crossed: the body
+     * fits (radius 0.25 m) and the halo is only a comfort margin. Closer cells must increase clearance.
+     */
+    val haloEscapeMinClearanceMeters: Float = 0.3f,
+    /** A* may cross halo cells near the start only when the start itself is inside a halo. */
+    val haloEscapeOnlyFromHalo: Boolean = false,
+
+    // ---------------------------------------------------------------- long-term planning (strategy/)
+    /** The long-term planner is consulted at least this often while a subgoal runs or none does. */
+    val plannerReplanMillis: Long = 10_000,
+    /**
+     * Arrival only once the destination's label has been read at its door (the VERIFY_DESTINATION
+     * skill), never on proximity to an earlier sighting.
+     */
+    val arrivalRequiresVerification: Boolean = false,
+    /**
+     * A reading of the destination counts as verifying it when taken from within this of where it is
+     * believed to be: close enough that the right door is the one being read.
+     */
+    val verifyRangeMeters: Float = 5f,
+    /** As [verifyRangeMeters], for a named place (a shop), whose name is high on its fascia. */
+    val verifyRangeNamedPlaceMeters: Float = 10f,
     /** Distance at which the final target counts as reached. */
     val arrivalRadiusMeters: Float = 1.0f,
     /**
@@ -435,6 +508,15 @@ data class NavigationConfig(
     val glimpseReachedMeters: Float = 1.0f,
     val glimpseSpentRadiusMeters: Float = 1.5f,
     val glimpseMemoryMillis: Long = 60_000,
+    /**
+     * Room numbers: fit how they run along the corridor from every nearby plate read
+     * (see RoomNumberModel) and steer towards where the target's should be. Off falls back to
+     * comparing the first and last plate seen. With fewer than three plates, the fallback is used
+     * either way.
+     */
+    val roomNumberModel: Boolean = true,
+    /** Most the numbering estimate adds to a frontier's semantic score, at full confidence. */
+    val roomNumberModelMaxScore: Float = 0.8f,
 
     // ---------------------------------------------------------------- phone aim (see AimPolicy)
     /** Looking for a shop: hold the camera this far above horizontal; null = the usual hold. */

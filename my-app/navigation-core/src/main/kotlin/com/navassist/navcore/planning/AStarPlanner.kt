@@ -149,6 +149,10 @@ class AStarPlanner(private val config: NavigationConfig) {
             val escapeCells = config.inflationRadiusCells + 1
             if (GridCoordinate(gx, gz).chebyshevTo(start) > escapeCells) return false
             if (grid.clearanceCells(gx, gz) <= 0) return false
+            // Only an escape when there is something to escape: from a start outside every halo,
+            // this let the path cut through the halo of a wall end beside the user - a corner the
+            // controller then rightly refused to walk, while the planner kept returning it.
+            if (config.haloEscapeOnlyFromHalo && !grid.isBlocked(start.gx, start.gz)) return false
         }
         if (!grid.isUnknown(gx, gz)) return true
         if (unknownBudget <= 0) return false

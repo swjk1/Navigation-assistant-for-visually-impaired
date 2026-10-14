@@ -17,6 +17,7 @@ import com.navassist.navcore.topology.TopologicalMap
  *         + weightRevisit     * revisitPenalty
  *         + weightRisk        * riskPenalty
  *         + weightAdvice      * adviceScore   (only when an adviser has spoken)
+ *         + weightPlanner     * planScore     (only when a long-term planner has spoken)
  *         + weightAxis        * along the space's long axis   (off by default)
  *         + weightClutter     * obstacles around the frontier (off by default)
  *
@@ -41,7 +42,9 @@ class FrontierScorer(private val config: NavigationConfig) {
         nowMillis: Long,
     ): List<Frontier> {
         val userPosition = userPose.position2D
-        val normalizer = config.gridSizeMeters * 0.5f
+        // A fixed scale, not the window's: a bigger window (for a longer-range sensor) must not make
+        // distance matter less. 6 m is half the original 12 m window, so that case is unchanged.
+        val normalizer = config.frontierDistanceScaleMeters
         val axis = if (config.weightAxis != 0f) {
             SpaceShape.axis(inflated, userPosition, config.axisRadiusMeters, config.gridResolutionMeters)
         } else {
@@ -53,6 +56,7 @@ class FrontierScorer(private val config: NavigationConfig) {
                 val semanticScore =
                     semantics.semanticScoreFor(frontier.centroid, userPose, target, nowMillis)
                 val adviceScore = semantics.adviceScoreFor(frontier.centroid, nowMillis)
+                val planScore = semantics.planScoreFor(frontier.centroid, userPosition, nowMillis)
                 val revisit = topology.revisitDensity(frontier.centroid, config.topoNodeSpacingMeters)
                 val risk = riskOf(frontier, inflated)
 
@@ -74,13 +78,16 @@ class FrontierScorer(private val config: NavigationConfig) {
                         config.weightDistance * normalizedDistance +
                         config.weightRevisit * revisit +
                         config.weightRisk * risk +
-                        config.weightAdvice * adviceScore
+                        config.weightAdvice * adviceScore +
+                        config.weightPlanner * planScore
 
                 frontier.copy(
                     distanceMeters = distance,
                     semanticScore = semanticScore,
                     revisitPenalty = revisit,
                     riskPenalty = risk,
+                    adviceScore = adviceScore,
+                    planScore = planScore,
                     score = total,
                 )
             }

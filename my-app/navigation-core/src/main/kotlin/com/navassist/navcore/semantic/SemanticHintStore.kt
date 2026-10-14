@@ -63,6 +63,9 @@ class SemanticHintStore(private val config: NavigationConfig) {
     /** Rooms seen so far, in arrival order, with where they were seen. Drives the number gradient. */
     private val roomTrail = ArrayList<Pair<Int, Vec2>>()
 
+    /** Every numbered plate read this trip, where it is: how the numbering runs (see [numberingScore]). */
+    private val numbering = RoomNumberModel()
+
     var currentFloorId: String? = null
         private set
 
@@ -107,6 +110,61 @@ class SemanticHintStore(private val config: NavigationConfig) {
         return GeometryUtils.clamp(score, -1f, 1f)
     }
 
+    /** The planner's latest guesses, when they arrived, and which have been searched. */
+    private var plan: List<PlannerHypothesis> = emptyList()
+    private var planAtMillis = 0L
+    private val searched = HashSet<PlannerHypothesis>()
+
+    /** Replaces the plan: each answer is the planner's whole current belief. */
+    fun setPlan(hypotheses: List<PlannerHypothesis>, nowMillis: Long) {
+        plan = hypotheses
+        planAtMillis = nowMillis
+        searched.retainAll(hypotheses.toSet())
+    }
+
+    /**
+     * How much each guess still counts: its confidence, fading exponentially with the plan's age,
+     * and nothing once its place has been searched.
+     */
+    fun planWeights(nowMillis: Long): List<Pair<PlannerHypothesis, Float>> {
+        if (plan.isEmpty()) return emptyList()
+        val fade = kotlin.math.exp(-(nowMillis - planAtMillis).toFloat() / config.plannerFadeMillis)
+        return plan.map { it to if (it in searched) 0f else it.confidence * fade }
+    }
+
+    /**
+     * The user walked within a guess's radius and the destination was not there: spend it, so the
+     * engine stops being drawn back to an empty place (Follow the Signs zeroes its confidence grid
+     * the same way). Called every frame with the user's position.
+     */
+    fun noteSearched(user: Vec2) {
+        for (h in plan) {
+            if (h !in searched && user.distanceTo(h.position) <= max(h.radiusMeters, MIN_SEARCH_RADIUS_METERS)) searched += h
+        }
+    }
+
+    /**
+     * How strongly the plan favours a frontier, in 0..1: for each live guess, frontiers in its
+     * direction from the user, or near it once the user is close, weighted by what it still counts.
+     */
+    fun planScoreFor(frontierCentroid: Vec2, userPosition: Vec2, nowMillis: Long): Float {
+        var score = 0f
+        for ((h, weight) in planWeights(nowMillis)) {
+            if (weight <= 0f) continue
+            val toGuess = h.position - userPosition
+            val reach = max(h.radiusMeters, MIN_SEARCH_RADIUS_METERS) + NUMBERING_NEAR_METERS
+            val factor = if (toGuess.length() < reach) {
+                GeometryUtils.clamp(1f - frontierCentroid.distanceTo(h.position) / (2f * reach), 0f, 1f)
+            } else {
+                val toFrontier = frontierCentroid - userPosition
+                if (toFrontier.lengthSquared() < 1e-4f) continue
+                max(0f, toFrontier.normalized().dot(toGuess.normalized()))
+            }
+            score += factor * weight
+        }
+        return GeometryUtils.clamp(score, 0f, 1f)
+    }
+
     /** What has been read or detected recently, newest first, for an adviser. */
     fun seenSigns(nowMillis: Long, limit: Int = 20): List<SeenSign> = hints.asReversed().asSequence().mapNotNull { hint ->
         val o = hint.observation
@@ -134,8 +192,20 @@ class SemanticHintStore(private val config: NavigationConfig) {
     fun reset() {
         hints.clear()
         roomTrail.clear()
+        numbering.clear()
         advice = emptyList()
+        plan = emptyList()
+        searched.clear()
         currentFloorId = null
+        targetSighting = null
+        spentGlimpses.clear()
+    }
+
+    /** A new floor: what was seen on the last one says nothing about where things are on this one. */
+    fun newFloor() {
+        hints.clear()
+        roomTrail.clear()
+        numbering.clear()
         targetSighting = null
         spentGlimpses.clear()
     }
@@ -185,6 +255,8 @@ class SemanticHintStore(private val config: NavigationConfig) {
                 currentFloorId = observation.floor
                 continue
             }
+            // Evidence for the world model only (NavigationEngine records it there): no direction, no match.
+            if (observation is SemanticObservation.UnreadSign) continue
 
             hints.add(StoredHint(observation, observerPose, nowMillis, bearings.getOrNull(index)))
 
@@ -192,6 +264,12 @@ class SemanticHintStore(private val config: NavigationConfig) {
                 TargetMatcher.numericPart(observation.label)?.let { number ->
                     roomTrail.add(number to observerPose.position2D)
                     if (roomTrail.size > MAX_ROOM_TRAIL) roomTrail.removeAt(0)
+                    // The plate itself where depth placed it, else a short way along its bearing:
+                    // plates are small, so one legible without depth was near.
+                    val plate = observation.worldPosition?.toVec2()
+                        ?: bearings.getOrNull(index)?.let { observerPose.position2D + it * config.glimpseRangeMeters }
+                        ?: observerPose.position2D
+                    numbering.add(number, plate)
                 }
             }
 
@@ -351,8 +429,47 @@ class SemanticHintStore(private val config: NavigationConfig) {
             score += angular * recency * hint.observation.confidence * relevance
         }
 
-        score += roomNumberGradientScore(frontierCentroid, userPose, target)
+        score += numberingScore(frontierCentroid, userPose, target)
         return GeometryUtils.clamp(score, -1f, 1.5f)
+    }
+
+    /** Where the numbering puts the target's plate, if the plates read so far say. */
+    fun numberingEstimate(target: NavigationTarget): RoomNumberModel.Estimate? {
+        val number = (target as? NavigationTarget.Room)?.number ?: return null
+        return if (config.roomNumberModel) numbering.estimate(number) else null
+    }
+
+    /** Every numbered plate read this trip and where it is, oldest first. For observability. */
+    fun numberingPlates(): List<RoomNumberModel.Plate> = numbering.plates.toList()
+
+    /** The advice currently held and how old it is, for observability; empty when none or stale. */
+    fun currentAdvice(nowMillis: Long): Pair<List<AdviceDirection>, Long> =
+        if (advice.isEmpty() || nowMillis - adviceAtMillis > config.adviceMaxAgeMillis) emptyList<AdviceDirection>() to 0L
+        else advice to nowMillis - adviceAtMillis
+
+    /** The target's number is in a different hundreds block from every plate on this floor. */
+    fun targetLikelyOnAnotherFloor(target: NavigationTarget): Boolean {
+        val number = (target as? NavigationTarget.Room)?.number ?: return false
+        return numbering.targetLikelyOnAnotherFloor(number)
+    }
+
+    /**
+     * Towards where the numbering puts the target: frontiers in that direction from the user, or
+     * once the user is nearly there, frontiers near the spot itself.
+     */
+    private fun numberingScore(frontierCentroid: Vec2, userPose: Pose3D, target: NavigationTarget): Float {
+        val estimate = numberingEstimate(target)
+            ?: return roomNumberGradientScore(frontierCentroid, userPose, target)
+        val user = userPose.position2D
+        val toEstimate = estimate.position - user
+        val factor = if (toEstimate.length() < NUMBERING_NEAR_METERS) {
+            GeometryUtils.clamp(1f - frontierCentroid.distanceTo(estimate.position) / (2f * NUMBERING_NEAR_METERS), 0f, 1f)
+        } else {
+            val toFrontier = frontierCentroid - user
+            if (toFrontier.lengthSquared() < 1e-4f) return 0f
+            max(0f, toFrontier.normalized().dot(toEstimate.normalized()))
+        }
+        return factor * estimate.confidence * config.roomNumberModelMaxScore
     }
 
     private fun relevanceOf(observation: SemanticObservation, target: NavigationTarget): Float =
@@ -380,6 +497,7 @@ class SemanticHintStore(private val config: NavigationConfig) {
                 else -> nearMissRelevance(observation, target)
             }
             is SemanticObservation.Floor -> 0f
+            is SemanticObservation.UnreadSign -> 0f
         }
 
     private fun nearMissRelevance(
@@ -470,6 +588,12 @@ class SemanticHintStore(private val config: NavigationConfig) {
         /** One reading and an assumed height: ranks below any depth-placed sighting. */
         const val RANGED_CONFIDENCE = 0.5f
         const val MAX_GRADIENT_SCORE = 0.5f
+
+        /** Within this of the numbering's estimate, steer to the spot rather than the direction. */
+        const val NUMBERING_NEAR_METERS = 3f
+
+        /** A guess counts as searched once the user is this close, however precise it claims to be. */
+        const val MIN_SEARCH_RADIUS_METERS = 2f
 
         /** A new depth sighting replaces one measured from at most this much nearer. */
         const val NEARER_SLACK_METERS = 1f

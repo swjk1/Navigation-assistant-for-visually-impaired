@@ -3,6 +3,7 @@ package com.navassist.sim
 import com.navassist.navcore.state.NavigationCommand
 import com.navassist.sim.foxglove.FoxglovePublisher
 import com.navassist.sim.foxglove.FoxgloveWebSocketSink
+import com.navassist.sim.foxglove.InsightPublisher
 
 /**
  * Runs one scenario in REAL time and streams it to Foxglove.
@@ -34,6 +35,7 @@ object LiveRunner {
             val simulation = Simulation(scenario.settings(seed))
             val publisher = FoxglovePublisher(sink)
             simulation.listeners += publisher::onFrame
+            InsightPublisher(sink).attach(simulation)
 
             println("Waiting for Foxglove to connect to ws://localhost:$port ...")
             while (!sink.connected) Thread.sleep(100)

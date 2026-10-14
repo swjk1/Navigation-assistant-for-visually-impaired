@@ -1,5 +1,8 @@
 package com.navassist.sim.bench
 
+import com.navassist.sim.world.NumberingFamily
+import com.navassist.sim.world.ProceduralFloor
+import com.navassist.sim.world.SignPolicy
 import com.navassist.navcore.semantic.NavigationTarget
 import com.navassist.navcore.semantic.TargetMatcher
 import com.navassist.navcore.state.NavigationStatus
@@ -41,6 +44,38 @@ class Episode(
     val scene: () -> Scene,
     val start: BodyPose,
     val target: NavigationTarget,
+    /** How the building really numbers its rooms, when known (procedural floors): for judging hypotheses, never for the agent. */
+    val truth: NumberingTruth? = null,
+    /** Floors joined by a lift, when the trip may change floor: [scene] is floor [startFloor]. */
+    val multiFloor: com.navassist.sim.world.Building? = null,
+    val startFloor: Int = 0,
+    /** The floor the destination is on. */
+    val goalFloor: Int = 0,
+)
+
+/** Ground truth about a floor's numbering, to score the hypotheses an agent confirmed. */
+data class NumberingTruth(
+    val family: NumberingFamily,
+    val risingEast: Boolean,
+    val oddNorth: Boolean,
+    /** The main corridor's plan y range: plates in it are judged against [risingEast] and [oddNorth]. */
+    val mainCorridorY: ClosedFloatingPointRange<Float>,
+)
+
+/** What the long-term planner did in one run. */
+data class PlannerStats(
+    val subgoals: Int,
+    /** "SKILL/STATUS" -> count. */
+    val outcomes: Map<String, Int>,
+    val inspections: Int,
+    val inspectionsRead: Int,
+    val verified: Boolean,
+    val rejections: Int,
+    val hypothesesConfirmed: Int,
+    /** Confirmed hypotheses the ground truth contradicts; null where the truth is not known. */
+    val hypothesesConfirmedWrong: Int?,
+    /** Confirmed hypotheses that could be judged. */
+    val hypothesesJudged: Int,
 )
 
 /** What one run of one episode came to. */
@@ -70,6 +105,8 @@ data class RunRecord(
     val changesPerMinute: Double? = null,
     /** Smallest gap between the user's body and anything solid, in metres. */
     val minClearanceMeters: Float? = null,
+    /** What the long-term planner did; null with no planner. */
+    val planner: PlannerStats? = null,
 )
 
 /** Averages over a set of runs. */
@@ -217,10 +254,129 @@ object Benchmark {
         list
     }
 
-    /** The episodes a filter picks: the main set, or the held-out set when the filter names it. */
+    /**
+     * Families whose rules a planner may be tuned on; every other [NumberingFamily] is held out and
+     * only ever used to judge. Fixed before any results: the paper's split, by family, not by seed.
+     */
+    val tuneFamilies = setOf(NumberingFamily.FLOOR_DIGIT, NumberingFamily.WING_BLOCK)
+
+    /** Buildings per family, and trips per building. */
+    private const val PROC_BUILDINGS = 6
+    private const val PROC_TRIPS = 3
+
+    /**
+     * Trips on procedurally generated floors (world/ProceduralFloor.kt): [PROC_BUILDINGS] buildings
+     * per numbering family, [PROC_TRIPS] trips each to a random room from a random start. Signs are
+     * accurate in most buildings, missing or misleading in some. Ids say the split:
+     * proc-tune-... or proc-test-..., so "--filter proc-test" runs only the held-out families.
+     */
+    val procedural: List<Episode> by lazy {
+        val list = ArrayList<Episode>()
+        for (family in NumberingFamily.entries) {
+            val split = if (family in tuneFamilies) "tune" else "test"
+            for (b in 1..PROC_BUILDINGS) {
+                val r = kotlin.random.Random(b * 7919L + family.ordinal)
+                val policy = when (r.nextInt(10)) { in 0..5 -> SignPolicy.ACCURATE; in 6..7 -> SignPolicy.MISSING; else -> SignPolicy.MISLEADING }
+                val floor = ProceduralFloor(family, b.toLong(), policy)
+                val rooms = floor.rooms.filter { it.label.last().isDigit() }
+                for (t in 1..PROC_TRIPS) {
+                    val room = rooms[r.nextInt(rooms.size)]
+                    // A trip worth taking: start at least 15 m from the plate.
+                    var start = floor.corridorPoint(0.1f + 0.8f * r.nextFloat())
+                    repeat(20) { if (kotlin.math.hypot(start.first - room.plateX, start.second - room.plateY) < 15f) start = floor.corridorPoint(0.1f + 0.8f * r.nextFloat()) }
+                    val (sx, sy) = start
+                    val heading = if (r.nextBoolean()) E else W
+                    list += Episode(
+                        "proc-$split-${floor.name}-$t-${room.label}", "proc-$split-${family.name.lowercase()}",
+                        { floor.build() }, BodyPose(sx, sy, heading), NavigationTarget.Room(room.label),
+                        truth = NumberingTruth(family, floor.risingEast, floor.oddNorth, 0f..ProceduralFloor.CORRIDOR),
+                    )
+                }
+            }
+        }
+        list
+    }
+
+    /** Multi-floor buildings per family, and trips per building. */
+    private const val MF_BUILDINGS = 4
+    private const val MF_TRIPS = 3
+
+    /**
+     * Trips in multi-floor buildings joined by a lift (world/MultiFloorBuilding.kt): the destination
+     * usually on another floor. FLOOR_DIGIT is tuned on; OFFSET (lift labels one higher than the
+     * rooms' digits) and DIGIT_IS_WING (the lift is a trap: the room is on this floor) are held out.
+     * Ids say the split: mf-tune-... or mf-test-....
+     */
+    val multiFloor: List<Episode> by lazy {
+        val list = ArrayList<Episode>()
+        for (family in com.navassist.sim.world.MultiFloorFamily.entries) {
+            val split = if (family == com.navassist.sim.world.MultiFloorFamily.FLOOR_DIGIT) "tune" else "test"
+            for (b in 1..MF_BUILDINGS) {
+                val r = kotlin.random.Random(b * 104729L + family.ordinal)
+                val building = com.navassist.sim.world.MultiFloorBuilding(family, 100L + b, floors = 3 + r.nextInt(2))
+                for (t in 1..MF_TRIPS) {
+                    val startFloor = r.nextInt(building.floors)
+                    val goalFloor = if (family == com.navassist.sim.world.MultiFloorFamily.DIGIT_IS_WING) startFloor
+                        else (startFloor + 1 + r.nextInt(building.floors - 1)) % building.floors
+                    val plan = building.plans[goalFloor]
+                    val rooms = plan.rooms.filter { it.label.last().isDigit() && (family != com.navassist.sim.world.MultiFloorFamily.DIGIT_IS_WING || it.inWing) }
+                    val room = rooms[r.nextInt(rooms.size)]
+                    val (sx, sy) = building.plans[startFloor].corridorPoint(0.1f + 0.8f * r.nextFloat())
+                    list += Episode(
+                        "mf-$split-${building.name}-$t-f${startFloor + 1}-${room.label}", "mf-$split-${family.name.lowercase()}",
+                        { building.scene(startFloor) }, BodyPose(sx, sy, if (r.nextBoolean()) E else W), NavigationTarget.Room(room.label),
+                        multiFloor = building, startFloor = startFloor, goalFloor = goalFloor,
+                    )
+                }
+            }
+        }
+        list
+    }
+
+    /** One trip by its exact id, from the main set, the held-out malls, the procedural or multi-floor buildings. */
+    fun episodeNamed(id: String): Episode =
+        (episodes + heldOut + procedural + multiFloor).firstOrNull { it.id == id }
+            ?: error("no episode '$id'; see --episodes (and --episodes --filter heldout)")
+
+    /**
+     * A trip with a design, as a [com.navassist.sim.Scenario], so everything built for scenarios -
+     * the live Foxglove stream, MCAP recordings, Webots, traces, pictures - works for it. Passes
+     * when the run counts as a benchmark success.
+     */
+    fun asScenario(episode: Episode, design: String, configure: (SimSettings) -> SimSettings): com.navassist.sim.Scenario {
+        val p = prepare(listOf(episode)).single()
+        return com.navassist.sim.Scenario(
+            name = "${episode.id}-$design",
+            description = "${episode.id}: ${episode.target.description}, design $design (shortest walk ${"%.1f".format(p.shortest)} m)",
+            expectation = com.navassist.sim.Expectation.KNOWN_LIMITATION,
+            settings = { seed ->
+                configure(
+                    SimSettings(
+                        episode.scene(), episode.start, target = episode.target, maxSeconds = p.maxSeconds, seed = seed,
+                        building = episode.multiFloor, startFloor = episode.startFloor,
+                    ),
+                )
+            },
+            check = { result, _ ->
+                val miss = p.goals.minOf { (x, y) -> hypot(result.finalBody.x - x, result.finalBody.y - y) }
+                when {
+                    result.outcome == Outcome.FELL -> listOf("fell")
+                    result.outcome != Outcome.ARRIVED -> listOf("did not arrive (${result.outcome}), %.1f m from the nearest destination".format(miss))
+                    result.finalFloor != episode.goalFloor -> listOf("arrived on floor ${result.finalFloor + 1}, the destination is on ${episode.goalFloor + 1}")
+                    miss > SUCCESS_RADIUS -> listOf("arrived %.1f m from the nearest destination".format(miss))
+                    else -> emptyList()
+                }
+            },
+        )
+    }
+
     fun select(filter: String?): List<Episode> =
         if (filter != null && "heldout" in filter) {
             heldOut.filter { filter == "heldout" || filter in it.id }
+        } else if (filter != null && filter.startsWith("proc")) {
+            procedural.filter { filter in it.id }
+        } else if (filter != null && filter.startsWith("mf")) {
+            multiFloor.filter { filter in it.id }
         } else {
             episodes.filter { filter == null || filter in it.id }
         }
@@ -253,7 +409,8 @@ object Benchmark {
     /** An episode, checked and priced: its destinations and the shortest walk to one. */
     class Prepared(val episode: Episode, val goals: List<Pair<Float, Float>>, val shortest: Float) {
         /** Time allowed: two minutes to get going plus six seconds per metre of the shortest walk. */
-        val maxSeconds: Double get() = (120.0 + 6.0 * shortest).coerceAtMost(480.0)
+        val maxSeconds: Double get() =
+            (120.0 + 6.0 * shortest + if (episode.goalFloor != episode.startFloor) 60.0 else 0.0).coerceAtMost(540.0)
     }
 
     fun prepare(episodes: List<Episode>): List<Prepared> {
@@ -261,6 +418,19 @@ object Benchmark {
         return episodes.map { e ->
             val scene = e.scene()
             val truth = truths.getOrPut(scene.name) { GroundTruth(scene) }
+            val building = e.multiFloor
+            if (building != null && e.goalFloor != e.startFloor) {
+                // To the lift on this floor, then from the lift to the destination on its floor.
+                val goalScene = building.scene(e.goalFloor)
+                val goalTruth = truths.getOrPut(goalScene.name) { GroundTruth(goalScene) }
+                val goals = goals(goalScene, e.target)
+                require(goals.isNotEmpty()) { "${e.id}: no sign names ${e.target.description} on floor ${e.goalFloor + 1}" }
+                val (lx, ly) = building.liftDoor
+                val spot = listOf(lx to ly + 1.5f)
+                val toLift = truth.shortestPath(e.start.x, e.start.y, spot, 1.0f) ?: error("${e.id}: no route to the lift")
+                val fromLift = goalTruth.shortestPath(lx, ly + 1.5f, goals, SUCCESS_RADIUS) ?: error("${e.id}: no route from the lift")
+                return@map Prepared(e, goals, toLift + fromLift)
+            }
             val goals = goals(scene, e.target)
             require(goals.isNotEmpty()) { "${e.id}: no sign names ${e.target.description} on this storey" }
             val shortest = truth.shortestPath(e.start.x, e.start.y, goals, SUCCESS_RADIUS)
@@ -297,7 +467,10 @@ object Benchmark {
 
     fun runOne(p: Prepared, seed: Long, configure: (SimSettings) -> SimSettings = { it }, pictures: File? = null): RunRecord {
         val settings = configure(
-            SimSettings(p.episode.scene(), p.episode.start, target = p.episode.target, maxSeconds = p.maxSeconds, seed = seed),
+            SimSettings(
+                p.episode.scene(), p.episode.start, target = p.episode.target, maxSeconds = p.maxSeconds, seed = seed,
+                building = p.episode.multiFloor, startFloor = p.episode.startFloor,
+            ),
         )
         val sim = Simulation(settings)
         val hits = ArrayList<String>()
@@ -319,7 +492,7 @@ object Benchmark {
         val result = sim.run()
         val miss = p.goals.minOf { (x, y) -> hypot(result.finalBody.x - x, result.finalBody.y - y) }
         val arrived = result.outcome == Outcome.ARRIVED
-        val success = arrived && miss <= SUCCESS_RADIUS
+        val success = arrived && miss <= SUCCESS_RADIUS && result.finalFloor == p.episode.goalFloor
         if (pictures != null) {
             val verdict = if (success) "pass" else "FAIL"
             TopDownRenderer.render(
@@ -346,17 +519,52 @@ object Benchmark {
             secondsByState = byState,
             changesPerMinute = result.instructionChangesPerMinute,
             minClearanceMeters = result.minClearanceMeters.takeIf { it < Float.MAX_VALUE },
+            planner = plannerStats(sim, p.episode.truth),
+        )
+    }
+
+    /** The planner's run in numbers, and its confirmed hypotheses judged against [truth]. */
+    fun plannerStats(sim: Simulation, truth: NumberingTruth?): PlannerStats? {
+        val e = sim.engine
+        if (e.longTermPlanner == null && e.executor.history.isEmpty()) return null
+        val history = e.executor.history
+        val inspections = history.filter { it.skill == com.navassist.navcore.strategy.Skill.INSPECT_ROOM_LABEL || it.skill == com.navassist.navcore.strategy.Skill.INSPECT_SIGN }
+        val confirmed = e.beliefs.hypotheses.filter {
+            it.status == com.navassist.navcore.belief.HypothesisStatus.CONFIRMED && it.family != com.navassist.navcore.belief.HypothesisFamily.DESTINATION
+        }
+        var judged = 0
+        var wrong = 0
+        if (truth != null) for (h in confirmed) {
+            val verdict = HypothesisTruth.judge(sim, h, truth) ?: continue
+            judged++
+            if (!verdict) wrong++
+        }
+        return PlannerStats(
+            subgoals = history.size,
+            outcomes = history.groupingBy { "${it.skill}/${it.status}" }.eachCount(),
+            inspections = inspections.size,
+            inspectionsRead = inspections.count { it.status == com.navassist.navcore.strategy.OutcomeStatus.SUCCEEDED },
+            verified = history.any { it.skill == com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION && it.status == com.navassist.navcore.strategy.OutcomeStatus.SUCCEEDED },
+            rejections = e.rejections.size,
+            hypothesesConfirmed = confirmed.size,
+            hypothesesConfirmedWrong = if (truth != null) wrong else null,
+            hypothesesJudged = judged,
         )
     }
 
     // ------------------------------------------------------------------ results files
 
-    fun write(file: File, name: String, seeds: Int, prepared: List<Prepared>, runs: List<RunRecord>) {
+    fun write(file: File, name: String, seeds: Int, prepared: List<Prepared>, runs: List<RunRecord>, design: String? = null) {
         val byEpisode = runs.groupBy { it.episode }
         file.parentFile?.mkdirs()
         file.writeText(
             json {
                 "name" to name
+                design?.let {
+                    "design" to it
+                    // Who acted on the instructions: a robot following the path, or a person.
+                    "agent" to if (it.startsWith("robot-")) "robot" else "person"
+                }
                 gitCommit()?.let { "commit" to it }
                 "seeds" to seeds
                 "successRadius" to SUCCESS_RADIUS
@@ -386,6 +594,19 @@ object Benchmark {
                                 "spl" to r.spl
                                 "finalStatus" to r.finalStatus
                                 if (r.hits.isNotEmpty()) "hits" to arr { r.hits.forEach { add(it) } }
+                                r.planner?.let { ps ->
+                                    "planner" to obj {
+                                        "subgoals" to ps.subgoals
+                                        "outcomes" to obj { for ((k, v) in ps.outcomes) k to v }
+                                        "inspections" to ps.inspections
+                                        "inspectionsRead" to ps.inspectionsRead
+                                        "verified" to ps.verified
+                                        "rejections" to ps.rejections
+                                        "hypothesesConfirmed" to ps.hypothesesConfirmed
+                                        ps.hypothesesConfirmedWrong?.let { "hypothesesConfirmedWrong" to it }
+                                        "hypothesesJudged" to ps.hypothesesJudged
+                                    }
+                                }
                                 r.locatedSeconds?.let { "locatedSeconds" to it }
                                 r.closestMeters?.let { "closestMeters" to it }
                                 if (r.secondsByState.isNotEmpty()) "secondsByState" to obj { r.secondsByState.forEach { (k, v) -> k to v } }
@@ -424,6 +645,10 @@ object Benchmark {
         val dirty = git("status", "--porcelain", "--", "src", "../navigation-core/src").isNotEmpty()
         if (dirty) "$head+dirty" else head
     }.getOrNull()
+
+    /** "robot" or "person" for files that record it; null for older results. */
+    @Suppress("UNCHECKED_CAST")
+    fun agentOf(file: File): String? = (MiniJson.parse(file.readText()) as Map<String, Any?>)["agent"] as String?
 
     /** Reads a results file back as run records. */
     @Suppress("UNCHECKED_CAST")
@@ -472,6 +697,10 @@ object Benchmark {
         val high: Double,
         val gained: List<String>,
         val lost: List<String>,
+        /** The same interval resampling whole buildings, when there are enough to; null otherwise. */
+        val buildingInterval: Triple<Int, Double, Double>? = null,
+        /** Instruction churn matters to a person being guided, not to a robot following the path. */
+        private val judgeChurn: Boolean = true,
     ) {
         val verdict: String get() = when {
             candidateSummary.fallRate > baselineSummary.fallRate -> "REJECT: more falls"
@@ -485,6 +714,7 @@ object Benchmark {
 
         /** Instruction changes per minute up by more than [CHURN_TOLERANCE]; unknown for older results. */
         private val moreChurn: Boolean get() {
+            if (!judgeChurn) return false
             val before = baselineSummary.meanChangesPerMinute ?: return false
             val after = candidateSummary.meanChangesPerMinute ?: return false
             return after > before * (1 + CHURN_TOLERANCE)
@@ -495,6 +725,9 @@ object Benchmark {
             appendLine("candidate $candidate: ${candidateSummary.line()}")
             appendLine("paired runs: $pairs")
             appendLine("success rate change: %+.1f points (95%% CI %+.1f to %+.1f)".format(delta * 100, low * 100, high * 100))
+            buildingInterval?.let { (n, lo, hi) ->
+                appendLine("  resampling the %d buildings instead of trips: 95%% CI %+.1f to %+.1f".format(n, lo * 100, hi * 100))
+            }
             appendLine("verdict: $verdict")
             if (gained.isNotEmpty()) appendLine("episodes that improved: ${gained.joinToString()}")
             if (lost.isNotEmpty()) appendLine("episodes that got worse: ${lost.joinToString()}")
@@ -507,7 +740,19 @@ object Benchmark {
     /** A design may raise instruction changes per minute by at most this fraction before it is rejected. */
     const val CHURN_TOLERANCE = 0.05
 
-    fun compare(baselineName: String, baseline: List<RunRecord>, candidateName: String, candidate: List<RunRecord>): Comparison {
+    private const val MIN_BUILDINGS_FOR_CLUSTERING = 8
+
+    /** Which building a trip is in: a procedural or multi-floor building by its id, else the set's first word. */
+    fun buildingOf(episode: String): String =
+        Regex("^((proc|mf)-(tune|test)-(proc|mf)-[a-z-]+?-\\d+)-").find(episode)?.groupValues?.get(1) ?: episode.substringBefore('-')
+
+    fun compare(
+        baselineName: String,
+        baseline: List<RunRecord>,
+        candidateName: String,
+        candidate: List<RunRecord>,
+        judgeChurn: Boolean = true,
+    ): Comparison {
         val a = baseline.associateBy { it.episode to it.seed }
         val b = candidate.associateBy { it.episode to it.seed }
         val keys = a.keys.intersect(b.keys)
@@ -525,12 +770,28 @@ object Benchmark {
             repeat(diffs.size) { sum += diffs[random.nextInt(diffs.size)] }
             sum / diffs.size
         }.sorted()
+        // Trips in one building are not independent either: resample buildings, each carrying all of
+        // its trips, when there are enough buildings for that to mean something.
+        val byBuilding = perEpisode.entries.groupBy({ buildingOf(it.key) }, { it.value })
+        val buildingInterval = if (byBuilding.size >= MIN_BUILDINGS_FOR_CLUSTERING) {
+            val clusters = byBuilding.values.toList()
+            val r = Random(54321)
+            val sorted = DoubleArray(10_000) {
+                var sum = 0.0
+                var count = 0
+                repeat(clusters.size) { val c = clusters[r.nextInt(clusters.size)]; sum += c.sum(); count += c.size }
+                sum / count
+            }.sorted()
+            Triple(byBuilding.size, sorted[249], sorted[9750])
+        } else null
         return Comparison(
             baselineName, candidateName, paired.size,
             Summary.of(paired.map { it.first }), Summary.of(paired.map { it.second }),
             delta, means[249], means[9750],
             gained = perEpisode.filter { it.value > 0 }.keys.sorted(),
             lost = perEpisode.filter { it.value < 0 }.keys.sorted(),
+            buildingInterval = buildingInterval,
+            judgeChurn = judgeChurn,
         )
     }
 }

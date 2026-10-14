@@ -113,6 +113,24 @@ sealed interface SemanticObservation {
         val normalizedHeight: Float? = null,
     ) : SemanticObservation
 
+    /**
+     * Something with text on it was seen, but the text could not be read: too small or too far,
+     * at too steep an angle, or OCR gave up. Worth reporting because it is worth a closer look -
+     * the active-perception skills (inspect_sign) are chosen on exactly this evidence. It never
+     * matches a destination and never biases exploration by itself.
+     */
+    data class UnreadSign(
+        /** A door plate (true) or a larger sign (false). */
+        val plate: Boolean,
+        override val confidence: Float,
+        val normalizedX: Float? = null,
+        val normalizedY: Float? = null,
+        override val timestampNanos: Long? = null,
+        override val worldPosition: Vec3? = null,
+        val normalizedWidth: Float? = null,
+        val normalizedHeight: Float? = null,
+    ) : SemanticObservation
+
     /** Which building floor the user is currently on, e.g. read from a lift indicator. */
     data class Floor(
         val floor: String,

@@ -44,6 +44,7 @@ object SemanticLocator {
             is SemanticObservation.Door -> observation.copy(worldPosition = world)
             is SemanticObservation.Stairs -> observation.copy(worldPosition = world)
             is SemanticObservation.Elevator -> observation.copy(worldPosition = world)
+            is SemanticObservation.UnreadSign -> observation.copy(worldPosition = world)
             else -> observation
         }
         return Located(placed, resolution.observerPose, resolution.bearing, resolution.elevationTan)
@@ -101,6 +102,7 @@ object SemanticLocator {
             is SemanticObservation.Door -> observation.normalizedWidth to observation.normalizedHeight
             is SemanticObservation.Stairs -> observation.normalizedWidth to observation.normalizedHeight
             is SemanticObservation.Elevator -> observation.normalizedWidth to observation.normalizedHeight
+            is SemanticObservation.UnreadSign -> observation.normalizedWidth to observation.normalizedHeight
             else -> null to null
         }
         return if (w != null && h != null && w > 0f && h > 0f) w to h else null
@@ -124,6 +126,7 @@ object SemanticLocator {
             is SemanticObservation.Door -> observation.normalizedX to observation.normalizedY
             is SemanticObservation.Stairs -> observation.normalizedX to observation.normalizedY
             is SemanticObservation.Elevator -> observation.normalizedX to observation.normalizedY
+            is SemanticObservation.UnreadSign -> observation.normalizedX to observation.normalizedY
             else -> null to null
         }
 }

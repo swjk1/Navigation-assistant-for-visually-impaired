@@ -61,7 +61,7 @@ class FoxgloveOutputTest {
             id to (schema to topic)
         }
         assertTrue(channels.values.all { it.first in schemaIds }, "every channel refers to a schema")
-        assertEquals(9, channels.size)
+        assertEquals(10, channels.size) // the base topics, /lidar/points included (declared even when no LiDAR publishes)
 
         val messages = records.filter { it.opcode == 0x05 }
         val perTopic = messages.groupingBy { channels.getValue(it.content.getShort(0).toInt()).second }.eachCount()

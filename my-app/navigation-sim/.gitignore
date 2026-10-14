@@ -8,3 +8,7 @@ replay_pid*.log
 webots-out/
 __pycache__/
 *.pyc
+
+# Generated Foxglove/Webots recordings: large binaries, regenerate with --mcap / --webots
+recordings/
+obs-demo/

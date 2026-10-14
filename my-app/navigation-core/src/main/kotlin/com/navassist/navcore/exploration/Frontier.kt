@@ -25,6 +25,10 @@ data class Frontier(
     val revisitPenalty: Float = 0f,
     /** Positive penalty for frontiers hugging obstacles / hard to reach safely. */
     val riskPenalty: Float = 0f,
+    /** How much an outside adviser favours this frontier, -1..1 (0 with no adviser). */
+    val adviceScore: Float = 0f,
+    /** How much the long-term planner's guesses favour it, 0..1 (0 with no planner). */
+    val planScore: Float = 0f,
     /** Weighted total produced by [FrontierScorer]. */
     val score: Float = 0f,
 )

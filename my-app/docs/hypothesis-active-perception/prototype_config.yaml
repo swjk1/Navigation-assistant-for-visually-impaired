@@ -1,0 +1,44 @@
+project:
+  name: hypothesis-conditioned-active-perception
+  phase: simulation_mvp
+  random_seed: 20261013
+  user_goal_examples: ["room 501", "room E-203", "admissions office"]
+simulator:
+  type: procedural_topological_with_geometry
+  floors: [1, 7]
+  rooms_per_floor: [8, 45]
+  hidden_map_for_agent: true
+  semantic_visibility: field_of_view_and_occlusion
+  initial_perception: perfect_if_visible
+  camera_horizontal_fov_deg: 80
+  camera_vertical_fov_deg: 55
+  camera_height_m: 1.35
+  camera_pitch_down_deg: 10
+  sign_readability_distance_m: 5.0  # illustrative; calibrate from images/size
+  max_episode_steps: 200
+  max_episode_distance_m: 1500
+  action_timeout_s: 180
+  numbering_rule_families: [floor_prefix, wing_prefix, mixed, irregular]
+agent:
+  world_model_backend: sqlite
+  graph_backend: networkx
+  foundation_model: replaceable_adapter
+  strategic_trigger: event_driven
+  hypothesis_top_k: 6
+  max_candidate_actions: 12
+  action_retry_limit: 1
+  look_action_cost_s: 3
+  ground_route_unknown_edges: forbidden_without_supervised_exploration
+  require_grounded_action_target: true
+  require_destination_label_or_explicit_confirmation: true
+learner:
+  first_baseline: heuristic_action_value
+  model: text_image_action_value
+  model_output: [p_useful, p_distinguishes, expected_remaining_cost, uncertainty]
+  training_label_generation: rollout_cost_to_go
+  validation_split: held_out_building_family
+  calibration: [reliability_plot, brier_score, ece]
+evaluation:
+  baselines: [geometric_frontier, semantic_frontier, vlm_landmark, explicit_beliefs, beliefs_plus_voi, beliefs_plus_learned_value]
+  primary_metrics: [verified_success, distance_ratio, total_search_time]
+  secondary_metrics: [wrong_floor_visits, repeated_edges, hypothesis_recovery, inference_cost, latency, safety_stops]

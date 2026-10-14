@@ -11,10 +11,55 @@ STRAIGHT · TURN_LEFT · TURN_RIGHT · STOP · SCAN · ARRIVED
 **Movement decisions are deterministic.** No LLM or VLM sits in the decision path. Perception
 supplies evidence about what is around; geometry and search decide where to step.
 
+The core does accept two kinds of outside opinion: **advice** (a short-term adviser scoring which
+way to explore) and **planner hypotheses** (a long-term planner's guesses at where the destination
+is). Both only re-weight the choice of frontier, through one term each in its score; neither can
+plan a path, steer, lift a stop or declare arrival (§5.1). The app does not use them yet. In the
+simulator they are fed by oracle and noisy stand-ins, and by a language-model adviser that is
+switched off while paid API use is paused.
+
 Companion documents: [ARCHITECTURE.md](./ARCHITECTURE.md) for the system diagram,
 [DEMO.md](./DEMO.md) for build and demo instructions,
 [modules/navigation-native/README.md](./my-app/modules/navigation-native/README.md) for the
-engine's own reference, and `my-app/docs/perception/` for the perception module's notes.
+engine's own reference, `my-app/docs/perception/` for the perception module's notes,
+[`my-app/navigation-sim/README.md`](./my-app/navigation-sim/README.md) for the simulator, and
+[`my-app/docs/RELATED_WORK.md`](./my-app/docs/RELATED_WORK.md) for similar research.
+
+---
+
+## 0. At a glance
+
+### What is built
+
+| Part | Where | What it does |
+|---|---|---|
+| Navigation core | `my-app/navigation-core/` (pure Kotlin) | Depth → floor estimate → occupancy grid → frontiers → A* → one instruction. Topological memory, three-tier routing, a fail-safe controller, sign hints, room-number model, advice and planner inputs. 187 unit and scenario tests |
+| Android adapter | `my-app/modules/navigation-native/` | ARCore pose and depth into the core, on its own thread; snapshots to JS at ≤ 8 Hz |
+| Perception | `my-app/modules/indoor-perception/`, `my-app/src/perception/` | Fine-tuned YOLO26n (ONNX, 17 classes, mAP50 0.833) and ML Kit OCR on device, optional Gemini check; signs mapped to semantic observations |
+| Guidance | `my-app/src/guidance/` | Speech and haptics for each instruction; hazard before direction |
+| Simulator | `my-app/navigation-sim/` (JVM) | Closed loop against 3D buildings with ARCore-like depth noise, the detector's recall, OCR errors, glass, drift, five sensor rigs; a person or a robot acting on the engine; 31 scenarios, 18 tests |
+| Benchmark | `navigation-sim/bench/` | 44 trips in 3 building types plus 15 held out; paired bootstrap comparison; about 90 designs, each also runnable with the robot |
+| Advisers | `navigation-sim/advice/` | Oracle, noisy oracle, outage, oracle and noisy planners, Follow the Signs' mechanism, a language-model adviser (Claude or Gemini), and a recorder of labelled decisions |
+
+### Key numbers
+
+| Measure | Value | Source |
+|---|---|---|
+| Original engine, simulated person | 28.0% success | `v0-original-10`, 440 runs |
+| Shipped engine, simulated person | 51.1% (simple 94.0, school 66.3, mall 12.7) | `p0-current`, 440 runs |
+| Shipped engine with a perfect route adviser, person | 90.0% (mall 87.3) | `p0-oracle-advice`, 440 runs |
+| Robot, engine alone | 45.6% (simple 87.0, school 54.8, mall 17.0), SPL 0.283 | `r1-current`, 880 runs |
+| Robot, held-out malls | 44.3% | `r1-heldout-current`, 300 runs |
+| What reading signs is worth, robot | +9.5 points overall, +29.7 in held-out malls | vs `frontier-only` |
+| Perfect short-term adviser, robot | +23.6 points (69.2%); +39.3 in held-out malls (83.7%) | `r1-oracle-advice` |
+| Perfect long-term planner, robot | +14.5 points (60.5%) | `r1-planner-oracle` |
+| Adviser accuracy needed to help significantly | about 70% at full weight | noisy-oracle sweep |
+| Falls | 0 in 18,060 robot runs | every `r1-*` result |
+| Detector | mAP50 0.833, precision 0.919, recall 0.738 (validation) | §4.1 |
+| Language-model pilot | Claude Haiku: 45.5% against 36.4% without it, one seed, older engine; about $1.13 spent in all | §5.2 |
+
+Success is the share of trips ending in a declared arrival within 2 m of a true destination; all of
+it is measured in simulation (§9).
 
 ---
 
@@ -246,6 +291,10 @@ guidance becomes an unusable stream of alternating slight-left/slight-right.
   1.5 m corridors, told about an obstacle that was only beside them.
 - **STOP bypasses all smoothing** — a safety stop is never delayed.
 
+A robot that steers continuously at the 1.5 m lookahead cuts inside bends, into the 0.3 m
+inflation margin, where the forward gate always reads blocked. The simulated robot (§9) follows the
+path at 0.6 m instead.
+
 ### 3.5 Timing
 
 Every gate is **time-based, not frame-count based**. This was a shipped bug: `commandStabilityFrames = 3`
@@ -284,10 +333,18 @@ score = 1.5 · informationGain
       − 1.0 · normalisedDistance
       − 2.0 · revisitPenalty
       − 2.0 · riskPenalty
+      + 2.0 · adviceScore          only when an adviser has spoken (§5.1)
+      + 2.0 · planScore            only when a planner has spoken (§5.1)
+      + 0   · alongLongAxis        shape cue, off: no significant gain measured
+      + 0   · clutter              shape cue, off: more glass contacts in malls
 ```
 
 Distance is normalised by half the grid size; raw metres would swamp every other term the moment a
 frontier was a few metres away, and no semantic clue could ever outweigh it.
+
+How much the semantic term is worth was measured with a robot in the simulator (§9): with
+`weightSemantic` 0 — classic frontier exploration that only reacts to seeing the destination —
+success fell from 45.6% to 36.0% on the benchmark, and from 44.3% to 14.7% in held-out malls.
 
 **Commitment.** A chosen waypoint is held through frontier splits, merges and score changes, and
 released only on arrival, blockage, repeated route failure, 20 s without approaching by 0.3 m
@@ -602,12 +659,95 @@ Semantics only ever **bias** frontier choice. The planner decides movement.
 
 Room numbering is a heuristic, never a guarantee. A sign covering the target is strong positive
 evidence (+1); a sign that does *not* cover it is only weak negative evidence (−0.25), so an
-alternative branch is never eliminated. The "301, 303, 305 → keep going" gradient contributes at
-most 0.5 and shrinks as the numeric gap grows.
+alternative branch is never eliminated.
+
+Plates read along the way feed `RoomNumberModel`, which fits how the numbers run:
+
+- **The corridor's axis** from the spread of nearby plates (within 20 m of the latest, at most 8),
+  measured within each wall's plates so the corridor's width does not tilt it.
+- **One slope, two walls.** Odd and even numbers are fitted as two parallel runs sharing a slope,
+  because 302 usually faces 301. Where each wall sits tells which side the target is on.
+- **One misread survives.** When the fit is not clean, it is refitted without each plate in turn
+  and the clearly better fit kept: a single "389" for "309" spreads its error over a least-squares
+  fit, so its residual alone does not stand out.
+- **Out:** where the target's plate should be, a confidence (fit quality × plate count ×
+  how far it extrapolates), and a flag when every plate read shares a hundreds digit the target
+  does not — the target is probably on another floor.
+
+With three or more plates, frontiers towards the estimate gain up to `roomNumberModelMaxScore`
+(0.8) × confidence; with fewer, the older first-and-last-plate gradient applies (at most 0.5).
+`roomNumberModel = false` restores the gradient alone. **Measured: no effect** (−0.3 points, 95%
+CI −1.7 to +1.0, 880 robot runs). The plates read on the benchmark trips rarely leave the number
+ordering in doubt; the model stays in because it is what a planner reads (§5.1), not because it
+moves the score.
+
+Every name for a washroom is the same place: `TargetMatcher.normalizeLabel` maps "Restrooms",
+"Men's toilets", "Bathroom", "Lavatories" and "WC" to `WASHROOM`, for the request and for what
+is read alike.
 
 A `DOOR` is deliberately distinct from `EXIT` and `ROOM` — it may lead outside, into a room, or
 into a cupboard — so it never *matches* those targets, only scores as partial evidence: 1.0 for a
 door request, 0.5 for an exit, 0.3 for a room.
+
+### 5.1 Advice and planner hypotheses
+
+Two inputs let reasoning outside the engine — a language model, a learned decision model, a floor
+plan — bias exploration. Both are in canonical coordinates, both only enter the frontier score, and
+neither touches the path, a safety stop or arrival: a slow, wrong or silent adviser costs time,
+never safety.
+
+| | Advice (short-term) | Planner hypothesis (long-term) |
+|---|---|---|
+| Call | `engine.submitAdvice(List<AdviceDirection>)` | `engine.submitPlan(List<PlannerHypothesis>)` |
+| Says | which way to explore from where the user stood: a direction and a weight in −1..1 | where the destination should be: a place, a radius, a confidence, and a check that would confirm it |
+| Scores a frontier by | its angle from the advised direction, tapering to 0 at 60° | its direction from the user towards the guess; near the guess, its distance to it |
+| Lifetime | ignored after 20 s (`adviceMaxAgeMillis`) | fades to 1/e over 90 s (`plannerFadeMillis`) |
+| When searched | — | spent once the user has been within its radius (at least 2 m) without finding the destination; stays spent if the planner repeats it |
+| Weight | `weightAdvice` 2.0 | `weightPlanner` 2.0 |
+
+`engine.situation()` gives an adviser what the engine has perceived — never ground truth: the
+target, pose, walked distance, the engine's own scored frontiers, up to 60 signs seen (kind, text,
+arrow, position, where they were read from), the numbering estimate and other-floor flag, and the
+planner guesses still held with their remaining weight.
+
+Advice used to act outside the score in two ways: turning the user to look where it pointed when no
+frontier lay that way, and dropping a committed frontier it did not point at. Both are now off by
+default (`adviceTurnsToLook`, `adviceReleasesCommitment`), so the frontier score is the only way in.
+
+How good an adviser must be was measured with stand-ins of known accuracy (§9): a perfect one adds
+23.6 points; one right 90% of the time adds 20; at 60% about 6, and at 40% nothing — but it costs
+nothing either, because the engine's own scoring still carries the trip.
+
+In the simulator the adviser is asked every 8 s while exploring and its answer arrives 2 s later;
+the planner is asked every 45 s and answers after 5 s. Answers keep arriving while the engine
+carries on, as they would over a network.
+
+### 5.2 The language-model adviser (simulator only)
+
+`navigation-sim/advice/LlmAdviser.kt` asks a language model which opening to explore.
+
+- **Providers.** Claude through the Anthropic Java SDK with a JSON-schema answer, or Gemini over
+  REST (temperature 0, 300 output tokens). `LLM_PROVIDER` picks one; models come from
+  `ANTHROPIC_MODEL` / `GEMINI_MODEL`.
+- **Prompt.** What the engine perceived, never a map: metres walked and seconds elapsed; up to 12
+  signs, merged when within 2.5 m or 25°, each with its type, text, clock direction and distance,
+  and how often and how long ago it was seen; up to 8 of the engine's openings with clock
+  direction and distance; and layout rules of thumb (corridors connect places, shops are dead ends,
+  numbers run in order, lifts and washrooms sit off side corridors, exits at the ends).
+- **Answer.** A probability per opening plus a reason of at most 15 words. Each opening becomes
+  advice towards it with weight `(p − 1/n) / (1 − 1/n)`, negative below an even share.
+- **Cost control.** A question is only asked when the openings (to 2 m) or the signs change; the
+  last answer is reused otherwise. Replies are cached on disk by a SHA-256 of the prompt; calls are
+  at least 250 ms apart; a per-model ledger enforces `LLM_BUDGET_USD` (default $1);
+  `LLM_CACHE_ONLY` replays the cache; `llm-dry-run` counts questions without asking any.
+- **Pilot.** Claude Haiku 4.5, one seed, on an older engine: 45.5% success against 36.4% without
+  it, and 4 of 15 mall trips against none. Its answers hedged: the median strongest weight was 0.20.
+  The cache holds 885 replies, 731,271 input and 78,885 output tokens — about $1.13, or roughly
+  $0.0013 a question. Paid use is paused, so no result exists on the current engine.
+- **Labelled decisions.** `SituationRecorder` (design `record`) writes every new question the
+  adviser would be asked, with the exact prompt, the engine's own score for each opening, and the
+  true remaining walk through each, so any model can be scored offline. In a first small run the
+  engine's own top opening was truly best 39% of the time.
 
 ---
 
@@ -719,7 +859,7 @@ comes — and it is the first thing the engine says in every session. It has its
 
 ## 9. Testing
 
-**153 tests**, all against the platform-independent core — no ARCore session, no Android context,
+**187 tests**, all against the platform-independent core — no ARCore session, no Android context,
 no Expo module, no device.
 
 | Suite | Covers |
@@ -732,6 +872,12 @@ no Expo module, no device.
 | `ExplorationManagerTest` | waypoint held across frontier changes, blocked/stalled release, progress budget |
 | `TopologicalMapTest` | merge, routing, blocked edges, multi-floor |
 | `SemanticHintStoreTest` | matching, ageing, directional bias, door semantics |
+| `RoomNumberModelTest` | position along the run, odd and even walls, a target behind, one misread, another corridor, a repeated plate, another floor |
+| `FacilitySynonymTest` | every washroom name normalised alike, other names untouched |
+| `PlannerHypothesisTest` | pull towards a guess, fading, a searched guess spent and kept spent, near-guess scoring |
+| `AimPolicyTest` | when to tilt or sweep the phone for a sign |
+| `GridRetentionTest` | decided cells survive time out of view |
+| `SpaceShapeTest` | long-axis and clutter cues |
 | `NavigationStateMachineTest` | every transition rule |
 | `NavigationControllerTest` | heading → command, hysteresis, timing contract, arrival |
 | `StopReasonTest` | each reason code, hazard vs fault |
@@ -756,16 +902,180 @@ cd my-app/navigation-core && ./gradlew test
 
 ### Simulator
 
-`my-app/navigation-sim` runs the engine in closed loop against a virtual building: a phone held
-portrait by a scripted person, ARCore-like depth (noise, dropouts, flying pixels, glass, 15 Hz depth
-one frame late), and a perception stand-in with the shipped model's measured recall and OCR errors.
-The depth goes through the core's own `SensorFrameAssembler` — the code the phone runs — so the
-adapter math is exercised too. Scenarios assert safety (no collisions, no falls, no movement without
-tracking) and outcomes (arrival, progress); `KNOWN_LIMITATION` scenarios document what does not work
-yet. Runs record to MCAP and stream live to Foxglove. See `my-app/navigation-sim/README.md`.
+`my-app/navigation-sim` runs the engine in closed loop against a virtual building. The depth goes
+through the core's own `SensorFrameAssembler` — the code the phone runs — so the adapter math is
+exercised too. Everything is pure JVM; runs are deterministic per seed, record to MCAP for
+Foxglove, stream live, and replay in Webots. See `my-app/navigation-sim/README.md`.
+
+| Modelled | Values |
+|---|---|
+| Buildings | Simple single-feature scenes; a 3-floor **school** (60 m corridor, rooms 1xx–3xx, odd and even sides, range signs with arrows, two stairwells, a lift, washrooms); a 2-level **mall** (84 m concourse, glass shop fronts with names 4.1 m up on fascias, an atrium behind a glass balustrade, escalators, a food court, a services corridor); three held-out parametric malls |
+| Depth | Noise σ = 5 mm + 8 mm × z²; dropout 2% + 3% per metre; up to +60% at grazing angles and on dark surfaces; glass returns 10% of the time, otherwise seen through; flying pixels at 30% of edges over 0.25 m; 8 m maximum; 160 × 120; 15 Hz, one frame late |
+| Perception | Signs projected through the camera (640 × 480), occluded by solid geometry but not glass. Recall from the detector's validation: door 0.63, exit 0.73, stairs 0.55, lift 0.75, washroom 0.95, arrows 0.33. OCR reads 85% of legible text and gets a character wrong 8% of the time. Detection needs 14 px, reading 12 px. A capture every 1 s, 0.3–0.8 s latency; every 4th may wait 0.6–2.5 s on Gemini |
+| Tracking | Loss windows; pose drift, mild (1°/min yaw, 1% of distance) or strong (3°/min, 3%, relocalising every 60–150 s and keeping 30% of the error) |
+| Sensor rigs | Phone; wide-angle phone (100°); chest stereo camera (87°, 12 m depth); the same seeing glass; chest LiDAR (25 m, low noise) |
+| A person | Reacts 0.45 s after an instruction; walks 1.0 m/s, turns 60°/s; scans ±60° every 4 s, tilting down; ±3° sway; also cautious (0.8 s, 0.6 m/s), hurried (0.3 s, 1.3 m/s) and never-tilts profiles |
+| A robot | Follows the engine's path (below) |
+
+**31 scenarios** with their own pass criteria: 11 pass (corridors, a table that must not become the
+floor, stairwells and escalator heads that must not be fallen down, tracking loss, room 314 by its
+plate, a 1.5 m office corridor, clutter, a lift lobby), and 20 are recorded `KNOWN_LIMITATION`s
+whose notes say what the simulator showed (doorways, glass, dark carpet, blind corners, most
+school and mall searches).
 
 ```bash
 cd my-app/navigation-sim && ./gradlew test
+```
+
+### Robot mode
+
+The research question was narrowed to a free-moving robot: placed anywhere on one floor of an
+unseen building, can it reach a destination named in text? `UserProfile.ROBOT` replaces the person.
+Any design runs with it when prefixed `robot-` (`robot-current`, `robot-oracle-advice`).
+
+- It follows the engine's planned path itself, aiming 0.6 m along it from the engine's own pose
+  estimate — never the simulator's truth — and reacts on the next frame.
+- It only moves forward while the engine says `STRAIGHT`; it turns in place (up to 90°/s, easing
+  in proportionally) on a turn, stops on `STOP`, sweeps the camera on `SCAN`. Safety stays with the
+  engine.
+- While hunting a room it sweeps its camera ±40° every 4 s. It drives at 1.0 m/s with no sway.
+
+How it was tuned (5 seeds unless noted, so differences of a few points are noise):
+
+| Version | Success | Note |
+|---|---|---|
+| First robot, steering at the engine's 1.5 m lookahead | 42.3% (20 seeds), mall 14.0% | 8.6% of runs collided; cut corners into the inflation margin and deadlocked on `OBSTACLE_AHEAD` until the 20 s stall timeout |
+| Same, signs ignored | 33.3% (20 seeds), mall 4.3% | |
+| Slower: 0.7 m/s / 0.5 m/s | 41.5% / 37.0% (40 trips) | fewer trips finish in time; rejected |
+| ±40° sweep every 2 s | 52.0% (40 trips) | aliased with the 1 s capture: the same two angles every time |
+| Sweep every 2.6 s / 3.3 s / 4 s | 42.7% / 44.5% / 48.2% | not significantly different; 4 s kept |
+| **Final: 0.6 m lookahead on the path, 4 s sweep** | **45.6%** (20 seeds), mall 17.0% | +3.3 over the first robot (CI −0.9 to +8.0); collisions down to 2.6% of runs |
+
+Against the simulated person on the same 10 seeds: alone, 45.9% against 51.1% (−5.2, CI −12.5 to
++2.5: not significant); with a perfect adviser, 69.3% against 90.0% (−20.7, CI −27.3 to −14.5).
+Most robot failures never see the destination: smooth driving past plates at a grazing angle reads
+fewer of them than a person's sway and pauses do.
+
+### Benchmark
+
+44 trips — 5 simple scenes, 24 school, 15 mall — plus 15 trips in three held-out mall layouts,
+run only with `--filter heldout`. A trip succeeds when the agent declares arrival within 2 m of a
+true destination before 120 s + 6 s per metre of the shortest walk (at most 480 s). SPL weights
+each success by the shortest walk over the walk taken. Results record the commit, the design and
+the agent. `--compare` pairs two results by trip and seed, bootstraps a 95% interval over trips
+(10,000 resamples), and rejects any design that adds falls or more than a point of false arrivals —
+and, for a person, more than 5% instruction churn. Use 20 seeds for decisions: at 10, differences
+of about 3 points are noise.
+
+#### The engine's history, simulated person
+
+| Stage (result file) | Engine alone | With a perfect route adviser |
+|---|---|---|
+| Original engine (`v0-original-10`) | 28.0% (mall 0.0) | — |
+| `deterministic-reference` | 34.3% | — |
+| `deterministic-v2` / `oracle-v2` | 38.9% (mall 2.0) | 67.0% |
+| `w9-current` / `w9-level` | 37.7% | 90.0% |
+| `g2`, 20 seeds | — | 91.5% |
+| `i1-oracle-advice`, 20 seeds | — | 89.7%, 0 falls in 880 runs |
+| **Shipped** (`p0-current`, `p0-oracle-advice`) | **51.1%** (simple 94.0, school 66.3, mall 12.7), SPL 0.305 | **90.0%** (mall 87.3), SPL 0.671 |
+
+10 seeds unless stated. Of the shipped engine's failures, 206 of 215 never located the destination;
+in the mall, exploration typically entered a shop through its 3 m opening and stayed there.
+
+#### What each feature was worth, simulated person
+
+| Change | Result | Verdict |
+|---|---|---|
+| A capture every 1 s instead of 2.5 s, with the oracle | 73.9% against 59.3% | kept |
+| Tilting the phone up 10° for shop names, with the oracle, 7 mall shop trips × 40 seeds | 87.1% against 56.1% without | kept |
+| Shop tilt angle: level / +10° / +20° | 85.7% / 88.0% / 80.9% | +10° kept |
+| Following up plates read without depth ("glimpses"), 20 seeds | 91.5% against 89.7% without | kept |
+| Assumed fascia height for ranging 3.5 / 4.0 / 4.5 m, with the oracle | 63.6% / 67.0% / 66.1% | 4.0 m kept |
+| Sweeping the phone while hunting a room, person | 80.2% against 84.8% | off for a person; the robot sweeps |
+| Advice turning to look / releasing a commitment, 20 seeds | both 90.1%, neither 89.7%, no release 88.0%, no turn 90.3% | not significant; both now off |
+| Close-range floor check, 20 seeds | 89.7% against 90.2% without | kept for safety |
+| Shape cues, no adviser: axis 1 / axis 2 / clutter 1 / clutter 3 | 51.8% / 51.1% / 52.5% / 53.4% against 51.1% | none significant; clutter 3 added glass contacts; off |
+| Advice strength with the oracle: full / half / quarter weight | 90.0% / 78.9% / 68.0% against 51.1% | — |
+
+#### Robot results
+
+2026-10-04, one build (`b3c715c+dirty`), 18,060 runs, no falls. 20 seeds for the first block, 10 for
+the rest; the 10-seed changes are against the engine alone on the same seeds (45.9%).
+
+| Design | Success | SPL | Simple | School | Mall | Change (95% CI) |
+|---|---|---|---|---|---|---|
+| `robot-current` — the engine alone | 45.6% | 0.283 | 87.0% | 54.8% | 17.0% | reference |
+| `robot-frontier-only` — signs ignored | 36.0% | 0.218 | 80.0% | 46.0% | 5.3% | −9.5 (−14.9 to −4.4) |
+| `robot-numbering-off` | 45.2% | 0.281 | 87.0% | 54.2% | 17.0% | −0.3 (−1.7 to +1.0) |
+| `robot-oracle-advice` — perfect adviser | 69.2% | 0.491 | 86.0% | 70.6% | 61.3% | +23.6 (+16.2 to +31.5) |
+| Held-out malls, engine alone | 44.3% | 0.248 | | | | reference |
+| Held-out malls, signs ignored | 14.7% | 0.080 | | | | −29.7 (−42.7 to −16.7) |
+| Held-out malls, perfect adviser | 83.7% | 0.533 | | | | +39.3 (+27.3 to +50.7) |
+| `robot-planner-oracle` — perfect planner | 60.5% | 0.421 | 88.0% | 62.1% | 48.7% | +14.5 (+7.3 to +21.8) |
+| `robot-planner-noisy-a80` | 58.6% | 0.395 | 88.0% | 62.9% | 42.0% | +12.7 (+5.7 to +19.8) |
+| `robot-planner-noisy-a60` | 56.6% | 0.377 | 88.0% | 62.5% | 36.7% | +10.7 (+4.1 to +17.5) |
+| `robot-planner-noisy-a40` | 55.9% | 0.369 | 88.0% | 60.8% | 37.3% | +10.0 (+2.5 to +18.0) |
+| `robot-two-tier-a80` — both tiers right 80% | 60.5% | 0.427 | 80.0% | 66.7% | 44.0% | +14.5 (+7.5 to +21.6) |
+| `robot-two-tier-a60` | 56.8% | 0.387 | 82.0% | 63.3% | 38.0% | +10.9 (+3.9 to +18.0) |
+| `robot-two-tier-a40` | 52.0% | 0.363 | 76.0% | 58.3% | 34.0% | +6.1 (−1.8 to +14.1) |
+
+Both tiers beat the short-term adviser alone at 80% (+6.4, CI +1.4 to +11.4); at 60% the gain is
+not significant (+5.7, CI −0.9 to +12.5).
+
+#### The accuracy curve
+
+A short-term adviser right a given share of the time (`robot-noisy-aNN-wNN`), each answer at a
+given weight; when wrong, it points at an opening the true route does not take. Success, robot,
+10 seeds; the engine alone scores 45.9% on these seeds and a perfect adviser 69.2% (20 seeds).
+
+| Right | Full weight | Half weight | Quarter weight | Full weight vs alone (95% CI) |
+|---|---|---|---|---|
+| 40% | 46.8% | 48.2% | 47.3% | +0.9 (−5.5 to +7.3) |
+| 50% | 49.3% | 47.0% | 46.8% | +3.4 (−2.7 to +9.8) |
+| 60% | 52.3% | 51.1% | 48.6% | +6.4 (−0.5 to +13.4) |
+| 70% | 54.8% | 51.4% | 49.8% | +8.9 (+0.2 to +17.5) |
+| 80% | 58.6% | 54.1% | 52.3% | +12.7 (+4.5 to +21.1) |
+| 90% | 65.9% | 55.5% | 52.3% | +20.0 (+11.4 to +28.9) |
+
+A wrong adviser costs nothing — at 40% success stays where it was — and help becomes significant
+from about 70% right at full weight. Weight matters most when the adviser is good: at 90%, half
+weight gives +9.5 (CI +2.3 to +16.8) and quarter weight +6.4 (CI +0.0 to +12.7).
+
+#### Follow the Signs' mechanism
+
+[Cao, Kumar and Curtis, 2026](https://arxiv.org/abs/2601.06652), rebuilt as `FollowTheSignsAdviser`:
+one of four map-axis directions every 2 s, right with a given probability, accumulated in a
+confidence grid (1 m cells, decay 0.9 per answer, searched cells within 2 m zeroed), the agent
+heading for the centroid of the cells within 90% of the best. `robot-fts-aNN` gives that subgoal
+an advice weight of 10, so it decides the frontier as in their method; `robot-fts-soft-aNN` fuses it
+at the usual weight of 2.
+
+| Accuracy | Subgoal decides | vs alone (95% CI) | Subgoal fused | Decides vs fused |
+|---|---|---|---|---|
+| 60% | 56.6% | +10.7 (+0.7 to +20.5) | 56.8% | +0.2 (−5.9 to +6.4) |
+| 80% | 61.6% | +15.7 (+5.7 to +25.7) | 61.8% | +0.2 (−5.9 to +6.4) |
+| 100% | 68.6% | +22.7 (+12.7 to +32.5) | 63.2% | −5.5 (−11.8 to +0.9) |
+
+How much authority the stand-in has made no significant difference, and at 80% their mechanism
+matches both tiers together (61.6% against 60.5%, −1.1, CI −8.0 to +6.4).
+
+#### Caveats
+
+- `NoisyPlanner`'s one wrong belief per trip is spent once searched, which flatters a 40%-accurate
+  planner; real models err less tidily.
+- Accuracy is defined differently for each stand-in (the right opening, the right side of the map,
+  the right place), so equal percentages are only roughly comparable.
+- The held-out malls are easier than the main malls (44.3% against 17.0% for the engine alone).
+- Navigation success is simulated; perception is a statistical stand-in for the detector and OCR,
+  not images. Depth noise is plausible, not measured on a device.
+
+```bash
+cd my-app/navigation-sim
+./gradlew installDist
+JAVA_OPTS=-Xmx2g BENCH_THREADS=3 build/install/navigation-sim/bin/navigation-sim \
+  --benchmark --name r1-current --design robot-current --seeds 20
+build/install/navigation-sim/bin/navigation-sim --compare benchmarks/r1-current.json benchmarks/r1-frontier-only.json
+build/install/navigation-sim/bin/navigation-sim --filter school-f2 --design robot-current --diagnose 1,2
 ```
 
 ---
@@ -806,6 +1116,9 @@ cd my-app/android
 The release APK (94 MB) embeds `index.android.bundle`, so it runs standalone — no laptop, no cable,
 no Metro. Debug builds require all three.
 
+The JVM builds (`navigation-core`, `navigation-sim`) need `JAVA_HOME`; Android Studio's bundled JDK
+works: `export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"`.
+
 ---
 
 ## 11. Known limitations
@@ -830,5 +1143,14 @@ no Metro. Debug builds require all three.
   from `PerceptionFrame.immediateHazard` both drive the same `hazard.detected` flag. Nobody owns
   merging them, so one can mask the other. **Open.**
 - **Single session per process.** `NavigationRuntime` is a singleton.
+- **No adviser or planner in the app.** Both inputs exist in the core and are exercised only in the
+  simulator; no language-model result exists on the current engine (the one pilot ran on an older
+  one, for one seed).
+- **The robot gains less from guidance than a person.** Alone it is not significantly worse
+  (−5.2 points, CI −12.5 to +2.5), but with a perfect adviser it reaches 69.3% against the person's
+  90.0%. Most of its failures never see the destination (§9).
+- **No real-world navigation result.** Every success rate here is simulated; the device check in §10
+  covers the pipeline running, not trips completed.
+- **The numbering model has not moved the benchmark.** It is kept for what it tells a planner.
 - **Android only.** The iOS adapter is out of scope; the core is structured to move to
   `commonMain` without algorithm changes.

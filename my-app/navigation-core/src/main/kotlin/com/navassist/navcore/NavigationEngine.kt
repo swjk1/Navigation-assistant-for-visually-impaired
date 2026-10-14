@@ -16,6 +16,7 @@ import com.navassist.navcore.planning.NavigationController
 import com.navassist.navcore.planning.PathSmoother
 import com.navassist.navcore.semantic.AdviceDirection
 import com.navassist.navcore.semantic.NavigationTarget
+import com.navassist.navcore.semantic.PlannerHypothesis
 import com.navassist.navcore.semantic.SemanticHintStore
 import com.navassist.navcore.semantic.SemanticObservation
 import com.navassist.navcore.semantic.Situation
@@ -64,6 +65,35 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     private val stateMachine = NavigationStateMachine()
 
     val topology = TopologicalMap()
+
+    /** The trip's evidence ledger and landmarks: facts, never edited (see WorldModel). */
+    val world = com.navassist.navcore.world.WorldModel()
+
+    /** Hypotheses about the building, tested against every new reading (see HypothesisStore). */
+    val beliefs = com.navassist.navcore.belief.HypothesisStore()
+
+    /** Runs the long-term planner's subgoals on the tactical machinery below. */
+    val executor = com.navassist.navcore.strategy.SubgoalExecutor(world, topology)
+
+    /**
+     * The long-term planner, consulted on events (see [runStrategy]); null for none, which is the
+     * engine as it always was. Planners behind a network call submit through [submitSubgoal].
+     */
+    var longTermPlanner: com.navassist.navcore.strategy.LongTermPlanner? = null
+
+    /** Subgoals refused by validation, oldest first. */
+    val rejections = ArrayList<com.navassist.navcore.strategy.Rejection>()
+
+    private var nextSubgoal = 1
+    private var outcomesSeen = 0
+    private var plannerNextMillis = 0L
+    private var plannerLandmarks = -1
+    private var plannerHadSighting = false
+    /** The current goal came from a subgoal, not the engine's own choice. */
+    private var goalOverride = false
+
+    /** Where the destination's plate was read at its door (VERIFY_DESTINATION); null until then. */
+    private var verifiedDestination: Vec2? = null
 
     private var grid = OccupancyGrid(config)
     private var inflated: InflatedGrid? = null
@@ -208,6 +238,18 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         exploration.reset()
         semantics.reset()
         topology.reset()
+        world.reset()
+        beliefs.reset()
+        executor.reset()
+        longTermPlanner?.reset()
+        rejections.clear()
+        nextSubgoal = 1
+        outcomesSeen = 0
+        plannerNextMillis = 0L
+        plannerLandmarks = -1
+        plannerHadSighting = false
+        goalOverride = false
+        verifiedDestination = null
         stateMachine.reset()
         currentPath = emptyList()
         currentGoal = null
@@ -283,7 +325,14 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     ) {
         val floor = floorEstimator.estimate
         val cameraHeight = if (floor.confidence >= config.floorMinConfidence) observerPose.position3D.y - floor.floorY else null
+        // A floor read (a lift display, a floor sign) first: it says where everything else was seen.
+        observations.filterIsInstance<SemanticObservation.Floor>().lastOrNull()?.let { changeFloor(it.floor, nowMillis) }
+        // Every report is evidence, whatever its score: the ledger records what perception said; what
+        // to believe is decided downstream.
+        for ((i, observation) in observations.withIndex()) world.record(observation, nowMillis, observerPose, bearings.getOrNull(i))
+        beliefs.update(world, target, nowMillis)
         semantics.submit(observations, nowMillis, observerPose, target, bearings, elevations, cameraHeight)
+        if (config.arrivalRequiresVerification) verifyByCloseReading(observations, observerPose, bearings)
         // Landmarks worth remembering at building scale go straight into the graph.
         for (observation in observations) {
             val world = observation.worldPosition ?: continue
@@ -357,6 +406,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         val nowMillis = frame.timestampNanos / 1_000_000
         clockMillis = nowMillis
         lastPose = frame.pose
+        semantics.noteSearched(frame.pose.position2D)
 
         if (!started || stateMachine.status == NavigationStatus.IDLE) {
             return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.NOT_STARTED)
@@ -418,6 +468,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 integrateDepth(frame, floor.floorY)
             }
         }
+        frame.lidar?.let { integrateLidar(frame.pose, it) }
         grid.commitObservation()
         bridgeBlindZone(frame.pose)
 
@@ -479,7 +530,27 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lookTowardsAdvice(frame.pose, nowMillis)?.let { turn ->
             return finish(nowMillis, frame, turn, null, null, mapConfidence)
         }
-        val goal = resolveGoal(frame.pose, inflatedGrid, nowMillis, mapConfidence)
+        runStrategy(nowMillis)
+        val directive = executor.directive(
+            frame.pose, nowMillis, walkedMeters,
+            frontierNear = { at -> exploration.frontiers.firstOrNull { it.centroid.distanceTo(at) <= FRONTIER_TRACK_METERS }?.centroid },
+            targetMatches = ::landmarkNamesTarget,
+        )
+        executor.verifiedLandmarkId?.let { id ->
+            // Read at the door: arrival there is now allowed, by walking up to it as usual.
+            executor.verifiedLandmarkId = null
+            verifiedDestination = world.landmark(id)?.position
+        }
+        if (directive is com.navassist.navcore.strategy.SubgoalExecutor.Directive.Turn) {
+            currentPath = emptyList()
+            return finish(nowMillis, frame, directive.command, null, null, mapConfidence)
+        }
+        goalOverride = directive is com.navassist.navcore.strategy.SubgoalExecutor.Directive.HeadFor
+        val goal = if (directive is com.navassist.navcore.strategy.SubgoalExecutor.Directive.HeadFor) {
+            clampToGrid(frame.pose.position2D, directive.goal).also { currentGoal = it }
+        } else {
+            resolveGoal(frame.pose, inflatedGrid, nowMillis, mapConfidence)
+        }
         if (goal == null) {
             currentPath = emptyList()
             return finish(
@@ -495,7 +566,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             if (it.worldPosition.toVec2().distanceTo(frame.pose.position2D) <= config.glimpseReachedMeters) semantics.spendGlimpse(nowMillis)
         }
         val glimpsed = semantics.targetSighting?.glimpsed == true
-        val distanceToTarget = finalDestination()?.distanceTo(frame.pose.position2D)
+        val distanceToTarget = (finalDestination() ?: verifiedDestination.takeIf { config.arrivalRequiresVerification })?.distanceTo(frame.pose.position2D)
         // Arrival also counts at the reachable spot nearest the destination (see refreshPath).
         // Only near the destination itself, though: at the approach spot's edge the user could
         // otherwise be told they had arrived 2.5 m from it.
@@ -507,7 +578,10 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
                 minOf(distanceToTarget ?: Float.MAX_VALUE, approach.distanceTo(frame.pose.position2D))
             } else null
         } ?: distanceToTarget
-        if (controller.updateArrival(arrivalDistance.takeUnless { glimpsed }, nowMillis)) {
+        // Arrival must be read at the door when so configured: only near a verified destination.
+        val verifiedHere = verifiedDestination?.let { v -> finalDestination()?.let { it.distanceTo(v) <= VERIFIED_MATCH_METERS } ?: true } ?: false
+        val proximityAllowed = !glimpsed && (!config.arrivalRequiresVerification || verifiedHere)
+        if (controller.updateArrival(arrivalDistance.takeIf { proximityAllowed }, nowMillis)) {
             stateMachine.on(NavigationEvent.Arrived)
             return finish(nowMillis, frame, NavigationCommand.ARRIVED, null, distanceToTarget, mapConfidence)
         }
@@ -517,6 +591,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
         // ---------------------------------------------------------- 8. local path
         val path = refreshPath(frame.pose, inflatedGrid, goal, nowMillis)
+        if (goalOverride) executor.reportRoute(path.size >= 2, nowMillis, walkedMeters)
         if (path.size < 2) {
             exploration.reportPlanningFailure(nowMillis)
             recordTargetRouteOutcome(succeeded = false, nowMillis = nowMillis)
@@ -640,6 +715,42 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
     }
 
     /**
+     * One horizontal LiDAR revolution, placed by the camera pose (the two are mounted together).
+     *
+     * A return is a solid surface at scan height: an occupied cell, recorded in the same per-frame
+     * observation as depth. The cells before it are plane-clear - air at scan height - which
+     * planning may route through but the controller will not step onto until depth has seen the
+     * floor there (see OccupancyGrid.isPlaneClear). A beam without a return clears nothing: it
+     * may have passed through glass, or off a dark surface, as easily as down an empty corridor.
+     */
+    private fun integrateLidar(pose: Pose3D, scan: com.navassist.navcore.geometry.LidarScan) {
+        val origin = pose.position2D
+        val minRange = config.lidarMinRangeMeters
+        val maxRange = lidarRangeMeters
+        for (i in 0 until scan.count) {
+            val range = scan.rangeMeters[i]
+            if (range < minRange || range > maxRange) continue
+            val direction = Vec2.fromYaw(pose.yawRadians + scan.angleRadians[i])
+            val end = origin + direction * range
+            val endCell = grid.worldToGrid(end)
+            if (config.lidarClearsPlane) {
+                val start = grid.worldToGrid(origin)
+                OccupancyGrid.traceLine(start.gx, start.gz, endCell.gx, endCell.gz) { gx, gz, isEndpoint ->
+                    if (!isEndpoint) grid.markPlaneClear(gx, gz)
+                }
+            }
+            if (config.lidarMarksObstacles) grid.observeOccupied(endCell.gx, endCell.gz)
+        }
+    }
+
+    /** LiDAR range, never reaching the rolling window's edge (see [integrationRangeMeters]). */
+    private val lidarRangeMeters: Float = run {
+        val insideWindow = config.gridSizeMeters / 2f - config.gridRecenterThresholdMeters -
+            2f * config.gridResolutionMeters
+        if (insideWindow > config.lidarMinRangeMeters) min(config.lidarMaxRangeMeters, insideWindow) else config.lidarMaxRangeMeters
+    }
+
+    /**
      * Bridges the floor the phone cannot see: the strip just in front of it, below the camera's
      * view even when tilted down. Without this nothing can be planned from a standing start - the
      * body's footprint and the first visible floor are separated by half a metre of unknown.
@@ -660,6 +771,11 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
             // Find where seen floor resumes, within the zone plus a little.
             var resume = -1f
             var d = step
+            // A fixed camera never sees the floor just past the body: skip the footprint first, so
+            // "seen floor resumes" means beyond the gap rather than the footprint's own edge.
+            if (config.blindZoneSkipsFootprint) {
+                while (d <= zone && grid.stateAtWorld(origin + forward * d) == CellState.FREE) d += step
+            }
             while (d <= zone + 3f * step) {
                 val state = grid.stateAtWorld(origin + forward * d)
                 if (state == CellState.OCCUPIED) break
@@ -796,7 +912,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         // Frontier detection is expensive; run it at ~1.5 Hz rather than per frame.
         if (nowMillis - lastFrontierMillis >= FRONTIER_INTERVAL_MILLIS || exploration.selected == null) {
             lastFrontierMillis = nowMillis
-            exploration.update(grid, inflatedGrid, pose, target, semantics, topology, nowMillis)
+            exploration.update(grid, inflatedGrid, pose, explorationTarget(), semantics, topology, nowMillis)
         }
 
         val selected = exploration.selected
@@ -1003,8 +1119,9 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         lastPlanMillis = nowMillis
         val start = inflatedGrid.worldToGrid(pose.position2D)
         val goalCell = inflatedGrid.worldToGrid(goal)
-        // Only exploration goals may touch unknown space, and only right at the goal.
-        val exploring = semantics.targetSighting == null
+        // Only exploration goals may touch unknown space, and only right at the goal. A subgoal's
+        // goal (a viewpoint, a frontier it names) may be just as unseen.
+        val exploring = semantics.targetSighting == null || goalOverride
         // A destination is often not itself somewhere to stand: a sign over a glass shop front, a
         // plate on a wall, a spot the map has not scanned. Aim at the nearest reachable cell
         // within the approach radius instead, and let arrival count there.
@@ -1132,6 +1249,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         }
     }
 
+    /**
+     * A long-term planner's guesses at where the destination is. Like advice, they only bias
+     * frontier choice; they fade over [NavigationConfig.plannerFadeMillis], and each is spent once
+     * the user has searched its place. Each plan replaces the last.
+     */
+    fun submitPlan(hypotheses: List<PlannerHypothesis>, nowMillis: Long = clockMillis) {
+        semantics.setPlan(hypotheses, nowMillis)
+        lastFrontierMillis = 0
+    }
+
     /** What the engine knows right now, for an adviser. Perceived state only, never ground truth. */
     fun situation(): Situation = Situation(
         target = target,
@@ -1142,10 +1269,299 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
         elapsedMillis = sessionStartMillis?.let { clockMillis - it } ?: 0L,
         frontiers = exploration.frontiers,
         signs = semantics.seenSigns(clockMillis, limit = 60),
+        numbering = semantics.numberingEstimate(target),
+        targetLikelyOnAnotherFloor = semantics.targetLikelyOnAnotherFloor(target),
+        plan = semantics.planWeights(clockMillis),
     )
+
+    // ================================================================= floors
+
+    /** The floor being walked, as last read; null until one is. */
+    val currentFloor: String? get() = world.floor
+
+    /** The floor a lift skill is asking for at the lift's door; null otherwise. The platform presses it. */
+    fun liftRequest(): String? = executor.liftRequest
+
+    /**
+     * The floor changed: a lift arrived somewhere, or a floor sign was read. A new floor is a new
+     * map - its walls, frontiers, walked graph and sightings are not the last floor's - but the
+     * evidence ledger and the hypotheses carry on: they are what was learned about the building.
+     */
+    private fun changeFloor(label: String, nowMillis: Long) {
+        val previous = world.floor
+        if (previous == label) {
+            executor.onFloorRead(label, nowMillis, walkedMeters)
+            return
+        }
+        world.floor = label
+        val riding = executor.active?.skill == com.navassist.navcore.strategy.Skill.TAKE_LIFT
+        if (previous != null || riding) {
+            grid.clear()
+            inflated = null
+            exploration.reset()
+            controller.reset()
+            currentPath = emptyList()
+            currentGoal = null
+            lastNodeId = null
+            lastNodePosition = null
+            backtrackTargetNodeId = null
+            // The walked graph and the distance from the start are the last floor's: kept, the engine
+            // took the lift lobby for a dead end of a walk it had not made here, ruled out the ways
+            // on, and tried to backtrack to places on another floor.
+            topology.reset()
+            sessionOrigin = null
+            farthestFromOrigin = 0f
+            clearTargetRouteFailures()
+            semantics.newFloor()
+            verifiedDestination = null
+            targetApproachPoint = null
+            lastFrontierMillis = 0
+            scanElapsedMillis = 0
+            lookAroundRadians = 0f
+            lookAroundLastYaw = null
+            stateMachine.on(NavigationEvent.MapReset)
+            originInitialized = false
+        }
+        executor.onFloorRead(label, nowMillis, walkedMeters)
+    }
+
+    /** What exploration steers towards: a lift while one is being searched for, else the destination. */
+    private fun explorationTarget(): NavigationTarget = executor.active?.searchFor ?: target
+
+    // ================================================================= long-term planning
+
+    /**
+     * Verification without the skill: the destination read from close to where it is believed to be,
+     * on the way there. Placed by depth or seen only along a bearing that passes it - a shop's name
+     * high on its fascia is placed by neither - either reading confirms it, as long as it was taken
+     * from within [NavigationConfig.verifyRangeMeters] of the sighting.
+     */
+    private fun verifyByCloseReading(observations: List<SemanticObservation>, observer: Pose3D, bearings: List<Vec2?>) {
+        if (verifiedDestination != null) return
+        val sighting = semantics.targetSighting?.takeIf { !it.glimpsed }?.worldPosition?.toVec2() ?: return
+        val from = observer.position2D
+        // A named place is read off a fascia high above its entrance: a camera that cannot tilt up
+        // loses it from view closer than several metres, so it is verified from further off.
+        val namedPlace = (target as? NavigationTarget.Room)?.let { it.number == null && it.normalizedLabel != "WASHROOM" } ?: false
+        val range = if (namedPlace) config.verifyRangeNamedPlaceMeters else config.verifyRangeMeters
+        if (from.distanceTo(sighting) > range) return
+        for ((i, o) in observations.withIndex()) {
+            if (!com.navassist.navcore.semantic.TargetMatcher.matches(o, target)) continue
+            val at = o.worldPosition?.toVec2()
+            val consistent = if (at != null) {
+                at.distanceTo(sighting) <= VERIFIED_MATCH_METERS
+            } else {
+                // Seen along a bearing: it must pass close by the sighting.
+                val b = bearings.getOrNull(i) ?: continue
+                val to = sighting - from
+                val along = to.dot(b)
+                along > 0f && (to - b * along).length() <= VERIFIED_MATCH_METERS
+            }
+            if (consistent) {
+                verifiedDestination = sighting
+                return
+            }
+        }
+    }
+
+    /** Whether a landmark's label (or kind, for a facility) names the destination. */
+    fun landmarkNamesTarget(landmark: com.navassist.navcore.world.Landmark): Boolean = when (val t = target) {
+        is NavigationTarget.Room -> landmark.label?.let { com.navassist.navcore.semantic.TargetMatcher.labelMatches(it, t) } ?: false
+        NavigationTarget.Exit -> landmark.kind == com.navassist.navcore.world.LandmarkKind.EXIT
+        NavigationTarget.Door -> landmark.kind == com.navassist.navcore.world.LandmarkKind.DOOR
+        NavigationTarget.Stairs -> landmark.kind == com.navassist.navcore.world.LandmarkKind.STAIRS
+        NavigationTarget.Elevator -> landmark.kind == com.navassist.navcore.world.LandmarkKind.ELEVATOR
+        NavigationTarget.Explore -> false
+    }
+
+    /** Landmarks naming the destination and not refuted, nearest first. */
+    fun targetLandmarks(): List<com.navassist.navcore.world.Landmark> {
+        val here = lastPose.position2D
+        return world.landmarks.filter { it.floor == world.floor && it.id !in executor.refuted && landmarkNamesTarget(it) }.sortedBy { it.position.distanceTo(here) }
+    }
+
+    /**
+     * Validates [subgoal] against the world as it is now and, if it holds, starts it. Returns the
+     * rejection, or null when accepted. A subgoal may only name things that exist: a landmark in
+     * the world model, a frontier the engine currently has, a node of the walked graph.
+     */
+    fun submitSubgoal(subgoal: com.navassist.navcore.strategy.StrategicSubgoal, nowMillis: Long = clockMillis): com.navassist.navcore.strategy.Rejection? {
+        val (resolved, reason) = resolveSubgoal(subgoal)
+        if (resolved == null) return com.navassist.navcore.strategy.Rejection(subgoal, reason ?: "invalid").also { rejections += it }
+        executor.start(resolved, nowMillis, walkedMeters)
+        return null
+    }
+
+    private fun resolveSubgoal(s: com.navassist.navcore.strategy.StrategicSubgoal): Pair<com.navassist.navcore.strategy.StrategicSubgoal?, String?> {
+        val sub = s.copy(id = if (s.id.isBlank()) "sg-%03d".format(nextSubgoal++) else s.id)
+        return when (sub.skill) {
+            com.navassist.navcore.strategy.Skill.EXPLORE_FRONTIER -> {
+                val fid = sub.targetId ?: return sub to null
+                val f = exploration.frontiers.firstOrNull { it.id == fid } ?: return null to "no frontier $fid"
+                sub.copy(targetPosition = f.centroid) to null
+            }
+            com.navassist.navcore.strategy.Skill.GO_TO_NODE -> {
+                val node = sub.targetId?.let { topology.node(it) } ?: return null to "no node ${sub.targetId}"
+                sub.copy(targetPosition = node.position) to null
+            }
+            com.navassist.navcore.strategy.Skill.GO_TO_LANDMARK, com.navassist.navcore.strategy.Skill.APPROACH_VIEWPOINT, com.navassist.navcore.strategy.Skill.INSPECT_SIGN,
+            com.navassist.navcore.strategy.Skill.INSPECT_ROOM_LABEL, com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION -> {
+                val l = sub.targetId?.let { world.landmark(it) } ?: return null to "no landmark ${sub.targetId}"
+                if (sub.skill == com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION && l.id in executor.refuted) return null to "${l.id} already refuted"
+                sub.copy(targetPosition = com.navassist.navcore.strategy.SubgoalExecutor.viewpointFor(l, world, wallNormalAt(l.position))) to null
+            }
+            com.navassist.navcore.strategy.Skill.TAKE_LIFT -> {
+                val l = sub.targetId?.let { world.landmark(it) } ?: return null to "no lift ${sub.targetId}"
+                if (l.kind != com.navassist.navcore.world.LandmarkKind.ELEVATOR) return null to "${l.id} is not a lift"
+                if (sub.floorLabel == null) return null to "take_lift needs a floor"
+                sub.copy(targetPosition = com.navassist.navcore.strategy.SubgoalExecutor.viewpointFor(l, world, wallNormalAt(l.position))) to null
+            }
+            com.navassist.navcore.strategy.Skill.ROTATE_IN_PLACE -> if (sub.angleRadians == null) null to "rotate needs an angle" else sub to null
+            com.navassist.navcore.strategy.Skill.FOLLOW_NUMBERING -> if (sub.angleRadians == null) null to "follow_numbering needs a heading" else sub to null
+            com.navassist.navcore.strategy.Skill.SCAN_INTERSECTION, com.navassist.navcore.strategy.Skill.STOP -> sub to null
+        }
+    }
+
+    /**
+     * Consults the long-term planner on events: a subgoal ended, the destination located or lost,
+     * a new landmark, or the replanning interval. And, when arrival must be read at the door,
+     * starts that verification itself if nothing else is.
+     */
+    private fun runStrategy(nowMillis: Long) {
+        if (config.arrivalRequiresVerification && semantics.targetSighting != null && verifiedDestination == null &&
+            executor.active?.skill != com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION
+        ) {
+            targetLandmarks().firstOrNull()?.let { l ->
+                submitSubgoal(com.navassist.navcore.strategy.StrategicSubgoal(id = "", skill = com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION, targetId = l.id, purpose = "read the destination's plate"), nowMillis)
+            }
+        }
+        val planner = longTermPlanner
+        val outcomes = if (planner != null) executor.takeOutcomes() else emptyList()
+        for (o in executor.history.drop(outcomesSeen)) {
+            if (o.skill == com.navassist.navcore.strategy.Skill.VERIFY_DESTINATION && o.targetId != null &&
+                (o.status == com.navassist.navcore.strategy.OutcomeStatus.SUCCEEDED || o.reason.startsWith("refuted"))
+            ) {
+                beliefs.destination(o.targetId, world.landmark(o.targetId)?.label ?: "?", o.status == com.navassist.navcore.strategy.OutcomeStatus.SUCCEEDED, nowMillis)
+            }
+        }
+        outcomesSeen = executor.history.size
+        if (planner == null) return
+        val landmarks = world.landmarks.size
+        val sighting = semantics.targetSighting != null
+        val trigger = when {
+            outcomes.isNotEmpty() -> "outcome ${outcomes.last().skill} ${outcomes.last().status}"
+            sighting != plannerHadSighting -> if (sighting) "destination located" else "destination lost"
+            landmarks != plannerLandmarks -> "new landmark"
+            nowMillis >= plannerNextMillis -> if (executor.active == null) "idle" else "replan interval"
+            else -> null
+        } ?: return
+        plannerLandmarks = landmarks
+        plannerHadSighting = sighting
+        plannerNextMillis = nowMillis + config.plannerReplanMillis
+        val context = com.navassist.navcore.strategy.PlannerContext(
+            snapshot = worldState(),
+            outcomes = executor.history.toList(),
+            refuted = executor.refuted.toSet(),
+            targetLandmarks = targetLandmarks().map { it.id },
+            trigger = trigger,
+            active = executor.active,
+            beliefs = beliefs,
+            numberingTarget = semantics.numberingEstimate(target)?.position,
+            destinationVerified = verifiedDestination != null,
+        )
+        val subgoal = planner.decide(context) ?: return
+        if (subgoal.id.isNotBlank() && subgoal.id == executor.active?.id) return
+        submitSubgoal(subgoal, nowMillis)
+    }
+
+    /**
+     * The normal of the wall at [position], from the occupied cells around it: the direction across
+     * their principal axis. Unoriented; null when too few walls are mapped there to tell.
+     */
+    fun wallNormalAt(position: Vec2, radiusMeters: Float = 0.6f): Vec2? {
+        val center = grid.worldToGrid(position)
+        val r = kotlin.math.ceil(radiusMeters / grid.resolution).toInt()
+        var n = 0
+        var mx = 0f; var mz = 0f
+        val cells = ArrayList<Vec2>()
+        for (dz in -r..r) for (dx in -r..r) {
+            if (grid.stateAt(center.gx + dx, center.gz + dz) != CellState.OCCUPIED) continue
+            val p = grid.gridToWorld(center.gx + dx, center.gz + dz)
+            if (p.distanceTo(position) > radiusMeters) continue
+            cells += p; mx += p.x; mz += p.z; n++
+        }
+        if (n < 4) return null
+        mx /= n; mz /= n
+        var sxx = 0f; var szz = 0f; var sxz = 0f
+        for (p in cells) { val dx = p.x - mx; val dz = p.z - mz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz }
+        // Principal axis angle of the 2x2 covariance; the wall runs along it.
+        val angle = 0.5f * kotlin.math.atan2(2f * sxz, sxx - szz)
+        val along = Vec2(kotlin.math.cos(angle), kotlin.math.sin(angle))
+        // Spread along and across the axis: a blob as wide as it is long (a column, a corner) has
+        // no one normal.
+        val major = 0.5f * (sxx + szz) + kotlin.math.sqrt(0.25f * (sxx - szz) * (sxx - szz) + sxz * sxz)
+        val minor = (sxx + szz) - major
+        if (major < 1e-4f || minor > 0.25f * major) return null
+        return Vec2(-along.z, along.x).normalized()
+    }
+
+    /** The world model as the long-term planner sees it: bounded, nearest first. */
+    fun worldState(maxLandmarks: Int = 40, maxFrontiers: Int = 12): com.navassist.navcore.world.WorldStateSnapshot {
+        val here = lastPose.position2D
+        val views = world.landmarks.filter { it.floor == world.floor }.map {
+            com.navassist.navcore.world.LandmarkView(
+                id = it.id, kind = it.kind, label = it.label, position = it.position,
+                distanceMeters = it.position.distanceTo(here), timesSeen = it.timesSeen, readCount = it.readCount,
+                conflictingReads = it.conflictingReads, lastSeenAgeMillis = clockMillis - it.lastSeenMillis,
+            )
+        }.sortedBy { it.distanceMeters }
+        val sighting = semantics.targetSighting
+        return com.navassist.navcore.world.WorldStateSnapshot(
+            revision = world.revision,
+            nowMillis = clockMillis,
+            goal = target,
+            status = stateMachine.status,
+            pose = lastPose,
+            walkedMeters = walkedMeters,
+            elapsedMillis = sessionStartMillis?.let { clockMillis - it } ?: 0L,
+            landmarks = views.filter { it.label != null || it.kind != com.navassist.navcore.world.LandmarkKind.PLATE }.take(maxLandmarks),
+            frontiers = exploration.frontiers.map {
+                com.navassist.navcore.world.FrontierView(it.id, it.centroid, it.centroid.distanceTo(here), it.score, it.cellCount)
+            }.sortedBy { it.distanceMeters }.take(maxFrontiers),
+            unreadSigns = views.filter { it.readCount == 0 }.take(maxLandmarks),
+            targetPosition = sighting?.worldPosition?.toVec2(),
+            targetSource = sighting?.source,
+            eventCount = world.events.size,
+            floor = world.floor,
+        )
+    }
 
     /** The goal currently being steered at, for debug rendering. */
     fun currentGoalWorld(): Vec2? = currentGoal
+
+    /** Everything the engine is remembering, for viewers and diagnostics. Never for the bridge. */
+    fun memory(): com.navassist.navcore.state.NavigationMemory {
+        val (advice, adviceAge) = semantics.currentAdvice(clockMillis)
+        val nodes = topology.nodes.toList()
+        return com.navassist.navcore.state.NavigationMemory(
+            nowMillis = clockMillis,
+            signs = semantics.seenSigns(clockMillis, limit = 200),
+            plates = semantics.numberingPlates(),
+            numbering = semantics.numberingEstimate(target),
+            targetLikelyOnAnotherFloor = semantics.targetLikelyOnAnotherFloor(target),
+            sighting = semantics.targetSighting,
+            frontiers = exploration.frontiers,
+            selectedFrontier = exploration.selected,
+            goal = currentGoal,
+            blacklisted = exploration.blacklistedAreas(),
+            nodes = nodes,
+            // Each edge is stored from both ends; keep one copy.
+            edges = nodes.flatMap { topology.edgesFrom(it.id) }.filter { it.fromId < it.toId },
+            advice = advice,
+            adviceAgeMillis = adviceAge,
+            plan = semantics.planWeights(clockMillis),
+        )
+    }
 
     /** Where the engine believes the destination is, and how it placed it; null if unknown. */
     fun targetSighting(): com.navassist.navcore.semantic.TargetSighting? = semantics.targetSighting
@@ -1164,6 +1580,12 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
 
         /** Turned to within this of the advised direction counts as having looked. */
         const val ADVICE_FACING_DEGREES = 30f
+        /** A verified plate and the sighting being approached are the same destination within this. */
+        const val VERIFIED_MATCH_METERS = 2f
+
+        /** A frontier a subgoal names is followed while one remains this close to it. */
+        const val FRONTIER_TRACK_METERS = 1.5f
+
         /** ~1.5 Hz frontier detection + scoring. */
         const val FRONTIER_INTERVAL_MILLIS = 650L
         /** ~6 Hz inflation refresh (shared by planning and frontier risk scoring). */

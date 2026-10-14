@@ -18,6 +18,18 @@ Kept up to date. If one of these disagrees with the code, the document is wrong.
 | Consuming the perception contract | [`perception/TEAMMATE_INTEGRATION.md`](perception/TEAMMATE_INTEGRATION.md) |
 | Hybrid YOLO / OCR / VLM design | [`perception/HYBRID_YOLO_OCR_VLM.md`](perception/HYBRID_YOLO_OCR_VLM.md) |
 | Camera permission behaviour | [`perception/CAMERA_PERMISSIONS_NOTE.md`](perception/CAMERA_PERMISSIONS_NOTE.md) |
+| Similar research, summarised | [`RELATED_WORK.md`](RELATED_WORK.md) |
+
+## Plans
+
+Proposals for work not yet done. They describe intent, not the code; where one disagrees with the
+code, the code is what exists.
+
+| Topic | Where |
+| --- | --- |
+| Layered navigation in simulation: the active design | [`LAYERED_NAVIGATION_DESIGN.md`](LAYERED_NAVIGATION_DESIGN.md) |
+| Hypothesis-conditioned active perception: research spec, diagrams, prototype config | [`hypothesis-active-perception/`](hypothesis-active-perception/technical_implementation.md) |
+| Belief-driven navigation: research plan to supervised wearable demo (real-world parts shelved) | [`BELIEF_DRIVEN_NAVIGATION_PLAN.md`](BELIEF_DRIVEN_NAVIGATION_PLAN.md) |
 
 ## Build log
 

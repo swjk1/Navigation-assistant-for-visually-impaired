@@ -75,6 +75,21 @@ class OccupancyGrid(
     fun isNearSeen(gx: Int, gz: Int): Boolean = inBounds(gx, gz) && nearSeen[index(gx, gz)]
 
     /**
+     * Cells a horizontal LiDAR beam has passed through: the air at scan height is empty there. That
+     * is NOT floor - a stairwell or a low box is invisible to the scan plane - so these cells read
+     * as FREE for planning and frontiers while the evidence is undecided, but are never near-seen:
+     * the controller still refuses to step onto them until depth has seen the floor (see
+     * NavigationController.forwardState). Occupied evidence always wins.
+     */
+    private val planeClear = BooleanArray(cells * cells)
+
+    fun markPlaneClear(gx: Int, gz: Int) {
+        if (inBounds(gx, gz)) planeClear[index(gx, gz)] = true
+    }
+
+    fun isPlaneClear(gx: Int, gz: Int): Boolean = inBounds(gx, gz) && planeClear[index(gx, gz)]
+
+    /**
      * Whether floor at or right beside [world] was seen close up. Depth samples the floor as points
      * a cell or two apart, so an exact cell would leave holes in floor that was seen perfectly well.
      */
@@ -126,6 +141,25 @@ class OccupancyGrid(
 
     fun stateAt(gx: Int, gz: Int): CellState {
         if (!inBounds(gx, gz)) return CellState.UNKNOWN
+        val i = index(gx, gz)
+        val value = logOdds[i]
+        return when {
+            value >= occupiedThreshold -> CellState.OCCUPIED
+            value <= freeThreshold -> CellState.FREE
+            planeClear[i] -> CellState.FREE
+            else -> CellState.UNKNOWN
+        }
+    }
+
+    fun stateAt(coord: GridCoordinate): CellState = stateAt(coord.gx, coord.gz)
+
+    /**
+     * The state as the camera's depth alone knows it, ignoring [isPlaneClear]: where it has not
+     * looked is UNKNOWN even when a LiDAR beam crossed it. Frontiers drawn on this follow what has
+     * been SEEN, which is what finding a sign needs (NavigationConfig.frontiersFromCamera).
+     */
+    fun cameraStateAt(gx: Int, gz: Int): CellState {
+        if (!inBounds(gx, gz)) return CellState.UNKNOWN
         val value = logOdds[index(gx, gz)]
         return when {
             value >= occupiedThreshold -> CellState.OCCUPIED
@@ -133,8 +167,6 @@ class OccupancyGrid(
             else -> CellState.UNKNOWN
         }
     }
-
-    fun stateAt(coord: GridCoordinate): CellState = stateAt(coord.gx, coord.gz)
 
     fun stateAtWorld(world: Vec2): CellState = stateAt(worldToGrid(world))
 
@@ -169,10 +201,11 @@ class OccupancyGrid(
         var free = 0
         var occupied = 0
         var unknown = 0
-        for (value in logOdds) {
+        for (i in logOdds.indices) {
+            val value = logOdds[i]
             when {
                 value >= occupiedThreshold -> occupied++
-                value <= freeThreshold -> free++
+                value <= freeThreshold || planeClear[i] -> free++
                 else -> unknown++
             }
         }
@@ -210,6 +243,7 @@ class OccupancyGrid(
     fun clear() {
         logOdds.fill(0f)
         nearSeen.fill(false)
+        planeClear.fill(false)
         discardObservation()
     }
 
@@ -353,6 +387,8 @@ class OccupancyGrid(
         if (abs(shiftX) >= cells || abs(shiftZ) >= cells) {
             // Teleport (or tracking reset): nothing overlaps, start clean.
             logOdds.fill(0f)
+            nearSeen.fill(false)
+            planeClear.fill(false)
         } else {
             shiftContents(shiftX, shiftZ)
         }
@@ -372,6 +408,7 @@ class OccupancyGrid(
                 val inside = srcX in 0 until cells && srcZ in 0 until cells
                 logOdds[index(gx, gz)] = if (inside) logOdds[index(srcX, srcZ)] else 0f
                 nearSeen[index(gx, gz)] = inside && nearSeen[index(srcX, srcZ)]
+                planeClear[index(gx, gz)] = inside && planeClear[index(srcX, srcZ)]
             }
         }
     }

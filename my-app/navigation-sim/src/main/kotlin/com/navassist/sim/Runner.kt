@@ -2,6 +2,7 @@ package com.navassist.sim
 
 import com.navassist.navcore.state.NavigationSnapshot
 import com.navassist.sim.foxglove.FoxglovePublisher
+import com.navassist.sim.foxglove.InsightPublisher
 import com.navassist.sim.foxglove.McapSink
 import com.navassist.sim.foxglove.McapWriter
 import com.navassist.sim.report.TopDownRenderer
@@ -34,6 +35,7 @@ object Runner {
             McapSink(McapWriter.open(file)).also { sink ->
                 val publisher = FoxglovePublisher(sink)
                 simulation.listeners += publisher::onFrame
+                InsightPublisher(sink).attach(simulation)
             }
         }
         val webots = webotsTo?.let { WebotsExporter.Recorder().also { r -> simulation.listeners += r::onFrame } }

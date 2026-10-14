@@ -1,0 +1,72 @@
+flowchart TD
+  subgraph ENV["Unknown Building and User"]
+    GOAL["Goal: Find Room 501"]
+    SENS["Camera / Depth / IMU / Optional LiDAR"]
+  end
+  subgraph PER["A. Grounded Perception | fast/local"]
+    GEO["SLAM, Pose, Traversability"]
+    SEM["Object Detection, OCR, Sign Parsing, VLM"]
+    FUS["Observation Events + Source References"]
+    GEO --> FUS
+    SEM --> FUS
+  end
+  subgraph STATE["B. Persistent World Model | versioned"]
+    LOG[("Observation and Outcome Ledger")]
+    MAP[("Metric and Topological Map")]
+    FACT[("Semantic Landmark Graph")]
+    BEL[("Structural Hypothesis and Evidence Graph")]
+    SNAP["WorldStateSnapshot API"]
+    LOG --> MAP
+    LOG --> FACT
+    LOG --> BEL
+    MAP --> SNAP
+    FACT --> SNAP
+    BEL --> SNAP
+  end
+  subgraph STRAT["C. Long-Term Reasoning | event-triggered"]
+    TASK["Task Manager"]
+    GEN["LLM/VLM Hypothesis and Candidate Generator"]
+    GRND["Grounding and Action Validator"]
+    TASK --> GEN --> GRND
+  end
+  subgraph ACTIVE["D. Active Perception + Decision Research Core"]
+    VIEW["Generate Viewpoints / Inspections / Exploration"]
+    TDM["Text Decision Model"]
+    IDM["Image Decision Model"]
+    CAL["Calibrated Outcome Estimates"]
+    VALUE["Expected Search Cost / Value of Information"]
+    SELECT["Constrained Subgoal Selector"]
+    VIEW --> TDM --> CAL
+    VIEW --> IDM --> CAL
+    CAL --> VALUE --> SELECT
+  end
+  subgraph TACT["E. Short-Term Navigation | local"]
+    SKILL["Bounded Skill Executor"]
+    ROUTE["Known-Graph Route and Waypoints"]
+    GUIDE["Voice + Haptic Guidance"]
+    MON["Progress / ActionOutcome"]
+    SKILL --> ROUTE --> GUIDE --> MON
+  end
+  SAFE["Independent Safety Supervisor: Pause / Stop / Help"]
+  GOAL --> TASK
+  SENS --> GEO
+  SENS --> SEM
+  FUS --> LOG
+  SNAP --> GEN
+  SNAP --> VIEW
+  GRND --> VIEW
+  GRND --> SELECT
+  SELECT --> SKILL
+  MAP --> ROUTE
+  GEO --> SAFE
+  GUIDE --> SAFE
+  SAFE --> MON
+  MON --> LOG
+  MON -. "Surprise / completion / contradiction" .-> TASK
+  SKILL -. "Active inspection" .-> SEM
+  classDef research fill:#e8e5ff,stroke:#6e5aca,color:#27205d,stroke-width:1.7px
+  classDef memory fill:#e8f7ef,stroke:#27816f,color:#1d473c
+  classDef safety fill:#fff0df,stroke:#bb762a,color:#673c11,stroke-width:2px
+  class VIEW,TDM,IDM,CAL,VALUE,SELECT research
+  class LOG,MAP,FACT,BEL,SNAP memory
+  class SAFE safety

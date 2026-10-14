@@ -481,7 +481,8 @@ class NavigationEngineScenarioTest {
     fun `advice for the way behind releases the way ahead`() {
         // In a corridor running both ways, after the scan facing north: south is unmapped.
         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -14f, toZ = 14f)
-        val engine = NavigationEngine(NavigationConfig())
+        // Both behaviours are opt-in: by default advice only re-weights frontiers.
+        val engine = NavigationEngine(NavigationConfig(adviceTurnsToLook = true, adviceReleasesCommitment = true))
         engine.start(NavigationTarget.Explore)
         var sweep = 0.0
         var snapshot: NavigationSnapshot? = null
