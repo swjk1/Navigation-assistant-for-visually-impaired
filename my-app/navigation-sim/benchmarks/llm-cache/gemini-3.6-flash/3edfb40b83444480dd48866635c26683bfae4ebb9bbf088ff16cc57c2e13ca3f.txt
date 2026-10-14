@@ -1,0 +1,2 @@
+1056
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.1, "E": 0.65, "F": 0.05, "G": 0.025, "H": 0.025}, "reason": "Opening E continues straight along the main corridor towards detected doors."}

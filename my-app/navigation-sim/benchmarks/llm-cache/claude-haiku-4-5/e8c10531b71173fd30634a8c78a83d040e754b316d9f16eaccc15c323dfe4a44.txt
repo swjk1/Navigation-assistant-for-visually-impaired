@@ -1,0 +1,2 @@
+1738
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Door ahead likely corridor continuation. Room 312 behind suggests numbered sequence. Left opening may be side corridor."}

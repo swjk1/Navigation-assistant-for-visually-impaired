@@ -1,0 +1,2 @@
+1981
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.20, "D": 0.10, "E": 0.15, "F": 0.05}, "reason": "Continue straight (B) along corridor. Side openings (A,C,E) less likely. Lift nearby suggests main corridor ahead."}

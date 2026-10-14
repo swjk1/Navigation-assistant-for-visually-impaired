@@ -1,0 +1,2 @@
+1746
+{"probabilities": {"A": 0.7, "B": 0.3}, "reason": "12 o'clock continues straight ahead, likely main corridor. 11 o'clock is a side turn, possibly side corridor or room."}

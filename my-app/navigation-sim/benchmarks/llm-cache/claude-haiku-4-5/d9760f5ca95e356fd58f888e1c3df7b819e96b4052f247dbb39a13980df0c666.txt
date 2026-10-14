@@ -1,0 +1,2 @@
+2335
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.05, "H": 0.15}, "reason": "Exit sign at 4 o'clock suggests right direction. Straight ahead (C) continues corridor. Room signs point right (D, F). Washroom suggests side corridor."}

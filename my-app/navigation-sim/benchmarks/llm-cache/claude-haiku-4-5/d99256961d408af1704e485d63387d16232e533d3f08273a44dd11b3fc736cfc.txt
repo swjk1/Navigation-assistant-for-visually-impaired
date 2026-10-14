@@ -1,0 +1,2 @@
+1461
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.15}, "reason": "Continue straight (B) most likely along main corridor. Side openings less probable; Phone Repair nearby suggests retail area."}

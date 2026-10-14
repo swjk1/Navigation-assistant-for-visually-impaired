@@ -1,0 +1,2 @@
+2536
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.15, "E": 0.10, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Continue straight (C) toward Phone Repair sign. Side corridors (A, D, F) likely lead to lifts. Avoid shops (B, E)."}

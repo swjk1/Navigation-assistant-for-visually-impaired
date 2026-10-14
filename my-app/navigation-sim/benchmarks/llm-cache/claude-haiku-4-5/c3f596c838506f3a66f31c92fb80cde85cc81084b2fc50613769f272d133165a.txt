@@ -1,0 +1,2 @@
+3863
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.20, "D": 0.25, "E": 0.15, "F": 0.05, "G": 0.03, "H": 0.02}, "reason": "Straight ahead (D) most likely continues main corridor. Side openings (C, E) explore perpendicular paths. Phone Repair sign suggests retail area nearby."}

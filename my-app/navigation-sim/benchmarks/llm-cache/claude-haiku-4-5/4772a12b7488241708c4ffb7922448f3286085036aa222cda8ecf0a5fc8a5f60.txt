@@ -1,0 +1,2 @@
+2138
+{"probabilities": {"A": 0.12, "B": 0.15, "C": 0.25, "D": 0.10, "E": 0.08, "F": 0.12, "G": 0.10, "H": 0.08}, "reason": "Straight ahead (C) most likely continues main corridor. Home Goods sign behind suggests forward progress. Side openings less likely."}

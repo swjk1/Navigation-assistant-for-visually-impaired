@@ -1,0 +1,2 @@
+3139
+{"probabilities": {"A": 0.70, "B": 0.05, "C": 0.25}, "reason": "Signs point right repeatedly. A (12 o'clock) continues corridor. C (5 o'clock) partially right. B goes backward."}

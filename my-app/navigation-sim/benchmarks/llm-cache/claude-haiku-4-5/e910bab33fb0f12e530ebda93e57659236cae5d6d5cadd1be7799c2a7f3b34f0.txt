@@ -1,0 +1,2 @@
+1270
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Straight ahead (12 o'clock) more likely continues main corridor. Side angle (10 o'clock) suggests side corridor or room."}

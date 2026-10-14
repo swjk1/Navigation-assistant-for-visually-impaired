@@ -1,0 +1,2 @@
+2804
+{"probabilities": {"A": 0.8, "B": 0.1, "C": 0.1}, "reason": "A continues straight along the main corridor; B is likely a room door."}

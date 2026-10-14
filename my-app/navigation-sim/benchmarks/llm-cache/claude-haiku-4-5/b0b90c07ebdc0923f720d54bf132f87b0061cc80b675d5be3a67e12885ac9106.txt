@@ -1,0 +1,2 @@
+2246
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.05, "E": 0.15, "F": 0.10, "G": 0.15, "H": 0.05}, "reason": "Lift at 11 o'clock suggests main corridor. C (11 o'clock) most likely continues toward room 104. Side openings less probable."}

@@ -1,0 +1,2 @@
+2201
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.30, "E": 0.20, "F": 0.05, "G": 0.10}, "reason": "Lift seen at 1 o'clock. Options C and D closest to that direction. D slightly nearer. Continue corridor logic."}

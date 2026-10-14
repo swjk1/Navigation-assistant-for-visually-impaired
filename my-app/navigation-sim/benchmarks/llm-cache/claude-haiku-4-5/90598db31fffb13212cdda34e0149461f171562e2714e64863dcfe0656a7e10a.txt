@@ -1,0 +1,2 @@
+2317
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.1, "D": 0.15, "E": 0.35, "F": 0.1, "G": 0.1, "H": 0.05}, "reason": "Cinema sign ahead suggests main corridor. Continue straight (E) most likely. Left/forward options (D, C) explore side corridors."}

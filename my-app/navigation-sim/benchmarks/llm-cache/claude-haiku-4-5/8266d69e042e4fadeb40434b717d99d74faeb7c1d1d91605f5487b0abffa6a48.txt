@@ -1,0 +1,2 @@
+1808
+{"probabilities": {"A": 0.15, "B": 0.70, "C": 0.15}, "reason": "Continuing straight (B) most likely follows main corridor. Side openings (A, C) likely lead to rooms or dead ends."}

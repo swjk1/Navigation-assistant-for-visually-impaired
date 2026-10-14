@@ -1,0 +1,2 @@
+2136
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.12, "D": 0.20, "E": 0.08, "F": 0.12, "G": 0.08, "H": 0.15}, "reason": "Burger Grill at 2 o'clock suggests Pizza nearby. H continues that direction. D straight ahead maintains corridor flow."}

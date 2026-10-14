@@ -1,0 +1,2 @@
+1758
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "B continues forward along corridor. A turns sharply left, likely dead-end room. Direction signs point left toward rooms 217-220."}

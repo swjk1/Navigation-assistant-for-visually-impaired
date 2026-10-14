@@ -1,0 +1,2 @@
+2168
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.15, "D": 0.20, "E": 0.05, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Washroom sign at 3 o'clock suggests facilities corridor. Lifts often near washrooms. Directions 2-4 o'clock most promising."}

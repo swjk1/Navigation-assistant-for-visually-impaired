@@ -1,0 +1,2 @@
+2297
+{"probabilities": {"A": 0.15, "B": 0.12, "C": 0.08, "D": 0.12, "E": 0.10, "F": 0.18, "G": 0.20, "H": 0.05}, "reason": "Exits typically at corridor ends. Rightward directions (F, G) suggest main corridor continuation. Washroom/lift signs indicate side corridors."}

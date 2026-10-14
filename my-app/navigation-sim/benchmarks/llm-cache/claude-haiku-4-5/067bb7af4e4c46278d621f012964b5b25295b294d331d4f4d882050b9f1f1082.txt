@@ -1,0 +1,2 @@
+1477
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.08, "D": 0.12, "E": 0.10, "F": 0.12, "G": 0.20, "H": 0.13}, "reason": "No cinema signs detected. G (10 o'clock) continues main corridor direction. Avoid shops on sides."}

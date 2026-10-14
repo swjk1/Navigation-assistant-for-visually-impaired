@@ -1,0 +1,2 @@
+1646
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.25, "D": 0.20, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.05}, "reason": "Sign points left (9 o'clock area). Rooms 101-106 suggest corridor ahead. A and C forward; D toward lift area."}

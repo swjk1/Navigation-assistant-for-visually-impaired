@@ -1,0 +1,2 @@
+2342
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.25, "E": 0.15, "F": 0.20, "G": 0.20}, "reason": "Sign 'Rooms 117-120' points left suggests corridor leftward. Room 114 likely nearby. Lift at 11 o'clock suggests main corridor. Prefer F, G continuing that direction."}

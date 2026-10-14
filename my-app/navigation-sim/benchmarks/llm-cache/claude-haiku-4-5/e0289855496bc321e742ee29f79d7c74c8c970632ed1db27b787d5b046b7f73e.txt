@@ -1,0 +1,2 @@
+1646
+{"probabilities": {"A": 0.08, "B": 0.12, "C": 0.15, "D": 0.18, "E": 0.25, "F": 0.08, "G": 0.10, "H": 0.04}, "reason": "Continue straight (E) along apparent main corridor. Side shops detected ahead suggest main passage. Avoid dead-end shops."}

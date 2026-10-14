@@ -1,0 +1,2 @@
+1999
+{"probabilities": {"A": 0.45, "B": 0.35, "C": 0.20}, "reason": "Room 114 nearby suggests corridor. Direction sign points left (9 o'clock). Option A (2 o'clock) continues corridor logic best."}

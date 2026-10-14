@@ -1,0 +1,2 @@
+2677
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.15, "D": 0.35, "E": 0.10, "F": 0.10, "G": 0.05, "H": 0.00}, "reason": "Straight ahead (12 o'clock) most likely continues main corridor toward pharmacy. Nearby H too close, likely side room."}

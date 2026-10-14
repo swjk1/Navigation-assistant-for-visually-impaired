@@ -1,0 +1,2 @@
+1937
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Sign points right (3 o'clock). B is directly right at 0.9m, closer and aligned with sign direction."}

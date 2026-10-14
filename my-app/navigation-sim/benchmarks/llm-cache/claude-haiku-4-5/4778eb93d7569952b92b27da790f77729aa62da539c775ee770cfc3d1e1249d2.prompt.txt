@@ -1,0 +1,28 @@
+You are guiding a blind person to room 320 in a building they do not know.
+You cannot see. You get only what their phone has detected. Directions are clock positions
+relative to where they face now: 12 is straight ahead, 3 is to their right, 9 to their left, 6 behind.
+
+So far they have walked 135 m in 192 s.
+
+Signs and landmarks detected, most recent first:
+- an exit sign, 6 o'clock, 1 m away (seen 2 times, last 7 s ago)
+- an exit sign, towards 12 o'clock, too far to judge the distance (seen 12 s ago)
+- a sign reading "016", towards 1 o'clock, too far to judge the distance (seen 12 s ago)
+- a door, towards 1 o'clock, too far to judge the distance (seen 12 s ago)
+- a sign reading "309", 7 o'clock, 11 m away (seen 16 s ago)
+- a sign reading "314", towards 1 o'clock, too far to judge the distance (seen 21 s ago)
+- a door, 6 o'clock, 16 m away (seen 21 s ago)
+
+Unexplored openings they could walk to next:
+A: 12 o'clock, 4.0 m
+B: 12 o'clock, 2.5 m
+C: 8 o'clock, 0.9 m
+D: 4 o'clock, 1.6 m
+
+Which opening most likely leads towards room 320? Use how buildings are laid out:
+corridors and concourses connect places; rooms, classrooms and shops are dead ends unless the
+destination is inside; room numbers run in order along a corridor; direction signs point the way;
+lifts and washrooms are often off side corridors; exits are at the ends of main corridors and
+concourses. Prefer continuing along a corridor or concourse over entering a room or shop.
+Reply with JSON only, probabilities summing to 1:
+{"probabilities": {"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0}, "reason": "at most 15 words"}

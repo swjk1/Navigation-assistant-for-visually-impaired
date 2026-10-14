@@ -1,0 +1,2 @@
+1787
+{"probabilities": {"A": 0.45, "B": 0.25, "C": 0.15, "D": 0.15}, "reason": "Straight ahead (A) most likely continues corridor. Lift (B) suggests building hub. Avoid backtracking (C, D)."}

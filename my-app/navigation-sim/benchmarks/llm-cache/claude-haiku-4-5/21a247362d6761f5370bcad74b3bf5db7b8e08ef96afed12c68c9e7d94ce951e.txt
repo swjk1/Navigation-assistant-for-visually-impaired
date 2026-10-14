@@ -1,0 +1,2 @@
+1600
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign pointed right; opening A at 10 o'clock aligns better with rightward direction than straight ahead."}

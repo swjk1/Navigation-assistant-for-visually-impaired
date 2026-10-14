@@ -1,0 +1,2 @@
+2422
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.20, "E": 0.05, "F": 0.15, "G": 0.15}, "reason": "Fashion sign at 2 o'clock suggests retail area ahead. Forward/left openings (B, C, D, F, G) likely continue corridor. Avoid right (A) and immediate left (E)."}

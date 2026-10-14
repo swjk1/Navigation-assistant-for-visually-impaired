@@ -1,0 +1,2 @@
+1874
+{"probabilities": {"A": 0.7, "B": 0.2, "C": 0.1}, "reason": "Sign points right (1 o'clock). Door at 1 o'clock aligns with corridor direction. Room 114 likely ahead."}

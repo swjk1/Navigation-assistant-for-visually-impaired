@@ -1,0 +1,2 @@
+2305
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.05, "E": 0.35, "F": 0.05, "G": 0.05, "H": 0.10}, "reason": "Direction signs point 10-11 o'clock. Openings B and E align with signs. E at 11 o'clock most promising for lift access."}

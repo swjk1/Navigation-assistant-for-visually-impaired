@@ -1,0 +1,2 @@
+1637
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.05, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.25, "H": 0.35}, "reason": "H closest to sign direction. G continues same corridor. B/D explore 10/9 o'clock paths toward signs."}

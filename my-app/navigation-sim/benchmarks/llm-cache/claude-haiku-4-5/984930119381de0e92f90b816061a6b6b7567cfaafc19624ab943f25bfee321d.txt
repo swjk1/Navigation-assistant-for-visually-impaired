@@ -1,0 +1,2 @@
+2053
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.25, "D": 0.25, "E": 0.05, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "Multiple exits/doors detected at 8 o'clock suggest main corridor. Continue that direction via C or D."}

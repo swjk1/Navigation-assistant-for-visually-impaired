@@ -1,0 +1,2 @@
+1962
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 216 at 8 o'clock suggests corridor runs left-right. Opening A (1 o'clock) continues corridor toward higher room numbers. B likely dead-end."}

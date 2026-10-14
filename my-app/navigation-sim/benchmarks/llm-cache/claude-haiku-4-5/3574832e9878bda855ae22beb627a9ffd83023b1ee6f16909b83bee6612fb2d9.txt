@@ -1,0 +1,2 @@
+2060
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.25, "D": 0.04, "E": 0.35, "F": 0.08, "G": 0.10, "H": 0.05}, "reason": "Continue straight (E) or follow Fashion sign direction (C). Avoid side corridors and dead ends."}

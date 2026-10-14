@@ -1,0 +1,2 @@
+2158
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.05, "D": 0.15, "E": 0.15, "F": 0.15}, "reason": "No signs yet. Prefer forward directions (1-2 o'clock) for corridor continuation. Avoid immediate left turn."}

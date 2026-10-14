@@ -1,0 +1,2 @@
+2242
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.05, "D": 0.15, "E": 0.35, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Lift door detected at 1 o'clock. Option E at 2 o'clock closest to that bearing, most promising direction."}

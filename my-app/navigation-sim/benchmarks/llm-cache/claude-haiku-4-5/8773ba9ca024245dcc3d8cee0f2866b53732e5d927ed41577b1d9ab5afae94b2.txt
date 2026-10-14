@@ -1,0 +1,2 @@
+2244
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.10, "E": 0.15, "F": 0.10, "G": 0.15}, "reason": "Sports sign at 1 o'clock suggests continuing forward. C (1 o'clock) most aligned with sign direction. Avoid backtracking (F, G). E too narrow."}

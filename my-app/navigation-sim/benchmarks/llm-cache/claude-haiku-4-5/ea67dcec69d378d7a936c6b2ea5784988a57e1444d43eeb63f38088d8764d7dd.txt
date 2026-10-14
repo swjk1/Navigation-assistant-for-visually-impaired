@@ -1,0 +1,2 @@
+2332
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.25, "D": 0.35, "E": 0.05, "F": 0.08, "G": 0.10, "H": 0.04}, "reason": "Direction signs point 10 o'clock (Travel Agent, Bakery shops). Lifts often off side corridors. D (10 o'clock) most promising; G (11 o'clock) secondary. C straight ahead maintains corridor."}

@@ -1,0 +1,2 @@
+2828
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.35, "E": 0.25, "F": 0.15}, "reason": "Room 104 is in 101-106 range (left sign). Door at 2 o'clock and opening D (3 o'clock, lift area) most promising. Continue corridor logic."}

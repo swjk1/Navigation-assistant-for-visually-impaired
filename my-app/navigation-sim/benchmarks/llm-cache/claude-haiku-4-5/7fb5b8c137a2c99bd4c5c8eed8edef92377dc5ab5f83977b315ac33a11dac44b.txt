@@ -1,0 +1,2 @@
+1736
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.20, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.20, "H": 0.10}, "reason": "Door at 10 o'clock (A) and corridor direction (G) most promising. Avoid shops. Continue main paths."}

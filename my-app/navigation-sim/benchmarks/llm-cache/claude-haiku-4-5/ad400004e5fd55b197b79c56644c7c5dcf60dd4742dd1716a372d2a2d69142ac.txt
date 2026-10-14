@@ -1,0 +1,2 @@
+2240
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.15, "D": 0.05, "E": 0.15, "F": 0.10, "G": 0.15, "H": 0.10}, "reason": "Jewellery sign ahead suggests forward corridor. Prefer forward/side openings over backtracking. Avoid dead-end shops."}

@@ -1,0 +1,2 @@
+2313
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.25, "D": 0.15, "E": 0.05, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (A, C) most likely continues main corridor. Pet Shop left suggests shops nearby; Cinema likely further along main route."}

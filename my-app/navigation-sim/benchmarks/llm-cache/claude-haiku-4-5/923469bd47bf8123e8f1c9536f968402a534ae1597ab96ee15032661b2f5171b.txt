@@ -1,0 +1,2 @@
+1433
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.35, "E": 0.25, "F": 0.05}, "reason": "Continue straight (12 o'clock) along main corridor. Left/right signs suggest side corridors. Exit sign at 8 o'clock indicates general direction."}

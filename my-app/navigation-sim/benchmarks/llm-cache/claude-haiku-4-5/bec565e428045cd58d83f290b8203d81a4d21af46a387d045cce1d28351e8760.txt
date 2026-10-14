@@ -1,0 +1,2 @@
+2146
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.10, "D": 0.05, "E": 0.15, "F": 0.40, "G": 0.05, "H": 0.10}, "reason": "Lift door repeatedly detected at 11 o'clock. Opening F at 10 o'clock, 2.2m is closest to that direction and likely leads there."}

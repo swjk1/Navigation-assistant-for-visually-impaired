@@ -1,0 +1,2 @@
+1758
+{"probabilities": {"A": 0.25, "B": 0.50, "C": 0.25}, "reason": "Lift at 11 o'clock suggests main corridor. Option B continues that direction toward stairs likely nearby."}

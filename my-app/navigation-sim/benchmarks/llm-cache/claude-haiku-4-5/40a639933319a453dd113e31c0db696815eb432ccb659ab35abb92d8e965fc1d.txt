@@ -1,0 +1,2 @@
+1516
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.15, "D": 0.10, "E": 0.25, "F": 0.10}, "reason": "Washroom sign suggests side corridor. Openings 11 and 10 o'clock likely continue main corridor toward exit."}

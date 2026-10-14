@@ -1,0 +1,2 @@
+1580
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.10, "D": 0.10, "E": 0.20, "F": 0.10, "G": 0.05, "H": 0.20}, "reason": "Exit signs point 10 o'clock. Options E and H (12 o'clock) continue straight ahead along main corridor. A (11 o'clock) aligns with exit sign direction."}

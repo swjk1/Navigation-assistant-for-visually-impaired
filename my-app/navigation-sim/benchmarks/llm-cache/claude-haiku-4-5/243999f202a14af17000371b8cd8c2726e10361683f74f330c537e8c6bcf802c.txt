@@ -1,0 +1,2 @@
+1650
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.05, "D": 0.15, "E": 0.10, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (A) most likely continues main corridor. Left-forward options (B,D,F) are secondary paths. Avoid dead ends and backtracking."}

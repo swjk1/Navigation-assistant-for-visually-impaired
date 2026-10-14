@@ -1,0 +1,2 @@
+2437
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.10, "E": 0.25, "F": 0.05, "G": 0.05, "H": 0.40}, "reason": "Cinema sign repeatedly seen at 8 o'clock. Openings H (9 o'clock, 3.4m) and E (9 o'clock, 5.2m) align best with that direction. H is closer, likely corridor continuation."}

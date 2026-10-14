@@ -1,0 +1,2 @@
+2636
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.10, "E": 0.15, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "Straight ahead (C) most likely continues main corridor. Side shops (Coffee, Electronics, Fashion at 3-5 o'clock) suggest corridor runs forward-right. Avoid backtracking (A). Forward-right options (B, H, E) promising."}

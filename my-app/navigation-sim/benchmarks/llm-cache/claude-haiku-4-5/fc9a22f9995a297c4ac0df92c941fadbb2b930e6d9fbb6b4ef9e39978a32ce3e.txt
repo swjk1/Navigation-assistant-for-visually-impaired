@@ -1,0 +1,2 @@
+2258
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.15, "E": 0.25, "F": 0.05, "G": 0.05, "H": 0.25}, "reason": "Continue forward (E) or explore 6 o'clock (H). Avoid side shops. Corridor logic suggests main paths."}

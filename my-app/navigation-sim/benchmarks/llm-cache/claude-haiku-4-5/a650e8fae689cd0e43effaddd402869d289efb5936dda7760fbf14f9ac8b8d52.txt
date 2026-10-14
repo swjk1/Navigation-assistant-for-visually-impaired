@@ -1,0 +1,2 @@
+1291
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Sign points right; A continues straighter ahead along likely corridor. B angles left away from sign direction."}

@@ -1,0 +1,26 @@
+You are guiding a blind person to "Toy World" in a building they do not know.
+You cannot see. You get only what their phone has detected. Directions are clock positions
+relative to where they face now: 12 is straight ahead, 3 is to their right, 9 to their left, 6 behind.
+
+So far they have walked 176 m in 312 s.
+
+Signs and landmarks detected, most recent first:
+- none yet
+
+Unexplored openings they could walk to next:
+A: 7 o'clock, 2.6 m
+B: 9 o'clock, 3.5 m
+C: 8 o'clock, 5.0 m
+D: 1 o'clock, 2.9 m
+E: 7 o'clock, 7.9 m
+F: 5 o'clock, 7.3 m
+G: 4 o'clock, 3.6 m
+H: 7 o'clock, 5.5 m
+
+Which opening most likely leads towards "Toy World"? Use how buildings are laid out:
+corridors and concourses connect places; rooms, classrooms and shops are dead ends unless the
+destination is inside; room numbers run in order along a corridor; direction signs point the way;
+lifts and washrooms are often off side corridors; exits are at the ends of main corridors and
+concourses. Prefer continuing along a corridor or concourse over entering a room or shop.
+Reply with JSON only, probabilities summing to 1:
+{"probabilities": {"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0, "F": 0.0, "G": 0.0, "H": 0.0}, "reason": "at most 15 words"}

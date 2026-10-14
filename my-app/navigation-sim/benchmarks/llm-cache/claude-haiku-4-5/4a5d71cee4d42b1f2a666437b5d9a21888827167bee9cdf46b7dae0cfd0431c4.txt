@@ -1,0 +1,2 @@
+2502
+{"probabilities": {"A": 0.05, "B": 0.50, "C": 0.05, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Room 112/110 seen at 7 o'clock (behind-left). Room 111 likely nearby. Exit sign at 11 o'clock suggests main corridor. B continues that direction."}

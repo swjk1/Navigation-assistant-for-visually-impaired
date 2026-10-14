@@ -1,0 +1,2 @@
+1325
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Signs point right toward rooms 117-120. Opening A (1 o'clock) aligns with rightward direction. Room 114 precedes 117-120 sequentially."}

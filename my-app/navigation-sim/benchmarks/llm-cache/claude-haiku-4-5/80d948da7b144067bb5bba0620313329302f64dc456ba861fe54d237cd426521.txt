@@ -1,0 +1,2 @@
+2172
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.15, "D": 0.12, "E": 0.08, "F": 0.07, "G": 0.18, "H": 0.25}, "reason": "Exit sign at 5 o'clock suggests main corridor direction. H closest at 7 o'clock, likely corridor continuation toward room 119."}

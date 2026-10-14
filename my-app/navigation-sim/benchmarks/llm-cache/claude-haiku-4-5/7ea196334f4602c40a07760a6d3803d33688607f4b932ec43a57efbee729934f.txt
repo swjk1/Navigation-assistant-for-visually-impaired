@@ -1,0 +1,2 @@
+1195
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Forward (12 o'clock) continues main corridor. Backward (6 o'clock) toward washroom suggests side corridor dead-end."}

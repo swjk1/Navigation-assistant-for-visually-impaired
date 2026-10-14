@@ -1,0 +1,2 @@
+1492
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.15, "D": 0.20, "E": 0.25, "F": 0.15, "G": 0.10}, "reason": "Room numbers 207-220 suggest corridor ahead. E (12 o'clock) continues forward along likely main corridor toward stairs."}

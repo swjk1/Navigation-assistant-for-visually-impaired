@@ -1,0 +1,2 @@
+1735
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Sign '217' suggests corridor with numbered rooms. Opening A continues forward; B enters room."}

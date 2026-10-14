@@ -1,0 +1,2 @@
+2449
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.05, "D": 0.15, "E": 0.2, "F": 0.1}, "reason": "No signs yet. Prefer forward/right directions (A, B, E) as main corridors. D too close, likely side room."}

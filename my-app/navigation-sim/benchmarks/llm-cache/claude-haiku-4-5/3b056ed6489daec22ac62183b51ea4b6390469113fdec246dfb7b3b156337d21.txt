@@ -1,0 +1,2 @@
+2241
+{"probabilities": {"A": 0.15, "B": 0.12, "C": 0.18, "D": 0.08, "E": 0.22, "F": 0.12, "G": 0.10, "H": 0.03}, "reason": "Forward/right directions (C, E) most likely continue main corridor. E closest. Avoid dead-end shops detected ahead."}

@@ -1,0 +1,2 @@
+1334
+{"probabilities": {"A": 0.15, "B": 0.55, "C": 0.30}, "reason": "B continues straight ahead along main corridor. Exit signs suggest main path. Washrooms typically off side corridors."}

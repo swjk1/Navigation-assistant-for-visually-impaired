@@ -1,0 +1,2 @@
+1778
+{"probabilities": {"A": 0.25, "B": 0.50, "C": 0.25}, "reason": "Sign '2O8' suggests room numbering. Straight ahead (B) most likely continues main corridor toward stairs."}

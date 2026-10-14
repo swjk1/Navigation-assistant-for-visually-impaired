@@ -1,0 +1,2 @@
+1680
+{"probabilities": {"A": 0.25, "B": 0.35, "C": 0.10, "D": 0.05, "E": 0.10, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Phone Repair shop at 1 o'clock suggests retail area. Straight ahead (B) or left-forward (A) likely continue main corridor toward exit."}

@@ -1,0 +1,2 @@
+2299
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.15, "E": 0.15, "F": 0.15, "G": 0.10}, "reason": "Straight ahead (A) most likely continues main corridor. Kitchen Store sign suggests shops nearby; side openings (B,D,E) may lead to retail areas including Pizza."}

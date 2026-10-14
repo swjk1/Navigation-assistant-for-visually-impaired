@@ -1,0 +1,2 @@
+1711
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.15, "D": 0.15, "E": 0.15, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "No signs detected yet. Lifts typically accessed via main corridors. Prefer forward/side directions over backward. Equal probability for forward-leaning options."}

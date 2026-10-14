@@ -1,0 +1,2 @@
+1652
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.10, "E": 0.15, "F": 0.20, "G": 0.25, "H": 0.15}, "reason": "Exit sign at 10 o'clock suggests main corridor. Forward/right openings likely shops. Left/back openings suggest main circulation paths."}

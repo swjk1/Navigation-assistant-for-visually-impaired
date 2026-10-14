@@ -1,0 +1,2 @@
+2182
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.20, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.05}, "reason": "Salon sign at 5 o'clock suggests Cinema may be ahead. Prefer forward directions (C, A, D, E) over side/back openings."}

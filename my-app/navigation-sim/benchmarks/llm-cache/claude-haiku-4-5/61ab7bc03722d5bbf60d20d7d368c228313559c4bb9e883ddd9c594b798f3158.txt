@@ -1,0 +1,2 @@
+1459
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25}, "reason": "C continues corridor rightward. Washrooms typically off side corridors. B, D also promising side corridor options."}

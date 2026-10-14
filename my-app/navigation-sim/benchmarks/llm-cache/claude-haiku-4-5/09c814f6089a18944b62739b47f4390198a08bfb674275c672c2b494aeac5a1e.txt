@@ -1,0 +1,2 @@
+2170
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.10, "F": 0.20, "G": 0.10, "H": 0.20}, "reason": "Forward directions (F, H, C, A) suggest main corridor. Washroom/lift behind indicate side corridors. Music likely ahead."}

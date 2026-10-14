@@ -1,0 +1,2 @@
+1137
+{"probabilities": {"A": 0.25, "B": 0.75}, "reason": "Straight ahead (B) continues corridor. Left (A) is side opening, likely washroom location."}

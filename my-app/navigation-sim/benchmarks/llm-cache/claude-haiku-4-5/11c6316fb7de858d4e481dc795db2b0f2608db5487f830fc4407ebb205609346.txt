@@ -1,0 +1,2 @@
+2451
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.35, "E": 0.15, "F": 0.15}, "reason": "Continue forward/left toward unexplored corridor. Noodle Bar sign suggests shops ahead at 1 o'clock. Avoid right turns away from detected signs."}

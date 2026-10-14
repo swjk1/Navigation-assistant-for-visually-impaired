@@ -1,0 +1,2 @@
+1175
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 206 is lower numbered than 210-220 signs pointing left. Opening A continues forward along corridor."}

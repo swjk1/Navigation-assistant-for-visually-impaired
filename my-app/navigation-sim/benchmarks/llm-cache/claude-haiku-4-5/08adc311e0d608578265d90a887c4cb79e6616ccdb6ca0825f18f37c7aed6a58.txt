@@ -1,0 +1,2 @@
+1194
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Straight ahead (A) likely continues main corridor. Left (B) toward lift suggests side corridor, less promising for stairs."}

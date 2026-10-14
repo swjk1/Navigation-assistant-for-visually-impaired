@@ -1,0 +1,2 @@
+1007
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.1, "D": 0.0, "E": 0.05, "F": 0.15, "G": 0.0, "H": 0.6}, "reason": "Lift doors and washroom signs consistently detected towards 4 o'clock; opening H matches closest."}

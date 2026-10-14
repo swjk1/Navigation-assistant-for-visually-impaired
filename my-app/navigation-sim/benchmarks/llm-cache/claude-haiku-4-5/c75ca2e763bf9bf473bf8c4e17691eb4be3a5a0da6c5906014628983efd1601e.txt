@@ -1,0 +1,2 @@
+1629
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.25, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Room 117-120 sign points left. Rooms 114 likely nearby. Right-side openings (A, E, F) most promising for corridor continuation."}

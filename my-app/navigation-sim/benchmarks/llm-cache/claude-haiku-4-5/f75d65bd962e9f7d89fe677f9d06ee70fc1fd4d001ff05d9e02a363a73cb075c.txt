@@ -1,0 +1,2 @@
+2001
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.60}, "reason": "Sign points right (3 o'clock). Opening C at 1 o'clock is closest, likely corridor continuation toward rooms 300-349."}

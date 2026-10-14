@@ -1,0 +1,2 @@
+2282
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.10, "D": 0.15, "E": 0.25, "F": 0.15, "G": 0.05, "H": 0.10}, "reason": "Fashion sign at 2 o'clock suggests retail area. E (2 o'clock, 4.7m) most aligned with sign direction. Toy World likely nearby in retail zone."}

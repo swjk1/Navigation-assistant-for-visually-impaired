@@ -1,0 +1,2 @@
+1585
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.1, "D": 0.1, "E": 0.25, "F": 0.1, "G": 0.05}, "reason": "Room 107 suggests corridor. Forward-left options (A, E) likely continue corridor. Avoid 7 o'clock cluster (F, G) behind."}

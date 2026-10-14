@@ -1,0 +1,2 @@
+2107
+{"probabilities": {"A": 0.25, "B": 0.35, "C": 0.15, "D": 0.25}, "reason": "Straight ahead (A) suggests corridor continuation. Left angles (B, D) likely lead to side corridors or shops. Left perpendicular (C) suggests dead-end room."}

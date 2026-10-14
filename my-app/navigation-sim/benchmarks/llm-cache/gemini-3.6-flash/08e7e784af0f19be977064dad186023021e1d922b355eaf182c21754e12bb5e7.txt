@@ -1,0 +1,2 @@
+1089
+{"probabilities": {"A": 0.1, "B": 0.05, "C": 0.1, "D": 0.25, "E": 0.35, "F": 0.0, "G": 0.05, "H": 0.1}, "reason": "Washrooms are often near lifts; openings D and E head toward the detected lift."}

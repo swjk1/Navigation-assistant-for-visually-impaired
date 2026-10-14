@@ -1,0 +1,2 @@
+2036
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.15, "D": 0.15, "E": 0.20, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "Lift detected at 4 o'clock. Options B, C, E toward that direction. E most likely continues corridor toward lift."}

@@ -1,0 +1,2 @@
+1694
+{"probabilities": {"A": 0.70, "B": 0.15, "C": 0.15}, "reason": "Door ahead suggests corridor continuation. Straight path (12 o'clock) most likely leads to room 206."}

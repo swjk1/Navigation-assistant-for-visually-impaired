@@ -1,0 +1,2 @@
+2075
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.20, "D": 0.15, "E": 0.25}, "reason": "Right angles (3, 4 o'clock) suggest corridor continuation. Left angles likely side corridors. Equal probability for forward-right options."}

@@ -1,0 +1,2 @@
+1682
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Room 218 sign points right. Straight ahead (B) more likely continues main corridor toward numbered rooms."}

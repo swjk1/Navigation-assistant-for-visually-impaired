@@ -1,0 +1,2 @@
+2204
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.05, "D": 0.10, "E": 0.25}, "reason": "Room 308 sign at 5 o'clock suggests corridor continues that direction. Opening A at 5 o'clock likely continues toward 320."}

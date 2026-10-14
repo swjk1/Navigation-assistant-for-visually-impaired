@@ -1,0 +1,2 @@
+2052
+{"probabilities": {"A": 0.55, "B": 0.25, "C": 0.20}, "reason": "Straight ahead (A) likely continues main corridor. Side openings (B,C) may be side corridors with washrooms."}

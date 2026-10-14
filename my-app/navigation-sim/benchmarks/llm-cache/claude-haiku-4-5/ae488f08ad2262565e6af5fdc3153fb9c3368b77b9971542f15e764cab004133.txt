@@ -1,0 +1,2 @@
+2349
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.15, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.15, "H": 0.10}, "reason": "Salon sign at 4 o'clock suggests cinema likely opposite direction. Straight ahead (A) most promising for main corridor. Side options (B, G, C) secondary."}

@@ -1,0 +1,2 @@
+1717
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.20, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.05, "H": 0.10}, "reason": "Optician sign ahead suggests forward corridor. B/C (11/10 o'clock) continue main path. Pharmacy likely ahead or side corridor."}

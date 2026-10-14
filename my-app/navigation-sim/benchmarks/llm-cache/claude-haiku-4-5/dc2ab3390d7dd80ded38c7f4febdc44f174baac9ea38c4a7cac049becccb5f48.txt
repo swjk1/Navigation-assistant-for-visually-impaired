@@ -1,0 +1,2 @@
+2142
+{"probabilities": {"A": 0.25, "B": 0.30, "C": 0.10, "D": 0.25, "E": 0.10}, "reason": "Forward-ish directions (A, B) most likely continue main corridor. Side passages (D) possible. Backward (E) unlikely."}

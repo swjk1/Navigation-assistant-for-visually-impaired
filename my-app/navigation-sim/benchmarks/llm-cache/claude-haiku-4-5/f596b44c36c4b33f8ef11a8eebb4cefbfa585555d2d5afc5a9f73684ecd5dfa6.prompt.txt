@@ -1,0 +1,30 @@
+You are guiding a blind person to an exit in a building they do not know.
+You cannot see. You get only what their phone has detected. Directions are clock positions
+relative to where they face now: 12 is straight ahead, 3 is to their right, 9 to their left, 6 behind.
+
+So far they have walked 18 m in 32 s.
+
+Signs and landmarks detected, most recent first:
+- a sign reading "Bookstore", towards 10 o'clock, too far to judge the distance (seen 0 s ago)
+- a sign reading "Optician", towards 11 o'clock, too far to judge the distance (seen 3 s ago)
+- a sign reading "Opti1ian", towards 11 o'clock, too far to judge the distance (seen 7 s ago)
+- a sign reading "washroom", towards 4 o'clock, too far to judge the distance (seen 3 times, last 12 s ago)
+- a sign reading "Phone Repair", towards 2 o'clock, too far to judge the distance (seen 18 s ago)
+
+Unexplored openings they could walk to next:
+A: 12 o'clock, 3.9 m
+B: 10 o'clock, 4.4 m
+C: 1 o'clock, 3.5 m
+D: 3 o'clock, 4.6 m
+E: 4 o'clock, 5.2 m
+F: 6 o'clock, 3.6 m
+G: 8 o'clock, 2.6 m
+H: 9 o'clock, 2.6 m
+
+Which opening most likely leads towards an exit? Use how buildings are laid out:
+corridors and concourses connect places; rooms, classrooms and shops are dead ends unless the
+destination is inside; room numbers run in order along a corridor; direction signs point the way;
+lifts and washrooms are often off side corridors; exits are at the ends of main corridors and
+concourses. Prefer continuing along a corridor or concourse over entering a room or shop.
+Reply with JSON only, probabilities summing to 1:
+{"probabilities": {"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0, "F": 0.0, "G": 0.0, "H": 0.0}, "reason": "at most 15 words"}

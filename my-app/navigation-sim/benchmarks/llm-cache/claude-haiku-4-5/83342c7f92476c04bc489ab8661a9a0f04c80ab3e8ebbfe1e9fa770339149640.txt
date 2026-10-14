@@ -1,0 +1,2 @@
+1228
+{"probabilities": {"A": 0.35, "B": 0.50, "C": 0.15}, "reason": "Exit signs point 5 o'clock. Option B (11 o'clock) best continues corridor toward that direction."}

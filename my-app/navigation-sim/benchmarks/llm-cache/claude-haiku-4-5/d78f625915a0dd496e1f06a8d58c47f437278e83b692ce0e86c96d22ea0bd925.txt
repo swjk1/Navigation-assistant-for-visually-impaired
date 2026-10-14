@@ -1,0 +1,2 @@
+1787
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.05, "D": 0.30, "E": 0.15}, "reason": "Lift at 9 o'clock suggests main corridor. Room 119 likely ahead or left. Avoid exits and dead ends."}

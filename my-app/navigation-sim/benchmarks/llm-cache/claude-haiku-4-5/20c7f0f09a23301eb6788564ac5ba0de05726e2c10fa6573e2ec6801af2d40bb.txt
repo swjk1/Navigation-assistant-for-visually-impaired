@@ -1,0 +1,2 @@
+2622
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.05, "E": 0.05, "F": 0.35, "G": 0.05, "H": 0.15}, "reason": "Washroom sign at 12 o'clock 2m away. Door at 12 o'clock 2m away. F (9 o'clock, 2.5m) and B (10 o'clock, 4.1m) align with washroom sign direction (10 o'clock, far). F is closest, likely side corridor to washroom."}

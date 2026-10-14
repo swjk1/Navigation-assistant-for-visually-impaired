@@ -1,0 +1,2 @@
+1729
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.10, "D": 0.20, "E": 0.10}, "reason": "Travel Agent sign at 7 o'clock suggests corridor continues leftward. Opening D (7 o'clock, closest) likely continues that direction. A (straight) maintains corridor flow."}

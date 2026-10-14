@@ -1,0 +1,2 @@
+1804
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.08, "D": 0.08, "E": 0.20, "F": 0.05, "G": 0.05, "H": 0.14}, "reason": "Signs point toward 2-4 o'clock. Continue forward (B) or explore right-forward directions (A, E, H). Avoid backtracking (F) and left turns (G)."}

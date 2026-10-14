@@ -1,0 +1,2 @@
+1938
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.15, "D": 0.35}, "reason": "Right openings (B, D) suggest corridor continuation. Burger Grill and Noodle Bar are shops, likely dead ends."}

@@ -1,0 +1,2 @@
+2046
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25}, "reason": "Room 208 sign behind suggests corridor continues backward. Option C explores that direction further, likely corridor."}

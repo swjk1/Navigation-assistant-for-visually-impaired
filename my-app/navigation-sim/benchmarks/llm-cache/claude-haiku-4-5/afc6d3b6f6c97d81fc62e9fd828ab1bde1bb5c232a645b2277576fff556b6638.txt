@@ -1,0 +1,2 @@
+1615
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.15, "F": 0.05, "G": 0.15, "H": 0.10}, "reason": "Sign 'Rooms 107-120' points right. Room 116 in that range. Door at 3 o'clock (D) most likely continues corridor toward higher room numbers."}

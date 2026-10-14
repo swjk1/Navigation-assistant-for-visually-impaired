@@ -1,0 +1,2 @@
+1642
+{"probabilities": {"A": 0.35, "B": 0.30, "C": 0.20, "D": 0.15}, "reason": "Left-forward (A) suggests corridor continuation. Right-forward (B) also viable. Right (C) and back-right (D) less likely for main routes."}

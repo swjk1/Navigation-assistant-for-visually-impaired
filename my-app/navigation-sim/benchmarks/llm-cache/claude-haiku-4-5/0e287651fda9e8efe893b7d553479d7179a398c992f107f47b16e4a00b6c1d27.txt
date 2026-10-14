@@ -1,0 +1,2 @@
+2073
+{"probabilities": {"A": 0.05, "B": 0.35, "C": 0.08, "D": 0.15, "E": 0.08, "F": 0.10, "G": 0.12, "H": 0.07}, "reason": "Phone Repair sign at 12 o'clock suggests main corridor ahead. Continue straight (B) most likely. Side openings less probable."}

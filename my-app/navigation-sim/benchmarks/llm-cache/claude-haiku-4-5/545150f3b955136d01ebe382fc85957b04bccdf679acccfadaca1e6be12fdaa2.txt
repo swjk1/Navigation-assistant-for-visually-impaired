@@ -1,0 +1,2 @@
+1620
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.20, "D": 0.10, "E": 0.05, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (B) most likely continues main corridor. Side options (A, C, F) explore branches. Jewellery signs suggest retail area nearby."}

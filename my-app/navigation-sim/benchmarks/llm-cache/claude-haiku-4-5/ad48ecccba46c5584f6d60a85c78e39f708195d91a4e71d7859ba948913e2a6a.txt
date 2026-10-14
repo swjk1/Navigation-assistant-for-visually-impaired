@@ -1,0 +1,2 @@
+1828
+{"probabilities": {"A": 0.65, "B": 0.15, "C": 0.10, "D": 0.10}, "reason": "Sign points left toward rooms 117-120. Straight ahead (A) likely continues main corridor. Left (B) too close, probably side corridor."}

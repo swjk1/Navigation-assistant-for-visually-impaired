@@ -1,0 +1,2 @@
+1843
+{"probabilities": {"A": 0.70, "B": 0.20, "C": 0.10}, "reason": "Exit sign at 1 o'clock points toward A. Likely main corridor direction. B and C deviate away."}

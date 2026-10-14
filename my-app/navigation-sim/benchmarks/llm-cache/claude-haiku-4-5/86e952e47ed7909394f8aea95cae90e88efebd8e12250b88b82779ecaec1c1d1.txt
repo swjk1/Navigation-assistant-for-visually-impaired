@@ -1,0 +1,2 @@
+2308
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.05, "F": 0.25, "G": 0.30}, "reason": "Continuing straight (G) or forward-right (F) likely follows main corridor. Repeated 11 o'clock doors (A) suggest explored path."}

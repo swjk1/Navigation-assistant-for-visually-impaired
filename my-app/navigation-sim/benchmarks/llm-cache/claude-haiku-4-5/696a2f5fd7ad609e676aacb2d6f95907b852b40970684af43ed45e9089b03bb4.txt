@@ -1,0 +1,2 @@
+1740
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.15, "D": 0.20, "E": 0.18, "F": 0.12, "G": 0.10, "H": 0.10}, "reason": "Direction sign points right toward rooms 107-120. Left side (9-10 o'clock) has multiple doors, likely corridor. Continue left."}

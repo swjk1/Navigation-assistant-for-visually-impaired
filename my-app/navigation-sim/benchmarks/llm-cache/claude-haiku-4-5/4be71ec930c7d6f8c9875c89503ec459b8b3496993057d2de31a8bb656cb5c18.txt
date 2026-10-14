@@ -1,0 +1,2 @@
+1691
+{"probabilities": {"A": 0.12, "B": 0.28, "C": 0.08, "D": 0.08, "E": 0.25, "F": 0.05, "G": 0.08, "H": 0.06}, "reason": "Straight ahead (B, E) most likely continues main corridor. Home Goods sign suggests retail area; lift typically nearby. Avoid side angles and backtracking."}

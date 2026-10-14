@@ -1,0 +1,2 @@
+1525
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.20, "E": 0.15, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Forward directions (C, D, E) preferred for corridor continuation. Side angles less likely for main paths."}

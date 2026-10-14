@@ -1,0 +1,2 @@
+1670
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Room 309 likely ahead. Straight corridors preferred. 312 sign suggests nearby rooms."}

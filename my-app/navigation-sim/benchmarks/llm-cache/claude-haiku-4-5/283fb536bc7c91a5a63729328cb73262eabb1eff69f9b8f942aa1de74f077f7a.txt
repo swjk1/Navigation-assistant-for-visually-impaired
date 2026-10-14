@@ -1,0 +1,2 @@
+2980
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.55, "D": 0.10, "E": 0.05, "F": 0.02, "G": 0.03}, "reason": "Pizza sign detected straight ahead (12 o'clock). Continue forward via opening C, most direct route."}

@@ -1,0 +1,2 @@
+2411
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.15, "D": 0.15, "E": 0.10, "F": 0.20, "G": 0.15, "H": 0.10}, "reason": "Lift likely at corridor end or side passage. F (behind) suggests main corridor continuation. C, D forward toward shops. B toward Electronics sign area."}

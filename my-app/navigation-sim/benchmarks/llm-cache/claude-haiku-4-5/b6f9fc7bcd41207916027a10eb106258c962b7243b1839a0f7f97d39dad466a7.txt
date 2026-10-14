@@ -1,0 +1,2 @@
+1198
+{"probabilities": {"A": 0.65, "B": 0.25, "C": 0.10}, "reason": "Lift door detected straight ahead multiple times. Option A closest to 12 o'clock, most aligned with corridor direction."}

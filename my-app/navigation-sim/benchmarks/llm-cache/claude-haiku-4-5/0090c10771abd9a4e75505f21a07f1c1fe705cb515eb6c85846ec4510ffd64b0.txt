@@ -1,0 +1,2 @@
+2366
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.10, "H": 0.15}, "reason": "Multiple food signs detected right (1 o'clock) and left (11 o'clock). Pizza likely in concourse with other restaurants. Explore all directions equally."}

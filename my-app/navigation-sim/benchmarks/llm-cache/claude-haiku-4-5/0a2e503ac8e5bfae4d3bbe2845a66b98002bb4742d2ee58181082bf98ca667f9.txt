@@ -1,0 +1,2 @@
+1791
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 307 ahead suggests corridor continues right. 309 likely follows sequentially. Washroom at 7 is side corridor."}

@@ -1,0 +1,2 @@
+1594
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.25, "D": 0.25}, "reason": "Lift detected at 12 o'clock recently. Option D continues straight ahead toward detected lift. Options A and C at 10 o'clock match earlier detection. Option B at 1 o'clock less aligned with detections. Insufficient data for confident differentiation."}

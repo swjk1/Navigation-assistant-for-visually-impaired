@@ -1,0 +1,2 @@
+1910
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.6}, "reason": "Lift at 12 o'clock suggests main corridor ahead. Continue straight (C) most likely. Sign points left to rooms 217-220, dead end."}

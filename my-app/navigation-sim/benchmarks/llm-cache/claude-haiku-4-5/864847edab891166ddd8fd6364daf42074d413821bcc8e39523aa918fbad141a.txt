@@ -1,0 +1,2 @@
+2377
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.15, "D": 0.10, "E": 0.05, "F": 0.10, "G": 0.15}, "reason": "Continue forward (A) or left (B,C) along likely corridor. Avoid right side shops (E,F). G uncertain."}

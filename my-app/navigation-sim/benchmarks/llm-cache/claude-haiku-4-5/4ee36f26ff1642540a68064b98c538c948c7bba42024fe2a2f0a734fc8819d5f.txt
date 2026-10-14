@@ -1,0 +1,2 @@
+1648
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.08, "F": 0.05, "G": 0.04, "H": 0.03}, "reason": "Exit sign and door detected at 12 o'clock. Option A continues straight ahead toward detected signs, most likely main corridor."}

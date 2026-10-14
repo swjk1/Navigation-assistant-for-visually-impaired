@@ -1,0 +1,2 @@
+2201
+{"probabilities": {"A": 0.25, "B": 0.30, "C": 0.08, "D": 0.05, "E": 0.10, "F": 0.07, "G": 0.05, "H": 0.10}, "reason": "Exit sign at 1 o'clock suggests forward direction. B (12 o'clock) most aligned with exit sign direction. A (2 o'clock) also promising. Avoid side corridors and dead ends."}

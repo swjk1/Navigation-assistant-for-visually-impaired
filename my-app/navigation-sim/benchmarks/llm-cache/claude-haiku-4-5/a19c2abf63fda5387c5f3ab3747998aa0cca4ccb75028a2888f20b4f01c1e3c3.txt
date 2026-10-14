@@ -1,0 +1,2 @@
+1485
+{"probabilities": {"A": 0.55, "B": 0.25, "C": 0.20}, "reason": "Straight ahead (12 o'clock) most likely continues corridor. Room numbers 214-218 suggest nearby rooms, not stairs."}

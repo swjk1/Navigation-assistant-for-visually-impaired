@@ -1,0 +1,2 @@
+2256
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.10, "E": 0.20, "F": 0.15, "G": 0.10}, "reason": "Home Goods sign suggests retail area. Lifts typically off side corridors. Multiple 6 o'clock options suggest main corridor behind."}

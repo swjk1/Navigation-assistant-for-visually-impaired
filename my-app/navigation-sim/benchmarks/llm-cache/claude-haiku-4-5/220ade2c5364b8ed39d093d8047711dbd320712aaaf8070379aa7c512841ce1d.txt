@@ -1,0 +1,2 @@
+1214
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Exit sign points left toward 11 o'clock. Washrooms often near exits. Room 209 suggests corridor. Backtracking unlikely."}

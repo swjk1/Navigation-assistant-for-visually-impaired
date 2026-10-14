@@ -1,0 +1,2 @@
+1644
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.20, "D": 0.10, "E": 0.05, "F": 0.15, "G": 0.02, "H": 0.08}, "reason": "No signs detected yet. Prefer forward/side directions (B, C) over backward (G). Avoid dead-ends."}

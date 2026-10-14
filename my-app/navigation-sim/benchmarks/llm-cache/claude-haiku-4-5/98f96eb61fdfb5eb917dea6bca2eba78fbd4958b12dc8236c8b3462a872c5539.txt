@@ -1,0 +1,2 @@
+1461
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.10, "E": 0.25, "F": 0.15, "G": 0.03, "H": 0.02}, "reason": "Lifts and washrooms often off side corridors. E (11 o'clock) near lift area, promising. C also viable side corridor."}

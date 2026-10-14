@@ -1,0 +1,2 @@
+1479
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.05, "E": 0.05, "F": 0.25, "G": 0.35, "H": 0.10}, "reason": "Pizza sign at 11 o'clock. G closest at 1.4m in that direction. H also viable. Prefer corridor continuation."}

@@ -1,0 +1,2 @@
+1825
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.10, "E": 0.35, "F": 0.10, "G": 0.05, "H": 0.15}, "reason": "Straight ahead (E) most likely continues main corridor. Bakery signs at 2 o'clock suggest shops cluster there; avoid. Left openings (B, H) explore new areas."}

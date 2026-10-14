@@ -1,0 +1,2 @@
+2421
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.08, "D": 0.20, "E": 0.12, "F": 0.08, "G": 0.18, "H": 0.09}, "reason": "Doors at 8 o'clock suggest corridor. Forward directions (11, 1, 10, 2 o'clock) likely continue main corridor. Room 119 probably ahead."}

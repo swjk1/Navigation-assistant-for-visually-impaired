@@ -1,0 +1,2 @@
+1311
+{"probabilities": {"A": 0.5, "B": 0.3, "C": 0.2}, "reason": "Straight ahead (12 o'clock) most likely continues main corridor. Side openings often lead to washrooms or dead ends."}

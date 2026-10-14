@@ -1,0 +1,2 @@
+1848
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Stairs sign at 10 o'clock suggests leftward direction. Opening A at 1 o'clock aligns better with that trajectory than B at 2 o'clock."}

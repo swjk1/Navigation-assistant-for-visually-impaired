@@ -1,0 +1,2 @@
+2320
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.10, "E": 0.50, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Sign 'Rooms 107-120' points right. Room 111 in that range. Direction 2 o'clock (E) aligns with right."}

@@ -1,0 +1,2 @@
+2328
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room numbers 206-210 suggest main corridor to right. Left opening too close, likely dead-end room."}

@@ -1,0 +1,2 @@
+2985
+{"probabilities": {"A": 0.12, "B": 0.15, "C": 0.08, "D": 0.25, "E": 0.18, "F": 0.12, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (D, F) most likely continues main corridor. Side openings (B, E) may lead to lifts off corridors. Shops detected left suggest avoiding that direction."}

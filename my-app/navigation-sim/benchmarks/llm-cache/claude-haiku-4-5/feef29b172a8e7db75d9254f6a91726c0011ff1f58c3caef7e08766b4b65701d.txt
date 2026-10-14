@@ -1,0 +1,2 @@
+2153
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.08, "D": 0.12, "E": 0.10, "F": 0.08, "G": 0.07, "H": 0.15}, "reason": "H closest to bookstore sign cluster. B straight ahead suggests main corridor. A, H align with detected shops indicating concourse direction."}

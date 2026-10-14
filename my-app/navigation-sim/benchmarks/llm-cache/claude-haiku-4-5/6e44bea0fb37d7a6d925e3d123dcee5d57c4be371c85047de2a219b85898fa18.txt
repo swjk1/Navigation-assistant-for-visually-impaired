@@ -1,0 +1,2 @@
+1667
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.15, "E": 0.15, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Games and Cinema signs suggest retail area. Florist likely nearby. Straight ahead (A) most promising; side openings (D, E, B) secondary options."}

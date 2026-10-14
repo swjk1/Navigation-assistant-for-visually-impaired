@@ -1,0 +1,2 @@
+1416
+{"probabilities": {"A": 0.45, "B": 0.25, "C": 0.10, "D": 0.05, "E": 0.15}, "reason": "Exit signs point toward 1 o'clock (option A). Continue main corridor ahead (B) as backup. Avoid backtracking (D)."}

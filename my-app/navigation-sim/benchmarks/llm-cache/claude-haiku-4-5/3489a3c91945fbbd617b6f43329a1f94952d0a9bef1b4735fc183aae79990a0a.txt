@@ -1,0 +1,2 @@
+1760
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.15, "F": 0.20, "G": 0.35, "H": 0.10}, "reason": "Continue straight (G) toward Florist/Toy World signs. Side openings (E,F) may lead to Cinema. Avoid backtracking (D)."}

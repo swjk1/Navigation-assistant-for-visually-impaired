@@ -1,0 +1,2 @@
+2149
+{"probabilities": {"A": 0.25, "B": 0.40, "C": 0.30, "D": 0.05}, "reason": "Continue straight (B) most likely along corridor. Door at 11 o'clock suggests C viable. Avoid backtracking (D)."}

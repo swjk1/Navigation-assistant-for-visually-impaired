@@ -1,0 +1,2 @@
+2134
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.15, "E": 0.10, "F": 0.20, "G": 0.10, "H": 0.10}, "reason": "Washrooms typically off side corridors. Forward (B) or side corridors (D, F) most likely. Avoid shops."}

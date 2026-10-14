@@ -1,0 +1,2 @@
+1354
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.15, "E": 0.25, "F": 0.35}, "reason": "Sign indicates rooms 107-120 right. Continue corridor ahead or left. Avoid dead-end doors."}

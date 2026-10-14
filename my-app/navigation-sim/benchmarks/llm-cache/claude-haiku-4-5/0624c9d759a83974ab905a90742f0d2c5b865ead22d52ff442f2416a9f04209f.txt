@@ -1,0 +1,2 @@
+1516
+{"probabilities": {"A": 0.45, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.05, "F": 0.35}, "reason": "Lift door detected at 2 o'clock. Option A closest to that direction. F continues corridor."}

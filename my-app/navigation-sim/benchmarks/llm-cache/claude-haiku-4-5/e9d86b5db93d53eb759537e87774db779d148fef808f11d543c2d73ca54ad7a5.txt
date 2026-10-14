@@ -1,0 +1,2 @@
+2245
+{"probabilities": {"A": 0.05, "B": 0.75, "C": 0.05, "D": 0.05, "E": 0.02, "F": 0.03, "G": 0.02, "H": 0.03}, "reason": "Washroom sign at 2 o'clock seen 4s ago. Opening B at 2 o'clock, 4.6m aligns with sign direction."}

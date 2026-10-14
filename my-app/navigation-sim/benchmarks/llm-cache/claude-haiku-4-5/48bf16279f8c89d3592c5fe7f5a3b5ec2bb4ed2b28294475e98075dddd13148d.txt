@@ -1,0 +1,2 @@
+2233
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.15, "D": 0.35}, "reason": "Room 114 likely ahead. Door at 1 o'clock suggests corridor continues forward. Avoid 3 o'clock (likely side room). Prefer 10-11 o'clock forward directions."}

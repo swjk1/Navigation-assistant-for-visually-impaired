@@ -1,0 +1,2 @@
+2039
+{"probabilities": {"A": 0.05, "B": 0.70, "C": 0.05, "D": 0.10, "E": 0.10}, "reason": "Room 316 nearby at 2 o'clock. Continue straight (12 o'clock) along corridor toward higher room numbers."}

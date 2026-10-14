@@ -1,0 +1,25 @@
+You are guiding a blind person to room 111 in a building they do not know.
+You cannot see. You get only what their phone has detected. Directions are clock positions
+relative to where they face now: 12 is straight ahead, 3 is to their right, 9 to their left, 6 behind.
+
+So far they have walked 158 m in 245 s.
+
+Signs and landmarks detected, most recent first:
+- a lift door, 1 o'clock, 2 m away (seen 3 times, last 1 s ago)
+- a sign reading "washroom", 6 o'clock, 3 m away (seen 12 s ago)
+- a door, 7 o'clock, 4 m away (seen 12 s ago)
+- a sign reading "106", 7 o'clock, 12 m away (seen 2 times, last 25 s ago)
+
+Unexplored openings they could walk to next:
+A: 6 o'clock, 1.3 m
+B: 4 o'clock, 3.6 m
+C: 6 o'clock, 7.5 m
+D: 5 o'clock, 5.2 m
+
+Which opening most likely leads towards room 111? Use how buildings are laid out:
+corridors and concourses connect places; rooms, classrooms and shops are dead ends unless the
+destination is inside; room numbers run in order along a corridor; direction signs point the way;
+lifts and washrooms are often off side corridors; exits are at the ends of main corridors and
+concourses. Prefer continuing along a corridor or concourse over entering a room or shop.
+Reply with JSON only, probabilities summing to 1:
+{"probabilities": {"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0}, "reason": "at most 15 words"}

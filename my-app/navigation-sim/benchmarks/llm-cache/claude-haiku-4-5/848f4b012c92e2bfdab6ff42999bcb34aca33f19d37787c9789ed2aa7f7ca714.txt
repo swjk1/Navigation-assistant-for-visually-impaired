@@ -1,0 +1,2 @@
+2153
+{"probabilities": {"A": 0.25, "B": 0.30, "C": 0.05, "D": 0.15, "E": 0.05, "F": 0.10, "G": 0.10}, "reason": "B continues forward naturally. Washroom sign suggests side corridor. Avoid backtracking (F). Prefer forward/right directions."}

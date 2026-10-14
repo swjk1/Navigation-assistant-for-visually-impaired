@@ -1,0 +1,2 @@
+2014
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.25, "D": 0.25}, "reason": "Insufficient data. Recent signs show rooms 211, 216, 209. Need clearer room number progression to determine corridor direction toward 206."}

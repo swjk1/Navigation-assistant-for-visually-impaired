@@ -1,0 +1,2 @@
+2222
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.10, "F": 0.15, "G": 0.20, "H": 0.05}, "reason": "Pet Shop sign at 2 o'clock suggests shops cluster there. Opening G at 2 o'clock most likely continues toward florist. Avoid dead-end shops."}

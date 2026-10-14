@@ -1,0 +1,2 @@
+1170
+{"probabilities": {"A": 0.7, "B": 0.05, "C": 0.15, "D": 0.02, "E": 0.04, "F": 0.01, "G": 0.015, "H": 0.015}, "reason": "Lift doors were repeatedly detected directly ahead at 12 and 1 o'clock."}

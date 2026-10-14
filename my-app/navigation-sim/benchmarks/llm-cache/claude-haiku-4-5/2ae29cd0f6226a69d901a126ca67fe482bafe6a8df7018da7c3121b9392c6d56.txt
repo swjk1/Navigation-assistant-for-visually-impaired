@@ -1,0 +1,2 @@
+2105
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.10, "E": 0.25, "F": 0.15}, "reason": "Prefer forward/side corridors (B, E) over backward openings. Avoid clustered 5 o'clock options (C, D)."}

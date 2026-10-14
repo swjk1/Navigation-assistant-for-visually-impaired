@@ -1,0 +1,2 @@
+3029
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.15, "D": 0.25}, "reason": "Sign 'Rooms 107-120' points right. Options A/B at 1 o'clock align with corridor. D at 11 o'clock near exit sign, likely side corridor."}

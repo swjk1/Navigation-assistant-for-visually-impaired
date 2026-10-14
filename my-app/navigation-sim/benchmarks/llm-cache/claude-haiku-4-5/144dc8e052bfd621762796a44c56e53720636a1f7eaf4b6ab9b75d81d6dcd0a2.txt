@@ -1,0 +1,2 @@
+1396
+{"probabilities": {"A": 0.7, "B": 0.2, "C": 0.1}, "reason": "Lift at 1 o'clock suggests corridor continues forward-right. Option A (2 o'clock) most aligned with corridor direction."}

@@ -1,0 +1,2 @@
+1610
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.25, "D": 0.20, "E": 0.15}, "reason": "Forward-ish directions (C, A) suggest corridor continuation. Side corridors (D, C) often contain lifts."}

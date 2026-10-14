@@ -1,0 +1,2 @@
+1713
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.12, "D": 0.25, "E": 0.28, "F": 0.08, "G": 0.07, "H": 0.07}, "reason": "Continue straight ahead (D, E) along main corridor. Exit signs suggest 3 o'clock direction; avoid dead-end shops."}

@@ -1,0 +1,2 @@
+2282
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.25, "D": 0.10, "E": 0.05, "F": 0.10, "G": 0.05, "H": 0.10}, "reason": "Straight ahead (B, C) most likely continues main corridor. Side openings less likely. Music/Home Goods signs suggest retail area."}

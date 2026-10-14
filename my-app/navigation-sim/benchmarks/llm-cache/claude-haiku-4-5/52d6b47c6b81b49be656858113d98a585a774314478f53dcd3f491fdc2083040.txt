@@ -1,0 +1,2 @@
+1547
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.15, "D": 0.15, "E": 0.20, "F": 0.10, "G": 0.12, "H": 0.08}, "reason": "Multiple food venues detected left (9-11 o'clock). Pizza likely in same cluster. Prefer corridor continuation over dead-end shops."}

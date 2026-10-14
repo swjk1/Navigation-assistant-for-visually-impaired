@@ -1,0 +1,2 @@
+1949
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.15, "D": 0.10, "E": 0.20, "F": 0.15}, "reason": "Jewellery sign at 11 o'clock suggests corridor direction. Opening B (11 o'clock) most aligned with sign direction."}

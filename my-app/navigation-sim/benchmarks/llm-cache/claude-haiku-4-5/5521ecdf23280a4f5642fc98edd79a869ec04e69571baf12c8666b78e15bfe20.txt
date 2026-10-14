@@ -1,0 +1,2 @@
+1715
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.15, "D": 0.25, "E": 0.07, "F": 0.05, "G": 0.10, "H": 0.25}, "reason": "Lift detected at 5 o'clock. Directions 10-12 o'clock align with exit/door signs. H and D continue forward; C aligns with recent signs."}

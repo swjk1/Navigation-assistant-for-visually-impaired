@@ -1,0 +1,2 @@
+2161
+{"probabilities": {"A": 0.25, "B": 0.30, "C": 0.30, "D": 0.15}, "reason": "Prefer forward/right directions (2-3 o'clock) as likely corridor continuations over leftward deviation."}

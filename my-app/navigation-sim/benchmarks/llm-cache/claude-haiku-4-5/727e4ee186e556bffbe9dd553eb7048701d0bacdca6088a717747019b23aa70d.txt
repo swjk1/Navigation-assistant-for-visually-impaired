@@ -1,0 +1,2 @@
+1727
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.20, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Washrooms typically off side corridors. Continue forward (C) or explore left-forward openings (B, D) away from shops detected left."}

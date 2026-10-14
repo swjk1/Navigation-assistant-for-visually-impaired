@@ -1,0 +1,2 @@
+2639
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.20, "D": 0.25, "E": 0.10, "F": 0.05}, "reason": "Exit signs point left (7 o'clock) and upper-left (10-11 o'clock). Options B, C, E at 4 o'clock align with exit direction. D (7 o'clock) matches recent exit sign. Continue corridor over dead-end rooms."}

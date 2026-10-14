@@ -1,0 +1,2 @@
+1715
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.5}, "reason": "C is closest, likely corridor entrance. A could be main corridor. B probably side room."}

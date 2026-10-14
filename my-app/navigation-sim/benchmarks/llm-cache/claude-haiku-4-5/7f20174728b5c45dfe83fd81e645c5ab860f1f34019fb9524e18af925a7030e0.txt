@@ -1,0 +1,2 @@
+1784
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 301 is lower numbered than 311-320 signs ahead. Continue straight (A) along corridor toward lower numbers."}

@@ -1,0 +1,2 @@
+1177
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign 314 at 11 o'clock suggests corridor with numbered rooms. Lifts often off side corridors. Continue that direction."}

@@ -1,0 +1,2 @@
+2146
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.05, "E": 0.10, "F": 0.15, "G": 0.15, "H": 0.05}, "reason": "Continue forward (A) or explore side corridors (B, F, G). Avoid small dead-end shops (D, E, H)."}

@@ -1,0 +1,2 @@
+1895
+{"probabilities": {"A": 0.7, "B": 0.15, "C": 0.15}, "reason": "Room 320 ahead. Sign 314 at 2 o'clock suggests corridor continues forward. Exit signs indicate main path. A continues corridor direction."}

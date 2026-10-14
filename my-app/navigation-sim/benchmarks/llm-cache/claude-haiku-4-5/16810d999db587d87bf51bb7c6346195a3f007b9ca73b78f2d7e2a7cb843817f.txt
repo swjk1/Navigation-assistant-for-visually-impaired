@@ -1,0 +1,2 @@
+2562
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.15, "D": 0.20, "E": 0.05, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Burger Grill sign ahead suggests forward corridor. Continue straight (A) or slightly left (D) most likely. Noodle Bar at 1 o'clock suggests right-forward options (B, C) less promising."}

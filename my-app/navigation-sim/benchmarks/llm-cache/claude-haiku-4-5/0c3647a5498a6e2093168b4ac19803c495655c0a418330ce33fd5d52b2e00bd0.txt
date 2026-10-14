@@ -1,0 +1,2 @@
+2330
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.35, "E": 0.05, "F": 0.10, "G": 0.10}, "reason": "Sign points left (rooms 107-120). Door at 12 o'clock most recent. Prefer straight/forward corridor continuation over side openings."}

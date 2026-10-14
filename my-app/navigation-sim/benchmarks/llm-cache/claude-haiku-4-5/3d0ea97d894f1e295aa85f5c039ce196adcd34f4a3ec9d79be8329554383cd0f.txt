@@ -1,0 +1,2 @@
+1329
+{"probabilities": {"A": 0.7, "B": 0.2, "C": 0.1}, "reason": "Room 114 ahead. Straight (12 o'clock) continues corridor. Side openings likely dead-end rooms."}

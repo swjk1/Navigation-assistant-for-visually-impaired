@@ -1,0 +1,2 @@
+2195
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.08, "E": 0.12, "F": 0.10, "G": 0.08, "H": 0.17}, "reason": "H closest, likely side corridor. B continues forward past shops. Lifts typically off main corridors."}

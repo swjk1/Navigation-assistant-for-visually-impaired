@@ -1,0 +1,2 @@
+1469
+{"probabilities": {"A": 0.15, "B": 0.70, "C": 0.15}, "reason": "Lift detected 22s ago at 7 o'clock. Option B at 7 o'clock most likely continues toward it."}

@@ -1,0 +1,2 @@
+1872
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign '20I' at 8 o'clock suggests room 218 nearby. Opening A at 11 o'clock continues corridor direction. B is dead-end door."}

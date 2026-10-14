@@ -1,0 +1,2 @@
+1607
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.05, "D": 0.10, "E": 0.25, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Door at 1 o'clock (3s ago) most promising. Pharmacy likely ahead or nearby. Avoid shops (Optician, Sho0 Palace)."}

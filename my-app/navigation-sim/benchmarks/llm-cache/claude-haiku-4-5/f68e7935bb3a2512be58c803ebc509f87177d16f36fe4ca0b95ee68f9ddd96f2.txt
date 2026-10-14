@@ -1,0 +1,2 @@
+1875
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.15, "D": 0.25}, "reason": "Travel Agent at 4 o'clock suggests rightward corridor. A (11 o'clock) continues forward; D (5 o'clock) follows sign direction; B, C are leftward/backward."}

@@ -1,0 +1,2 @@
+1691
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.25, "E": 0.20, "F": 0.05, "G": 0.10, "H": 0.20}, "reason": "Signs ahead (12 o'clock) and right (1-2 o'clock) suggest corridor. H toward Taco Stand sign; D straight ahead toward Noodle Bar."}

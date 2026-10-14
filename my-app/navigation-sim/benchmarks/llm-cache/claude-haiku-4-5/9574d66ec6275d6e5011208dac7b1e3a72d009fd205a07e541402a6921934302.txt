@@ -1,0 +1,2 @@
+2431
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Stairs sign at 1 o'clock suggests corridor continuation. Room 104 likely accessible via stairs. Option B too close, likely a room."}

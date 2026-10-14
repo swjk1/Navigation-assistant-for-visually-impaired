@@ -1,0 +1,2 @@
+1710
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Lift detected ahead at 12 o'clock. Opening A at 1 o'clock continues forward direction. B diverges backward."}

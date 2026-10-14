@@ -1,0 +1,2 @@
+1608
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.08, "D": 0.25, "E": 0.20, "F": 0.05, "G": 0.07, "H": 0.10}, "reason": "Room 106 detected left; 114 likely ahead/right. Prefer forward/right openings over backtracking."}

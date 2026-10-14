@@ -1,0 +1,2 @@
+1775
+{"probabilities": {"A": 0.55, "B": 0.30, "C": 0.15}, "reason": "A is farthest, likely main corridor. B and C closer, possibly side corridors or rooms. Exit signs suggest continuing forward."}

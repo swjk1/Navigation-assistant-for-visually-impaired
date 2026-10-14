@@ -1,0 +1,2 @@
+1070
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.1, "E": 0.1, "F": 0.6, "G": 0.02, "H": 0.03}, "reason": "Sign indicates rooms 101-106 are to the left, matching 9 o'clock."}

@@ -1,0 +1,2 @@
+1394
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.25, "D": 0.15}, "reason": "Stairs sign at 1 o'clock suggests lift nearby. Opening A aligns with sign direction, most promising route."}

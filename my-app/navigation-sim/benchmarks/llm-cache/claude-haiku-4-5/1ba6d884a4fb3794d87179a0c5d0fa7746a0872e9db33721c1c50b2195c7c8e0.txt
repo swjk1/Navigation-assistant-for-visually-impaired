@@ -1,0 +1,2 @@
+1222
+{"probabilities": {"A": 0.85, "B": 0.15}, "reason": "Room 101 sign ahead suggests corridor continues forward. Opening A at 11 o'clock likely continues corridor toward higher room numbers."}

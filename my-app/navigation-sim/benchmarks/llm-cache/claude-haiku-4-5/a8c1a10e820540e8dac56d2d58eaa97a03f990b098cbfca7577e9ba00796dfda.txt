@@ -1,0 +1,2 @@
+2068
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 218 ahead. Sign 214 at 2 o'clock suggests rightward progression. Continue straight (12 o'clock) along corridor."}

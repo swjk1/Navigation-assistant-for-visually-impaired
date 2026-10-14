@@ -1,0 +1,2 @@
+1631
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.10, "D": 0.15, "E": 0.25, "F": 0.05, "G": 0.15, "H": 0.05}, "reason": "Continue straight (E) toward Tea House sign. Side corridors (A, D, G) possible. Avoid dead-end shops (B, C, F, H)."}

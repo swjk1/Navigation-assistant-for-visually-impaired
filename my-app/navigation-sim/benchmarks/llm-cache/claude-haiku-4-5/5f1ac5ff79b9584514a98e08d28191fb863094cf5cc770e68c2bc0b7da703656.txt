@@ -1,0 +1,2 @@
+2240
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.15, "E": 0.1, "F": 0.2, "G": 0.2}, "reason": "Exit sign points right (3 o'clock). Continuing forward (C) or backward (D, F, G) likely follows main corridor. Avoid shop signs (A, B, E)."}

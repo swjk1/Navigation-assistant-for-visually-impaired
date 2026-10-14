@@ -1,0 +1,2 @@
+1378
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.35, "E": 0.15}, "reason": "Washrooms often off side corridors. Closest option D at 4 o'clock, 2.2m likely side corridor entrance."}

@@ -1,0 +1,2 @@
+1895
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Straight ahead (A) most likely continues main corridor. Side options (B, D) could be secondary corridors. Avoid tight clusters suggesting dead-end rooms."}

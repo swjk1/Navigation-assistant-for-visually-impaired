@@ -1,0 +1,2 @@
+1664
+{"probabilities": {"A": 0.25, "B": 0.10, "C": 0.10, "D": 0.10, "E": 0.15, "F": 0.05, "G": 0.25}, "reason": "Jewellery sign at 11 o'clock suggests leftward corridor. Options A, G, C explore left/forward. F too close, likely dead-end. Prefer continuing corridor over backtracking."}

@@ -1,0 +1,2 @@
+2178
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.15, "E": 0.15, "F": 0.15, "G": 0.25, "H": 0.10}, "reason": "Exit signs point right (2 o'clock). Backtrack left (11 o'clock) to explore main corridor. Pharmacy likely off main route."}

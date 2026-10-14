@@ -1,0 +1,2 @@
+2069
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25}, "reason": "Straight ahead (C, D) suggests corridor continuation. Room numbers 206-208 indicate numbered corridor. Washrooms typically off side corridors or main routes."}

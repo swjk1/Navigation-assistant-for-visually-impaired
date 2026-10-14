@@ -1,0 +1,2 @@
+2396
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.35, "E": 0.25}, "reason": "Direction sign points left (9 o'clock). Room 308 at 10 o'clock suggests corridor. Options B, D, E at 7 o'clock align with leftward direction. D is optimal distance for corridor continuation."}

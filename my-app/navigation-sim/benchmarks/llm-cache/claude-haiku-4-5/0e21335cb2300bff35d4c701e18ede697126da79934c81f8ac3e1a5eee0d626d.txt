@@ -1,0 +1,2 @@
+1733
+{"probabilities": {"A": 0.55, "B": 0.15, "C": 0.30}, "reason": "A continues forward along corridor. B reverses direction. C is leftward side corridor, possibly to stairs."}

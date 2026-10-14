@@ -1,0 +1,2 @@
+1079
+{"probabilities": {"A": 0.55, "B": 0.45}, "reason": "A is farther, likely main corridor. B closer but may be side corridor or room."}

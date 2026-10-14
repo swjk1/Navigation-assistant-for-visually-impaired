@@ -1,0 +1,2 @@
+2198
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.12, "D": 0.10, "E": 0.25, "F": 0.08, "G": 0.12, "H": 0.20}, "reason": "Washrooms typically off main corridors. E (straight ahead) most likely main corridor. H (right) secondary option. Side corridors A, C, D plausible."}

@@ -1,0 +1,2 @@
+1491
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.50, "F": 0.15, "G": 0.05}, "reason": "Sign 'Rooms 107-120' points right. E (12 o'clock) continues main corridor. C/F (5 o'clock) toward lift area."}

@@ -1,0 +1,2 @@
+3832
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.10, "D": 0.15, "E": 0.45, "F": 0.05, "G": 0.05, "H": 0.00}, "reason": "Lift door detected at 11 o'clock. E at 11 o'clock, 4.7m aligns best with detected lift direction."}

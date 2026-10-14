@@ -1,0 +1,2 @@
+1621
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.25, "D": 0.05, "E": 0.15, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Straight ahead (12 o'clock) options A and C most likely continue main corridor. Signs ahead suggest forward direction. Side openings less likely for main destination."}

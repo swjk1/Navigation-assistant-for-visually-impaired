@@ -1,0 +1,2 @@
+2154
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.15, "D": 0.10, "E": 0.20, "F": 0.15}, "reason": "Continue forward/right toward signs. B most likely corridor; E, F explore further. Avoid backtracking (D)."}

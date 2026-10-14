@@ -1,0 +1,2 @@
+1614
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.10, "E": 0.08, "F": 0.22, "G": 0.08, "H": 0.07}, "reason": "Lifts often off side corridors. F and C (left/11 o'clock) most promising. Avoid right-side shops."}

@@ -1,0 +1,2 @@
+1808
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.10, "D": 0.10, "E": 0.15, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Fashion and Sports signs at 4-5 o'clock suggest retail area. Openings A, B at 8 o'clock continue corridor. E right explores new direction."}

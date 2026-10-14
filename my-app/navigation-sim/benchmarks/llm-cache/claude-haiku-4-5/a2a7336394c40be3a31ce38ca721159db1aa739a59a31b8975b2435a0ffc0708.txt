@@ -1,0 +1,2 @@
+1674
+{"probabilities": {"A": 0.7, "B": 0.3}, "reason": "A continues forward along corridor. B reverses direction toward washroom area, likely dead end."}

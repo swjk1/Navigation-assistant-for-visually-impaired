@@ -1,0 +1,2 @@
+1743
+{"probabilities": {"A": 0.25, "B": 0.35, "C": 0.15, "D": 0.25}, "reason": "Room numbers 312-314-317-320 suggest corridor. Left turn (B/D) aligns with direction sign pointing left. B most likely continues main corridor."}

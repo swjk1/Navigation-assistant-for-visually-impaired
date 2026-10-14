@@ -1,0 +1,2 @@
+1531
+{"probabilities": {"A": 0.15, "B": 0.45, "C": 0.15, "D": 0.08, "E": 0.05, "F": 0.05, "G": 0.02, "H": 0.05}, "reason": "Washroom sign at 12 o'clock, most recent. B continues straight ahead toward sign. A, C explore nearby angles."}

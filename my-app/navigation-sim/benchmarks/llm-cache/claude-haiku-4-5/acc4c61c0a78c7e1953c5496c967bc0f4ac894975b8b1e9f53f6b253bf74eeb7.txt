@@ -1,0 +1,2 @@
+1667
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Forward continuation (12 o'clock) more likely follows main corridor toward exit than backtracking."}

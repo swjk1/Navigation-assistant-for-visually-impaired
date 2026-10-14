@@ -1,0 +1,2 @@
+1695
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.10, "D": 0.08, "E": 0.15, "F": 0.08, "G": 0.05, "H": 0.04}, "reason": "Sports sign ahead suggests main corridor. Continue forward (A) or explore side openings (E, B) for Toy World."}

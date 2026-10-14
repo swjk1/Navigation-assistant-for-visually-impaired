@@ -1,0 +1,2 @@
+1520
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.15, "E": 0.20, "F": 0.20, "G": 0.15, "H": 0.10}, "reason": "Left/forward openings (D, E, F) suggest main corridor. Avoid right-side shops. Continue exploring."}

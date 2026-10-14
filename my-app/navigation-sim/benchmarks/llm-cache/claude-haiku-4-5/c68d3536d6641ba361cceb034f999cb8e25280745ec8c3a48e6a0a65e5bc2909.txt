@@ -1,0 +1,2 @@
+1460
+{"probabilities": {"A": 0.55, "B": 0.15, "C": 0.20, "D": 0.10}, "reason": "Room 316 detected at 4 o'clock. Rooms 317-320 sign points right. Continue forward (12 o'clock) most likely follows corridor toward 301."}

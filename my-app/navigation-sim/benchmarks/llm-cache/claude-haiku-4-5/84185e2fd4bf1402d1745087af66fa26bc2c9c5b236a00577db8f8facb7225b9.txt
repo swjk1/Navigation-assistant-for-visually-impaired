@@ -1,0 +1,2 @@
+2138
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.05, "E": 0.25, "F": 0.15, "G": 0.10, "H": 0.00}, "reason": "Florist likely in retail cluster right. E (4 o'clock) most promising toward detected shops. Avoid dead ends."}

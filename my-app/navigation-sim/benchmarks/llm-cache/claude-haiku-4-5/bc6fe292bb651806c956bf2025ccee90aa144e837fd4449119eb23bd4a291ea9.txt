@@ -1,0 +1,2 @@
+1687
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.15, "E": 0.50, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Washroom and door ahead suggest lift nearby. Continue straight (E) most likely along main corridor."}

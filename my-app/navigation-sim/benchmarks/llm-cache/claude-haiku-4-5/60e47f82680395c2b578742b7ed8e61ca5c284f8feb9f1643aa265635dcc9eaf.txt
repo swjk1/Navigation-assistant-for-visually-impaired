@@ -1,0 +1,2 @@
+1178
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 202 nearby suggests corridor ahead. Room 203 likely continues forward along corridor."}

@@ -1,0 +1,2 @@
+1145
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "A aligns with stairs/exit signs at 11 o'clock. B is backward, likely dead-end room."}

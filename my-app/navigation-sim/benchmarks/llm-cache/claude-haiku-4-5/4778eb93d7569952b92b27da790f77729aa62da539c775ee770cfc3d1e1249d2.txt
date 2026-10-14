@@ -1,0 +1,2 @@
+2029
+{"probabilities": {"A": 0.45, "B": 0.35, "C": 0.10, "D": 0.10}, "reason": "Room 320 ahead. Exit signs suggest main corridor continues forward. Rooms 309-314 nearby indicate ascending sequence."}

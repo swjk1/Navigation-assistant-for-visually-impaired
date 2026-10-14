@@ -1,0 +1,2 @@
+2222
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.25, "F": 0.25, "G": 0.10}, "reason": "Lifts typically located off main corridors. Right-side openings (B, E, F) most likely continuation. Prefer farther distances suggesting main routes."}

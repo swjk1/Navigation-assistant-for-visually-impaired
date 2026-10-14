@@ -1,0 +1,2 @@
+3374
+{"probabilities": {"A": 0.05, "B": 0.35, "C": 0.05, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "Direction sign points left (9 o'clock). Room 107-120 sign suggests continuing forward or left. B (straight ahead) most likely continues main corridor toward room 111."}

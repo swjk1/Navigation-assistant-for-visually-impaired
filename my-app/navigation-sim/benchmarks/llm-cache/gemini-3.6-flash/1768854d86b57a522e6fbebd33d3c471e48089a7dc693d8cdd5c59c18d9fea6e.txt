@@ -1,0 +1,14 @@
+1210
+{
+  "probabilities": {
+    "A": 0.05,
+    "B": 0.05,
+    "C": 0.05,
+    "D": 0.05,
+    "E": 0.70,
+    "F": 0.05,
+    "G": 0.0,
+    "H": 0.05
+  },
+  "reason": "Signs point Rooms 101-106 left towards exit sign at 11 o'clock; E is closest."
+}

@@ -1,0 +1,2 @@
+1808
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.55, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Cinema sign repeatedly seen at 6 o'clock behind. Options E and H point backward toward sign. E is most direct path."}

@@ -1,0 +1,2 @@
+1598
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.25, "D": 0.25, "E": 0.10, "F": 0.05}, "reason": "Bank sign ahead suggests main corridor. Continue forward (D, 11 o'clock) or explore left side (B, C, 8 o'clock) for Cinema."}

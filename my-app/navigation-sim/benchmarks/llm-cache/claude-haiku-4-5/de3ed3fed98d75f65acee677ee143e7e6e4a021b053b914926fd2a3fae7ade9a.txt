@@ -1,0 +1,2 @@
+1567
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.15, "D": 0.20, "E": 0.10, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Forward directions (1-2 o'clock) suggest main corridor. Prefer B/D closest forward options over side/rear openings."}

@@ -1,0 +1,2 @@
+1902
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.10, "D": 0.12, "E": 0.50, "F": 0.03, "G": 0.05, "H": 0.05}, "reason": "Washroom signs point 12 o'clock. Opening E at 12 o'clock, 3.3m aligns with sign direction. Continue straight ahead."}

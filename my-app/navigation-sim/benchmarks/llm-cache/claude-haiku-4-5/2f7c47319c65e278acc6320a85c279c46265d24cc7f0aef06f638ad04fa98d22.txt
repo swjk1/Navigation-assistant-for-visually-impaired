@@ -1,0 +1,2 @@
+1358
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.10, "D": 0.40}, "reason": "Right side (B, D) suggests corridor continuation. Room 314 ahead indicates numbered sequence. Lift likely off main corridor."}

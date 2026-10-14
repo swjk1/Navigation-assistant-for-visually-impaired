@@ -1,0 +1,2 @@
+1938
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.05, "D": 0.20, "E": 0.15, "F": 0.10, "G": 0.15, "H": 0.10}, "reason": "Multiple shops detected ahead (12 o'clock) and right (2 o'clock). Lifts typically off side corridors. Option D (1 o'clock) continues forward; E, G (4 o'clock) explore right side corridors away from shops."}

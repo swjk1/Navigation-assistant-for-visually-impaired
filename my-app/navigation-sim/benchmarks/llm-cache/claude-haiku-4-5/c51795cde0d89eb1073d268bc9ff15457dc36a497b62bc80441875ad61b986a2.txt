@@ -1,0 +1,2 @@
+1975
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.60}, "reason": "C is closest and slightly ahead. B is nearby but behind. A is far. Washrooms often near main paths."}

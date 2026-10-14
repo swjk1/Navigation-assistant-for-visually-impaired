@@ -1,0 +1,2 @@
+2253
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.25, "D": 0.20, "E": 0.15, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Florist likely in retail area right. Multiple shops detected rightward (Bank, Games, Toy World, Pharmacy). Continue exploring right side openings."}

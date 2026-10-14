@@ -1,0 +1,2 @@
+2270
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.12, "E": 0.08, "F": 0.05, "G": 0.10, "H": 0.15}, "reason": "Cinema sign at 1 o'clock suggests shops nearby. Straight ahead (B) or right side (H) most likely continues main corridor toward retail areas."}

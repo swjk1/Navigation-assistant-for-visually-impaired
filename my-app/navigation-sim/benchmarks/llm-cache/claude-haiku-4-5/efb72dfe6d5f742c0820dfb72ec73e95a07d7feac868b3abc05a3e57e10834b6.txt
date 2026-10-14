@@ -1,0 +1,2 @@
+2430
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.25, "D": 0.10, "E": 0.15}, "reason": "Travel Agent sign at 4 o'clock suggests rightward direction. Opening A (11 o'clock) continues forward along likely corridor. C and E (8 o'clock) offer left alternatives. B and D near sign direction but likely dead-end shops."}

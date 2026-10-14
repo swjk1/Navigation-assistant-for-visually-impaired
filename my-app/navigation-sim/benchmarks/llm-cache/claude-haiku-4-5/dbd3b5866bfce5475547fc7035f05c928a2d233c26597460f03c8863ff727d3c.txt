@@ -1,0 +1,2 @@
+2114
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.15, "D": 0.35, "E": 0.08, "F": 0.05, "G": 0.07, "H": 0.15}, "reason": "Straight ahead (D) most likely continues main corridor. H nearby suggests branching. Shops detected ahead suggest concourse layout."}

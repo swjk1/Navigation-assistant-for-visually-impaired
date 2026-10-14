@@ -1,0 +1,2 @@
+2106
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.25, "E": 0.35, "F": 0.15}, "reason": "Cinema sign ahead at 12 o'clock. Openings at 5 o'clock suggest corridor continuation. Prefer E's distance for main concourse."}

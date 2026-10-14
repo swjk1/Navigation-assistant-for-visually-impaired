@@ -1,0 +1,2 @@
+2347
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.05, "D": 0.20, "E": 0.05, "F": 0.15, "G": 0.10, "H": 0.05}, "reason": "Sign points left (9 o'clock). Rooms 107-120 suggests corridor ahead. Prefer left-forward options A, D, F over right-side openings."}

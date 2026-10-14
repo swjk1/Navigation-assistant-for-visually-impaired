@@ -1,0 +1,2 @@
+1539
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.08, "E": 0.12, "F": 0.08, "G": 0.10, "H": 0.12}, "reason": "Straight ahead (B) most likely continues main corridor. Doors at 11 o'clock suggest leftward corridor; avoid bookstore (C)."}

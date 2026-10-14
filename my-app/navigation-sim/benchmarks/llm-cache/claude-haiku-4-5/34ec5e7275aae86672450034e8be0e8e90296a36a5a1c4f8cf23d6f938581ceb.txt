@@ -1,0 +1,2 @@
+2179
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.30, "E": 0.05, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Signs point 4 o'clock direction. Closest opening D at 4 o'clock (1.9m) most likely continues corridor toward Music."}

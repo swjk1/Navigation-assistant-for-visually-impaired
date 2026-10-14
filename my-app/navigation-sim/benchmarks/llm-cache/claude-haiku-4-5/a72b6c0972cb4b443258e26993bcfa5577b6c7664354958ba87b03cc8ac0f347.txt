@@ -1,0 +1,2 @@
+2240
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.15, "D": 0.10, "E": 0.20, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Stairs likely along main corridor. A (straight) and E (10 o'clock near lift) most promising. Avoid dead-end rooms."}

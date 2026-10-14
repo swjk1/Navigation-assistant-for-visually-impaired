@@ -1,0 +1,2 @@
+1268
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 209 sign at 5 o'clock suggests corridor continues that direction. Opening A (2 o'clock) aligns better with forward progression toward 218."}

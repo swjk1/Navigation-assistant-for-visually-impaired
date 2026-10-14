@@ -1,0 +1,2 @@
+1911
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.12, "D": 0.25, "E": 0.18, "F": 0.08, "G": 0.12, "H": 0.05}, "reason": "Multiple shops detected left (7-9 o'clock). Continue exploring right/forward for main corridor leading to Pizza."}

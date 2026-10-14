@@ -1,0 +1,2 @@
+1635
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.35, "E": 0.10, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Signs at 11 o'clock suggest direction. Opening D (11 o'clock) most likely continues toward signage. B (straight) is secondary corridor option."}

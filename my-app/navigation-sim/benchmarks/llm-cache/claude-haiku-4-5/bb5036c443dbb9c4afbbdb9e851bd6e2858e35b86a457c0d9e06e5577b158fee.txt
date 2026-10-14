@@ -1,0 +1,2 @@
+1461
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.25, "E": 0.10, "F": 0.25, "G": 0.10, "H": 0.10}, "reason": "Lifts often off side corridors. D and F (10-11 o'clock) suggest left corridor. Continue forward preferred."}

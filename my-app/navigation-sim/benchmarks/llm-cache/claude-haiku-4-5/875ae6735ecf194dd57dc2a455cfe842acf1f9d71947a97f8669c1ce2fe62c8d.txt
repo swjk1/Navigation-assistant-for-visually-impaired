@@ -1,0 +1,2 @@
+1991
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.15, "D": 0.15, "E": 0.10, "F": 0.10}, "reason": "Straight ahead (12 o'clock) most likely continues main corridor. Kitchen Store sign suggests retail area; washrooms typically off side corridors."}

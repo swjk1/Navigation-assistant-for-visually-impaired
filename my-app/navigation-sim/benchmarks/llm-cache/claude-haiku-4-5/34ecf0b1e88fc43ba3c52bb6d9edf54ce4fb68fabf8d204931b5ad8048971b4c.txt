@@ -1,0 +1,2 @@
+2101
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.15, "D": 0.15, "E": 0.12, "F": 0.08, "G": 0.12, "H": 0.08}, "reason": "No signs detected yet. Prefer forward/side corridors over tight angles. Avoid backtracking."}

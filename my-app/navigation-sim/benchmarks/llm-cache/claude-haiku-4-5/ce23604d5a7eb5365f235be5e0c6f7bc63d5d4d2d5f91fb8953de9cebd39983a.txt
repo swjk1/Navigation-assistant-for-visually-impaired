@@ -1,0 +1,2 @@
+1580
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.1, "E": 0.1, "F": 0.2, "G": 0.25, "H": 0.2}, "reason": "Pizza likely ahead. Multiple signs at 12 o'clock suggest main corridor. Openings F, G, H at 1 o'clock continue forward direction."}

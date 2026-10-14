@@ -1,0 +1,2 @@
+2241
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.05, "D": 0.10, "E": 0.10, "F": 0.05, "G": 0.20, "H": 0.10}, "reason": "Continue forward (B) or left corridor (G). Avoid shops (Jewellery ahead). Side corridors (A, G) likely connect to other areas."}

@@ -1,0 +1,2 @@
+2002
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.30, "D": 0.20}, "reason": "Stairs sign at 11 o'clock suggests corridor. Options C/D ahead likely continue main path. A toward stairs."}

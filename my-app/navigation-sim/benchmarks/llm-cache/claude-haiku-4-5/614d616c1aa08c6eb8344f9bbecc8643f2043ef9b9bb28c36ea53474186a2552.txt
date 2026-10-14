@@ -1,0 +1,2 @@
+1909
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Door at 12 o'clock likely continues corridor. Sign 212 suggests numbered rooms nearby; washroom often off main corridor."}

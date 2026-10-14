@@ -1,0 +1,2 @@
+1296
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.70, "D": 0.20}, "reason": "Sign points left to rooms 117-120. Door at 7 o'clock likely leads that direction. Continue corridor logic."}

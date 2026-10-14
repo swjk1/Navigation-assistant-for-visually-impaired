@@ -1,0 +1,2 @@
+1091
+{"probabilities": {"A": 0.8, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.05}, "reason": "A door straight ahead at 12 o'clock indicates continuing along the main corridor."}

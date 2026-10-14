@@ -1,0 +1,2 @@
+1888
+{"probabilities": {"A": 0.35, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.02, "F": 0.15, "G": 0.18, "H": 0.05}, "reason": "Exit sign points 1 o'clock (A). Lift nearby suggests main corridor. G continues straight, likely corridor. F/C explore side passages."}

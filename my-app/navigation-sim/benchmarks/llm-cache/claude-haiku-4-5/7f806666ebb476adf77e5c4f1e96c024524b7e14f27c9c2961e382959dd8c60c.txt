@@ -1,0 +1,2 @@
+1175
+{"probabilities": {"A": 0.7, "B": 0.2, "C": 0.1}, "reason": "Door at 4 o'clock matches sign direction. Room 309 likely nearby. Continue toward higher room numbers."}

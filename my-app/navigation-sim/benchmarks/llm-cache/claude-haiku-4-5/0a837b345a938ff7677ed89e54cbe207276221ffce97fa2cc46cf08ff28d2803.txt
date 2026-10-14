@@ -1,0 +1,2 @@
+2264
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.05, "E": 0.15, "F": 0.15, "G": 0.05, "H": 0.15}, "reason": "Lift detected at 11 o'clock. A is closest in that direction. E, F, H explore side corridors where lifts often locate."}

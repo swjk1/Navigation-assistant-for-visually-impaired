@@ -1,0 +1,2 @@
+2021
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.15, "E": 0.20, "F": 0.15, "G": 0.05}, "reason": "Retail signs suggest shops nearby. Continue right or forward to explore main corridor/concourse."}

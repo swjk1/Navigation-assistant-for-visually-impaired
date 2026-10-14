@@ -1,0 +1,2 @@
+2113
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.20, "E": 0.05, "F": 0.10, "G": 0.25, "H": 0.15}, "reason": "Continue forward/right along main corridor. Pet Shop likely ahead or right. Avoid detected shops (dead ends)."}

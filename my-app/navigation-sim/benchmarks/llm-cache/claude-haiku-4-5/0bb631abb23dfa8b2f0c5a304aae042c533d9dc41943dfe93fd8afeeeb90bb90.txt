@@ -1,0 +1,2 @@
+2091
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.05, "D": 0.15, "E": 0.10, "F": 0.05, "G": 0.05}, "reason": "Door ahead (12 o'clock) most likely corridor continuation. Exit signs suggest main corridor ahead. Side openings less likely."}

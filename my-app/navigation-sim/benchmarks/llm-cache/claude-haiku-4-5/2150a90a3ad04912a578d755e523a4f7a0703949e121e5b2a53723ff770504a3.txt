@@ -1,0 +1,2 @@
+2140
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.15, "D": 0.25, "E": 0.05, "F": 0.03, "G": 0.02}, "reason": "Door detected at 11 o'clock suggests corridor there. Options A, B, D cluster around 11 o'clock. Prefer corridor continuation over nearby rooms F, G."}

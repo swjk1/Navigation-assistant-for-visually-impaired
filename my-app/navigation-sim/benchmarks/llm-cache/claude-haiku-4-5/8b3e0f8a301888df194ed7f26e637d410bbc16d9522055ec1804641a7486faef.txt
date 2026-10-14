@@ -1,0 +1,2 @@
+2010
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.35, "D": 0.10, "E": 0.10, "F": 0.05, "G": 0.05, "H": 0.10}, "reason": "Door at 12 o'clock suggests main corridor. Continue straight ahead toward exit."}

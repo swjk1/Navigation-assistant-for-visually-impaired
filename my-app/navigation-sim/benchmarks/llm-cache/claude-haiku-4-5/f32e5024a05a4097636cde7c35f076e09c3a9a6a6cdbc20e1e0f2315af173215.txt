@@ -1,0 +1,2 @@
+1935
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.15}, "reason": "Straight ahead (12 o'clock) most likely continues main corridor. Phone Repair sign suggests shops nearby; Music likely further along."}

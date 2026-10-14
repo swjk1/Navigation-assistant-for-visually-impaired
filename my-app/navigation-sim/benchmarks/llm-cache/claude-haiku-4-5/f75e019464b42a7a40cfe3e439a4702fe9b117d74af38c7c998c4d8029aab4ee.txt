@@ -1,0 +1,2 @@
+2393
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.05, "D": 0.10, "E": 0.05, "F": 0.20, "G": 0.05, "H": 0.05}, "reason": "Continuing straight (A) most likely follows main corridor. Left turns (F, E) explore alternative routes. Bakery signs suggest retail area nearby."}

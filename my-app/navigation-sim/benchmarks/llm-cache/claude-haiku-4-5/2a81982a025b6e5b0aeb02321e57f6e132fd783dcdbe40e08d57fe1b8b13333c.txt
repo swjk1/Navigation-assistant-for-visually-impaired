@@ -1,0 +1,2 @@
+1977
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Sign '2l4' at 11 o'clock suggests B leads to rooms/facilities. A at 1 o'clock likely dead-end room."}

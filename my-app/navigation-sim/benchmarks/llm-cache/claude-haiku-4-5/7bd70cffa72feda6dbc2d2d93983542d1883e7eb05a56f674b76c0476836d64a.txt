@@ -1,0 +1,2 @@
+2197
+{"probabilities": {"A": 0.05, "B": 0.50, "C": 0.10, "D": 0.05, "E": 0.05, "F": 0.02, "G": 0.23}, "reason": "Continue straight (B) along main corridor. G likely leads back past Travel Agent. Side openings less probable."}

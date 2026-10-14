@@ -1,0 +1,2 @@
+1797
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room numbers ascending (317→319→320) suggest corridor ahead. Option A continues this direction; B diverges."}

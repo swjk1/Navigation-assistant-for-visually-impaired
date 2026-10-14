@@ -1,0 +1,2 @@
+2036
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.25, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.30}, "reason": "Washrooms typically off side corridors or main concourse. Backward (H) and left-back (D) directions suggest main corridor continuation. Explore systematically."}

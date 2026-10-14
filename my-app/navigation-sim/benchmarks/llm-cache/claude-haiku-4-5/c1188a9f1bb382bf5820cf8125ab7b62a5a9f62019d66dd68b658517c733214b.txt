@@ -1,0 +1,2 @@
+1315
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.60}, "reason": "C is closest, straight ahead. Lifts typically near main corridors. B is behind, less likely."}

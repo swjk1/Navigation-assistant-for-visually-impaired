@@ -1,0 +1,2 @@
+1458
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.05, "D": 0.35}, "reason": "Rooms 317-320 sign points left (8-9 o'clock). Continue forward (A) or follow sign direction (D). Avoid room entries."}

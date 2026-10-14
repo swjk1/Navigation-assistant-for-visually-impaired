@@ -1,0 +1,2 @@
+1494
+{"probabilities": {"A": 0.15, "B": 0.70, "C": 0.15}, "reason": "Room 111 behind suggests corridor ahead. Continue straight (B) to find 114 next in sequence."}

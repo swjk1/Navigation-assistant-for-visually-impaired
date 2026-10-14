@@ -1,0 +1,2 @@
+1940
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.35, "D": 0.15}, "reason": "Straight ahead (C) most likely continues main corridor. Left sign suggests rooms ahead. Avoid side openings."}

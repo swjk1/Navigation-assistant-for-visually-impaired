@@ -1,0 +1,2 @@
+1791
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.05, "D": 0.15, "E": 0.20, "F": 0.10}, "reason": "Room 304 behind suggests forward progress toward 320. Straight ahead (A,B,E) most likely corridor. Exit signs at 11 o'clock indicate direction."}

@@ -1,0 +1,2 @@
+2315
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.12, "D": 0.08, "E": 0.10, "F": 0.18, "G": 0.12, "H": 0.05}, "reason": "Door at 10 o'clock (B) aligns with recent door detection. Avoid shop signs (Toy World, Pharmacy, Electronics). F and G explore new directions."}

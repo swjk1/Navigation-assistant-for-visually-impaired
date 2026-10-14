@@ -1,0 +1,2 @@
+1841
+{"probabilities": {"A": 0.15, "B": 0.70, "C": 0.15}, "reason": "Door ahead suggests corridor. Closest opening (B) likely continues it. A and C are side branches."}

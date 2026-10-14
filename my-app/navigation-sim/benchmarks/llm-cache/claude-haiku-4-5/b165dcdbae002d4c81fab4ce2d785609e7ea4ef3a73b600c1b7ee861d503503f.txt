@@ -1,0 +1,2 @@
+990
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Continue forward along corridor. Backward leads away from explored path."}

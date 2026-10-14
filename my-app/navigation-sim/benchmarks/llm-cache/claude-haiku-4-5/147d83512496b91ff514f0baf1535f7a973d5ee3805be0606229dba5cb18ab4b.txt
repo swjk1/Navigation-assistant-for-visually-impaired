@@ -1,0 +1,2 @@
+2172
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.05, "F": 0.20, "G": 0.10, "H": 0.35}, "reason": "Signs ahead (12 o'clock) suggest forward corridor. H (11 o'clock) continues that direction. F (2 o'clock) alternative forward path."}

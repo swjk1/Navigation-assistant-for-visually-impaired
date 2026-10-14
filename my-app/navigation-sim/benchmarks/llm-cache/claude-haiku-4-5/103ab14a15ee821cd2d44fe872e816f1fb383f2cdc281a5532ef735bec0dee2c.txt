@@ -1,0 +1,2 @@
+1743
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.15, "D": 0.20, "E": 0.10, "F": 0.08, "G": 0.02, "H": 0.10}, "reason": "Forward directions (1-2 o'clock) likely continue main corridor. Avoid immediate left (G). Side angles less probable."}

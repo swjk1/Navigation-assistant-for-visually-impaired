@@ -1,0 +1,2 @@
+2118
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.25, "D": 0.08, "E": 0.08, "F": 0.05, "G": 0.04}, "reason": "Straight ahead (12 o'clock) most likely continues main corridor. Side angles suggest dead-end rooms or lifts off corridors."}

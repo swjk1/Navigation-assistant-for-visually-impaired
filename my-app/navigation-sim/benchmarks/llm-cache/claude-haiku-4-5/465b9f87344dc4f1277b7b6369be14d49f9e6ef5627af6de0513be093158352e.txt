@@ -1,0 +1,2 @@
+1881
+{"probabilities": {"A": 0.55, "B": 0.05, "C": 0.05, "D": 0.35}, "reason": "Straight ahead (A) most likely continues main corridor. Side doors (C,D) suggest side corridors. Washroom sign indicates utility area."}

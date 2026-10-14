@@ -1,0 +1,2 @@
+1126
+{"probabilities": {"A": 0.5, "B": 0.5}, "reason": "Both identical openings at 11 o'clock, 4m. Insufficient data to differentiate. Continue corridor exploration."}

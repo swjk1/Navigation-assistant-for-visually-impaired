@@ -1,0 +1,2 @@
+2076
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.20, "D": 0.25, "E": 0.05, "F": 0.05, "G": 0.20, "H": 0.05}, "reason": "Pizza sign at 2 o'clock. Openings toward 10-11 o'clock align with sign direction. Prefer corridor continuation."}

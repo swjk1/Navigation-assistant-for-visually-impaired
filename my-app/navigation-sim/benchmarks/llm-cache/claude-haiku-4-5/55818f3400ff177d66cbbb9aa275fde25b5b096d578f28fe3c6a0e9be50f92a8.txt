@@ -1,0 +1,2 @@
+2173
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.05, "D": 0.05, "E": 0.25, "F": 0.15, "G": 0.20, "H": 0.05}, "reason": "Stairs likely ahead (E) or along corridor. Lift detected behind suggests main corridor. G continues that direction."}

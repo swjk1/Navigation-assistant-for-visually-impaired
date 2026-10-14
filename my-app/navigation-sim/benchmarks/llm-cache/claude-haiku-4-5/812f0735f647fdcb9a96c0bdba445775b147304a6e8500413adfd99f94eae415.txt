@@ -1,0 +1,2 @@
+1232
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Exit/stairs signs at 1 o'clock suggest main corridor. Room 305 nearby indicates 301 likely along same path."}

@@ -1,0 +1,2 @@
+2444
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25}, "reason": "Room 317 sign at 11 o'clock suggests corridor continues left-forward. Options B, C, D at 5 o'clock likely continue corridor. C is middle distance, most likely continuation path."}

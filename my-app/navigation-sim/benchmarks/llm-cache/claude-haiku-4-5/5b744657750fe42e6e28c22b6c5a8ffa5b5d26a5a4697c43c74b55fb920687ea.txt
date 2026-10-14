@@ -1,0 +1,2 @@
+2002
+{"probabilities": {"A": 0.25, "B": 0.30, "C": 0.10, "D": 0.20, "E": 0.15}, "reason": "Forward directions (2, 3 o'clock) suggest continuing main corridor. Side corridors (7-8 o'clock) less likely for lifts."}

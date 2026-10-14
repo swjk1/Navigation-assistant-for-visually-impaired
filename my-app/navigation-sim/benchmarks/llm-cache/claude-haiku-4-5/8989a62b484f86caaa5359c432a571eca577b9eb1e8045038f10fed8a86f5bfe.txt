@@ -1,0 +1,2 @@
+1635
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.35, "D": 0.20, "E": 0.05, "F": 0.05, "G": 0.03, "H": 0.02}, "reason": "Continue forward (12 o'clock) toward Fashion sign. Side corridors (10-11 o'clock) secondary. Avoid dead ends."}

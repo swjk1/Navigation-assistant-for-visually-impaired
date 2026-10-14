@@ -1,0 +1,2 @@
+1803
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.05, "D": 0.05, "E": 0.15, "F": 0.05, "G": 0.15, "H": 0.25}, "reason": "Pet Shop likely ahead or right. Forward/right openings (A,B,E,G,H) preferred over left shops. H closest, forward-right direction most promising."}

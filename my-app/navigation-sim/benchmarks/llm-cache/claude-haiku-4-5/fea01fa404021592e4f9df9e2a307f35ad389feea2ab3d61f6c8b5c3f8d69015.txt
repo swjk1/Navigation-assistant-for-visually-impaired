@@ -1,0 +1,2 @@
+2114
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.30, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Sports sign at 10 o'clock suggests corridor direction. Continue toward 10-12 o'clock cluster of signs."}

@@ -1,0 +1,2 @@
+2039
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.15, "D": 0.25}, "reason": "Kitchen Store at 9 suggests leftward corridor. Options C and D continue left; A/B turn right. Washrooms typically off side corridors."}

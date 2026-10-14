@@ -1,0 +1,2 @@
+2324
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.05, "D": 0.20, "E": 0.10, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Lift and sign suggest side corridor. Continue forward (B,F) or explore left (D) for washroom access."}

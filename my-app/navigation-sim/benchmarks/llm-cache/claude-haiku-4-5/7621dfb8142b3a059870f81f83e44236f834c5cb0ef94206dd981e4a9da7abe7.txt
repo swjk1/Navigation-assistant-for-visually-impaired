@@ -1,0 +1,2 @@
+1732
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.10, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.30}, "reason": "Room 119 is in 107-120 range pointing right. H (2 o'clock) continues forward-right. C (7 o'clock) follows left signs for 101-106 corridor structure."}

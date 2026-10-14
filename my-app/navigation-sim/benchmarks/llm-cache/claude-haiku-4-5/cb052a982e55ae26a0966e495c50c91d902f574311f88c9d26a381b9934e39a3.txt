@@ -1,0 +1,2 @@
+1752
+{"probabilities": {"A": 0.6, "B": 0.4}, "reason": "1 o'clock slightly ahead favors main corridor; 7 o'clock behind suggests backtracking."}

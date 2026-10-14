@@ -1,0 +1,2 @@
+2268
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.15, "F": 0.25, "G": 0.10, "H": 0.05}, "reason": "Signs at 9-10 o'clock suggest retail area. Opening F (10 o'clock, 4.8m) aligns with signs, likely corridor. H too close, G behind."}

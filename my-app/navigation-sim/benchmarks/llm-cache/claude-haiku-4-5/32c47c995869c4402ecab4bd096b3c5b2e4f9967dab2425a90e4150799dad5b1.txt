@@ -1,0 +1,2 @@
+1682
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Door at 1 o'clock ahead likely corridor continuation. Lift at 7 o'clock suggests washroom nearby off side corridor."}

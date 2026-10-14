@@ -1,0 +1,2 @@
+2226
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.20, "D": 0.15, "E": 0.15, "F": 0.05, "G": 0.10, "H": 0.05}, "reason": "Continue forward (A) or explore right side (C, E, D). Signs suggest rightward direction. Avoid dead ends."}

@@ -1,0 +1,2 @@
+2030
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.10, "D": 0.08, "E": 0.12, "F": 0.08, "G": 0.20, "H": 0.12}, "reason": "Straight ahead (B) and backward (G) suggest main corridor. Side openings less likely for lifts."}

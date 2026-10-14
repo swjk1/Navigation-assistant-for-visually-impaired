@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","answers":[{"type":"choice","name":"next_action","choice":"c1","probabilities":[{"value":"c1","probability":0.64},{"value":"explore","probability":0.36}],"confidence":0.28}],"usage":{"input_tokens":706,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":706}}

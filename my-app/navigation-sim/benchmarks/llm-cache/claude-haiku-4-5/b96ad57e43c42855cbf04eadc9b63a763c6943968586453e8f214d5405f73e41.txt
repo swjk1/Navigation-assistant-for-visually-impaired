@@ -1,0 +1,2 @@
+1311
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign '206' seen behind suggests continuing forward (12 o'clock). Side opening (11 o'clock) likely side corridor."}

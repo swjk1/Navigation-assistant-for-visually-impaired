@@ -1,0 +1,2 @@
+1481
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.20, "D": 0.15, "E": 0.25}, "reason": "Noodle Bar sign at 11 o'clock suggests corridor direction. Options E and B continue that general direction, likely main corridor paths."}

@@ -1,0 +1,2 @@
+1518
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.15, "D": 0.10, "E": 0.10, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Continue forward (B) along main corridor. Side corridors (A, C, E) less likely. Avoid dead-ends and backtracking."}

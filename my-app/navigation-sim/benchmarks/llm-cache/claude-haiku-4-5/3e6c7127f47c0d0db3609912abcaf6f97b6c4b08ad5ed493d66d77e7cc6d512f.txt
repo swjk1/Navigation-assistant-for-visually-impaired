@@ -1,0 +1,2 @@
+1744
+{"probabilities": {"A": 0.25, "B": 0.50, "C": 0.25}, "reason": "Door at 11 o'clock matches recent detection. Continuing forward direction favors corridor over side openings."}

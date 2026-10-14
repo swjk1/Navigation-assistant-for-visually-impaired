@@ -1,0 +1,2 @@
+1634
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Door at 1 o'clock ahead suggests main corridor. Room 118 at 7 o'clock indicates side corridor, likely dead end."}

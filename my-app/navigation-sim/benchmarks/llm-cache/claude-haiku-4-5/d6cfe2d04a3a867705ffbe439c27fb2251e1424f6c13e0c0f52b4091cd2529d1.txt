@@ -1,0 +1,2 @@
+2063
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Washroom at 4 o'clock suggests side corridor. Lifts often near washrooms. A continues main corridor."}

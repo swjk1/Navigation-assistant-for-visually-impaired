@@ -1,0 +1,2 @@
+1148
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "A continues corridor ahead. B is lift area, typically off-corridor. Stairs likely at corridor end."}

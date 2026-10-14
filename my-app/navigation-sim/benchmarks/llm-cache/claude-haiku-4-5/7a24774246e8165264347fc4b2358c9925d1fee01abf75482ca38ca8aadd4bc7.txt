@@ -1,0 +1,2 @@
+2022
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.15, "H": 0.05}, "reason": "Signs behind suggest shops. Continue right (3 o'clock) along main corridor. B most promising."}

@@ -1,0 +1,2 @@
+2031
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.25, "E": 0.15, "F": 0.15, "G": 0.05, "H": 0.20}, "reason": "Continue straight (12 o'clock) or explore side corridors. Avoid Jewellery shops (dead ends)."}

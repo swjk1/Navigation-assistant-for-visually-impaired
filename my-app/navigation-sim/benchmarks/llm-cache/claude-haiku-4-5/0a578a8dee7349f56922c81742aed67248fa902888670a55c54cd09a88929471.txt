@@ -1,0 +1,2 @@
+2112
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.05, "E": 0.05, "F": 0.15}, "reason": "Sign 'Rooms 117-120' points left (9 o'clock). Room 114 likely nearby. C (10 o'clock) best aligns with sign direction and corridor continuation."}

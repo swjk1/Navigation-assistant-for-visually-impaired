@@ -1,0 +1,2 @@
+2377
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.05, "E": 0.25, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Multiple shops ahead (12 o'clock) suggest main corridor. Forward-right directions (B, E) likely continue corridor toward unexplored areas."}

@@ -1,0 +1,2 @@
+1512
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Straight ahead (A) likely continues main corridor. Room 206 is lower-numbered than 216-220 signs, suggesting we passed it or need to backtrack along main path."}

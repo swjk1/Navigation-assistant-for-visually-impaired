@@ -1,0 +1,2 @@
+1568
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.05, "E": 0.25, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Pizza sign at 12 o'clock. E (11 o'clock, 4.2m) best aligns with that direction, continuing forward along corridor."}

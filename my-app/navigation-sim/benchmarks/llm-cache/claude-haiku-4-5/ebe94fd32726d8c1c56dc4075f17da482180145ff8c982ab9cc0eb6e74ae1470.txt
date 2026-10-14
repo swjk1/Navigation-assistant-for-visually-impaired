@@ -1,0 +1,2 @@
+1528
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.05, "E": 0.20, "F": 0.20, "G": 0.15, "H": 0.05}, "reason": "Continue forward/right along main corridor. Left side shows shops/services (dead ends). Ahead options most promising."}

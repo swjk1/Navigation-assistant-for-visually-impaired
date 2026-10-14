@@ -1,0 +1,2 @@
+1080
+{"probabilities": {"A": 0.55, "B": 0.45}, "reason": "Opening A at 1 o'clock continues forward direction better than B at 10 o'clock, likely main corridor."}

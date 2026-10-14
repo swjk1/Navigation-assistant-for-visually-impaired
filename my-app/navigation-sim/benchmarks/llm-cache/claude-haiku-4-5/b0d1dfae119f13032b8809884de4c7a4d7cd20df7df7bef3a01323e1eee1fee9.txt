@@ -1,0 +1,2 @@
+2717
+{"probabilities": {"A": 0.65, "B": 0.25, "C": 0.10}, "reason": "A continues straight ahead, likely main corridor. B is slight turn. C goes backward toward washroom area."}

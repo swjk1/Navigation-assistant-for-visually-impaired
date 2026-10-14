@@ -1,0 +1,2 @@
+1894
+{"probabilities": {"A": 0.15, "B": 0.65, "C": 0.10, "D": 0.10}, "reason": "Direction sign showed rooms 107-120 pointing right. Room 116 is in that range. Continue right."}

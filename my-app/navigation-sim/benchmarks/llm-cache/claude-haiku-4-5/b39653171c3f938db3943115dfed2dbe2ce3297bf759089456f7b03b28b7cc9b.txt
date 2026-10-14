@@ -1,0 +1,2 @@
+1723
+{"probabilities": {"A": 0.45, "B": 0.45, "C": 0.1}, "reason": "Room 206 likely ahead. Recent 214 sign left suggests passing higher numbers. Continue forward."}

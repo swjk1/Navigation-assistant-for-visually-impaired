@@ -1,0 +1,2 @@
+2147
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.30, "D": 0.20}, "reason": "B continues forward corridor trend. Lift/washroom at 1 o'clock suggest main corridor ahead. Avoid sharp left turn A."}

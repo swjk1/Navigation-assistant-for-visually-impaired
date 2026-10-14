@@ -1,0 +1,2 @@
+1167
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 303 ahead suggests corridor. Side opening likely dead-end room or lift access."}

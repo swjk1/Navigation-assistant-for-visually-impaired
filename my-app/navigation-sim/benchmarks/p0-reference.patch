@@ -1,0 +1,1756 @@
+diff --git a/TECHNICAL.md b/TECHNICAL.md
+index e0e6515..d3d55cc 100644
+--- a/TECHNICAL.md
++++ b/TECHNICAL.md
+@@ -11,10 +11,55 @@ STRAIGHT · TURN_LEFT · TURN_RIGHT · STOP · SCAN · ARRIVED
+ **Movement decisions are deterministic.** No LLM or VLM sits in the decision path. Perception
+ supplies evidence about what is around; geometry and search decide where to step.
+ 
++The core does accept two kinds of outside opinion: **advice** (a short-term adviser scoring which
++way to explore) and **planner hypotheses** (a long-term planner's guesses at where the destination
++is). Both only re-weight the choice of frontier, through one term each in its score; neither can
++plan a path, steer, lift a stop or declare arrival (§5.1). The app does not use them yet. In the
++simulator they are fed by oracle and noisy stand-ins, and by a language-model adviser that is
++switched off while paid API use is paused.
++
+ Companion documents: [ARCHITECTURE.md](./ARCHITECTURE.md) for the system diagram,
+ [DEMO.md](./DEMO.md) for build and demo instructions,
+ [modules/navigation-native/README.md](./my-app/modules/navigation-native/README.md) for the
+-engine's own reference, and `my-app/docs/perception/` for the perception module's notes.
++engine's own reference, `my-app/docs/perception/` for the perception module's notes,
++[`my-app/navigation-sim/README.md`](./my-app/navigation-sim/README.md) for the simulator, and
++[`my-app/docs/RELATED_WORK.md`](./my-app/docs/RELATED_WORK.md) for similar research.
++
++---
++
++## 0. At a glance
++
++### What is built
++
++| Part | Where | What it does |
++|---|---|---|
++| Navigation core | `my-app/navigation-core/` (pure Kotlin) | Depth → floor estimate → occupancy grid → frontiers → A* → one instruction. Topological memory, three-tier routing, a fail-safe controller, sign hints, room-number model, advice and planner inputs. 187 unit and scenario tests |
++| Android adapter | `my-app/modules/navigation-native/` | ARCore pose and depth into the core, on its own thread; snapshots to JS at ≤ 8 Hz |
++| Perception | `my-app/modules/indoor-perception/`, `my-app/src/perception/` | Fine-tuned YOLO26n (ONNX, 17 classes, mAP50 0.833) and ML Kit OCR on device, optional Gemini check; signs mapped to semantic observations |
++| Guidance | `my-app/src/guidance/` | Speech and haptics for each instruction; hazard before direction |
++| Simulator | `my-app/navigation-sim/` (JVM) | Closed loop against 3D buildings with ARCore-like depth noise, the detector's recall, OCR errors, glass, drift, five sensor rigs; a person or a robot acting on the engine; 31 scenarios, 18 tests |
++| Benchmark | `navigation-sim/bench/` | 44 trips in 3 building types plus 15 held out; paired bootstrap comparison; about 90 designs, each also runnable with the robot |
++| Advisers | `navigation-sim/advice/` | Oracle, noisy oracle, outage, oracle and noisy planners, Follow the Signs' mechanism, a language-model adviser (Claude or Gemini), and a recorder of labelled decisions |
++
++### Key numbers
++
++| Measure | Value | Source |
++|---|---|---|
++| Original engine, simulated person | 28.0% success | `v0-original-10`, 440 runs |
++| Shipped engine, simulated person | 51.1% (simple 94.0, school 66.3, mall 12.7) | `p0-current`, 440 runs |
++| Shipped engine with a perfect route adviser, person | 90.0% (mall 87.3) | `p0-oracle-advice`, 440 runs |
++| Robot, engine alone | 45.6% (simple 87.0, school 54.8, mall 17.0), SPL 0.283 | `r1-current`, 880 runs |
++| Robot, held-out malls | 44.3% | `r1-heldout-current`, 300 runs |
++| What reading signs is worth, robot | +9.5 points overall, +29.7 in held-out malls | vs `frontier-only` |
++| Perfect short-term adviser, robot | +23.6 points (69.2%); +39.3 in held-out malls (83.7%) | `r1-oracle-advice` |
++| Perfect long-term planner, robot | +14.5 points (60.5%) | `r1-planner-oracle` |
++| Adviser accuracy needed to help significantly | about 70% at full weight | noisy-oracle sweep |
++| Falls | 0 in 18,060 robot runs | every `r1-*` result |
++| Detector | mAP50 0.833, precision 0.919, recall 0.738 (validation) | §4.1 |
++| Language-model pilot | Claude Haiku: 45.5% against 36.4% without it, one seed, older engine; about $1.13 spent in all | §5.2 |
++
++Success is the share of trips ending in a declared arrival within 2 m of a true destination; all of
++it is measured in simulation (§9).
+ 
+ ---
+ 
+@@ -246,6 +291,10 @@ guidance becomes an unusable stream of alternating slight-left/slight-right.
+   1.5 m corridors, told about an obstacle that was only beside them.
+ - **STOP bypasses all smoothing** — a safety stop is never delayed.
+ 
++A robot that steers continuously at the 1.5 m lookahead cuts inside bends, into the 0.3 m
++inflation margin, where the forward gate always reads blocked. The simulated robot (§9) follows the
++path at 0.6 m instead.
++
+ ### 3.5 Timing
+ 
+ Every gate is **time-based, not frame-count based**. This was a shipped bug: `commandStabilityFrames = 3`
+@@ -284,11 +333,19 @@ score = 1.5 · informationGain
+       − 1.0 · normalisedDistance
+       − 2.0 · revisitPenalty
+       − 2.0 · riskPenalty
++      + 2.0 · adviceScore          only when an adviser has spoken (§5.1)
++      + 2.0 · planScore            only when a planner has spoken (§5.1)
++      + 0   · alongLongAxis        shape cue, off: no significant gain measured
++      + 0   · clutter              shape cue, off: more glass contacts in malls
+ ```
+ 
+ Distance is normalised by half the grid size; raw metres would swamp every other term the moment a
+ frontier was a few metres away, and no semantic clue could ever outweigh it.
+ 
++How much the semantic term is worth was measured with a robot in the simulator (§9): with
++`weightSemantic` 0 — classic frontier exploration that only reacts to seeing the destination —
++success fell from 45.6% to 36.0% on the benchmark, and from 44.3% to 14.7% in held-out malls.
++
+ **Commitment.** A chosen waypoint is held through frontier splits, merges and score changes, and
+ released only on arrival, blockage, repeated route failure, 20 s without approaching by 0.3 m
+ (progress renews the budget), or once no frontier cell remains within
+@@ -602,13 +659,96 @@ Semantics only ever **bias** frontier choice. The planner decides movement.
+ 
+ Room numbering is a heuristic, never a guarantee. A sign covering the target is strong positive
+ evidence (+1); a sign that does *not* cover it is only weak negative evidence (−0.25), so an
+-alternative branch is never eliminated. The "301, 303, 305 → keep going" gradient contributes at
+-most 0.5 and shrinks as the numeric gap grows.
++alternative branch is never eliminated.
++
++Plates read along the way feed `RoomNumberModel`, which fits how the numbers run:
++
++- **The corridor's axis** from the spread of nearby plates (within 20 m of the latest, at most 8),
++  measured within each wall's plates so the corridor's width does not tilt it.
++- **One slope, two walls.** Odd and even numbers are fitted as two parallel runs sharing a slope,
++  because 302 usually faces 301. Where each wall sits tells which side the target is on.
++- **One misread survives.** When the fit is not clean, it is refitted without each plate in turn
++  and the clearly better fit kept: a single "389" for "309" spreads its error over a least-squares
++  fit, so its residual alone does not stand out.
++- **Out:** where the target's plate should be, a confidence (fit quality × plate count ×
++  how far it extrapolates), and a flag when every plate read shares a hundreds digit the target
++  does not — the target is probably on another floor.
++
++With three or more plates, frontiers towards the estimate gain up to `roomNumberModelMaxScore`
++(0.8) × confidence; with fewer, the older first-and-last-plate gradient applies (at most 0.5).
++`roomNumberModel = false` restores the gradient alone. **Measured: no effect** (−0.3 points, 95%
++CI −1.7 to +1.0, 880 robot runs). The plates read on the benchmark trips rarely leave the number
++ordering in doubt; the model stays in because it is what a planner reads (§5.1), not because it
++moves the score.
++
++Every name for a washroom is the same place: `TargetMatcher.normalizeLabel` maps "Restrooms",
++"Men's toilets", "Bathroom", "Lavatories" and "WC" to `WASHROOM`, for the request and for what
++is read alike.
+ 
+ A `DOOR` is deliberately distinct from `EXIT` and `ROOM` — it may lead outside, into a room, or
+ into a cupboard — so it never *matches* those targets, only scores as partial evidence: 1.0 for a
+ door request, 0.5 for an exit, 0.3 for a room.
+ 
++### 5.1 Advice and planner hypotheses
++
++Two inputs let reasoning outside the engine — a language model, a learned decision model, a floor
++plan — bias exploration. Both are in canonical coordinates, both only enter the frontier score, and
++neither touches the path, a safety stop or arrival: a slow, wrong or silent adviser costs time,
++never safety.
++
++| | Advice (short-term) | Planner hypothesis (long-term) |
++|---|---|---|
++| Call | `engine.submitAdvice(List<AdviceDirection>)` | `engine.submitPlan(List<PlannerHypothesis>)` |
++| Says | which way to explore from where the user stood: a direction and a weight in −1..1 | where the destination should be: a place, a radius, a confidence, and a check that would confirm it |
++| Scores a frontier by | its angle from the advised direction, tapering to 0 at 60° | its direction from the user towards the guess; near the guess, its distance to it |
++| Lifetime | ignored after 20 s (`adviceMaxAgeMillis`) | fades to 1/e over 90 s (`plannerFadeMillis`) |
++| When searched | — | spent once the user has been within its radius (at least 2 m) without finding the destination; stays spent if the planner repeats it |
++| Weight | `weightAdvice` 2.0 | `weightPlanner` 2.0 |
++
++`engine.situation()` gives an adviser what the engine has perceived — never ground truth: the
++target, pose, walked distance, the engine's own scored frontiers, up to 60 signs seen (kind, text,
++arrow, position, where they were read from), the numbering estimate and other-floor flag, and the
++planner guesses still held with their remaining weight.
++
++Advice used to act outside the score in two ways: turning the user to look where it pointed when no
++frontier lay that way, and dropping a committed frontier it did not point at. Both are now off by
++default (`adviceTurnsToLook`, `adviceReleasesCommitment`), so the frontier score is the only way in.
++
++How good an adviser must be was measured with stand-ins of known accuracy (§9): a perfect one adds
++23.6 points; one right 90% of the time adds 20; at 60% about 6, and at 40% nothing — but it costs
++nothing either, because the engine's own scoring still carries the trip.
++
++In the simulator the adviser is asked every 8 s while exploring and its answer arrives 2 s later;
++the planner is asked every 45 s and answers after 5 s. Answers keep arriving while the engine
++carries on, as they would over a network.
++
++### 5.2 The language-model adviser (simulator only)
++
++`navigation-sim/advice/LlmAdviser.kt` asks a language model which opening to explore.
++
++- **Providers.** Claude through the Anthropic Java SDK with a JSON-schema answer, or Gemini over
++  REST (temperature 0, 300 output tokens). `LLM_PROVIDER` picks one; models come from
++  `ANTHROPIC_MODEL` / `GEMINI_MODEL`.
++- **Prompt.** What the engine perceived, never a map: metres walked and seconds elapsed; up to 12
++  signs, merged when within 2.5 m or 25°, each with its type, text, clock direction and distance,
++  and how often and how long ago it was seen; up to 8 of the engine's openings with clock
++  direction and distance; and layout rules of thumb (corridors connect places, shops are dead ends,
++  numbers run in order, lifts and washrooms sit off side corridors, exits at the ends).
++- **Answer.** A probability per opening plus a reason of at most 15 words. Each opening becomes
++  advice towards it with weight `(p − 1/n) / (1 − 1/n)`, negative below an even share.
++- **Cost control.** A question is only asked when the openings (to 2 m) or the signs change; the
++  last answer is reused otherwise. Replies are cached on disk by a SHA-256 of the prompt; calls are
++  at least 250 ms apart; a per-model ledger enforces `LLM_BUDGET_USD` (default $1);
++  `LLM_CACHE_ONLY` replays the cache; `llm-dry-run` counts questions without asking any.
++- **Pilot.** Claude Haiku 4.5, one seed, on an older engine: 45.5% success against 36.4% without
++  it, and 4 of 15 mall trips against none. Its answers hedged: the median strongest weight was 0.20.
++  The cache holds 885 replies, 731,271 input and 78,885 output tokens — about $1.13, or roughly
++  $0.0013 a question. Paid use is paused, so no result exists on the current engine.
++- **Labelled decisions.** `SituationRecorder` (design `record`) writes every new question the
++  adviser would be asked, with the exact prompt, the engine's own score for each opening, and the
++  true remaining walk through each, so any model can be scored offline. In a first small run the
++  engine's own top opening was truly best 39% of the time.
++
+ ---
+ 
+ ## 6. Camera ownership
+@@ -719,7 +859,7 @@ comes — and it is the first thing the engine says in every session. It has its
+ 
+ ## 9. Testing
+ 
+-**153 tests**, all against the platform-independent core — no ARCore session, no Android context,
++**187 tests**, all against the platform-independent core — no ARCore session, no Android context,
+ no Expo module, no device.
+ 
+ | Suite | Covers |
+@@ -732,6 +872,12 @@ no Expo module, no device.
+ | `ExplorationManagerTest` | waypoint held across frontier changes, blocked/stalled release, progress budget |
+ | `TopologicalMapTest` | merge, routing, blocked edges, multi-floor |
+ | `SemanticHintStoreTest` | matching, ageing, directional bias, door semantics |
++| `RoomNumberModelTest` | position along the run, odd and even walls, a target behind, one misread, another corridor, a repeated plate, another floor |
++| `FacilitySynonymTest` | every washroom name normalised alike, other names untouched |
++| `PlannerHypothesisTest` | pull towards a guess, fading, a searched guess spent and kept spent, near-guess scoring |
++| `AimPolicyTest` | when to tilt or sweep the phone for a sign |
++| `GridRetentionTest` | decided cells survive time out of view |
++| `SpaceShapeTest` | long-axis and clutter cues |
+ | `NavigationStateMachineTest` | every transition rule |
+ | `NavigationControllerTest` | heading → command, hysteresis, timing contract, arrival |
+ | `StopReasonTest` | each reason code, hazard vs fault |
+@@ -756,18 +902,182 @@ cd my-app/navigation-core && ./gradlew test
+ 
+ ### Simulator
+ 
+-`my-app/navigation-sim` runs the engine in closed loop against a virtual building: a phone held
+-portrait by a scripted person, ARCore-like depth (noise, dropouts, flying pixels, glass, 15 Hz depth
+-one frame late), and a perception stand-in with the shipped model's measured recall and OCR errors.
+-The depth goes through the core's own `SensorFrameAssembler` — the code the phone runs — so the
+-adapter math is exercised too. Scenarios assert safety (no collisions, no falls, no movement without
+-tracking) and outcomes (arrival, progress); `KNOWN_LIMITATION` scenarios document what does not work
+-yet. Runs record to MCAP and stream live to Foxglove. See `my-app/navigation-sim/README.md`.
++`my-app/navigation-sim` runs the engine in closed loop against a virtual building. The depth goes
++through the core's own `SensorFrameAssembler` — the code the phone runs — so the adapter math is
++exercised too. Everything is pure JVM; runs are deterministic per seed, record to MCAP for
++Foxglove, stream live, and replay in Webots. See `my-app/navigation-sim/README.md`.
++
++| Modelled | Values |
++|---|---|
++| Buildings | Simple single-feature scenes; a 3-floor **school** (60 m corridor, rooms 1xx–3xx, odd and even sides, range signs with arrows, two stairwells, a lift, washrooms); a 2-level **mall** (84 m concourse, glass shop fronts with names 4.1 m up on fascias, an atrium behind a glass balustrade, escalators, a food court, a services corridor); three held-out parametric malls |
++| Depth | Noise σ = 5 mm + 8 mm × z²; dropout 2% + 3% per metre; up to +60% at grazing angles and on dark surfaces; glass returns 10% of the time, otherwise seen through; flying pixels at 30% of edges over 0.25 m; 8 m maximum; 160 × 120; 15 Hz, one frame late |
++| Perception | Signs projected through the camera (640 × 480), occluded by solid geometry but not glass. Recall from the detector's validation: door 0.63, exit 0.73, stairs 0.55, lift 0.75, washroom 0.95, arrows 0.33. OCR reads 85% of legible text and gets a character wrong 8% of the time. Detection needs 14 px, reading 12 px. A capture every 1 s, 0.3–0.8 s latency; every 4th may wait 0.6–2.5 s on Gemini |
++| Tracking | Loss windows; pose drift, mild (1°/min yaw, 1% of distance) or strong (3°/min, 3%, relocalising every 60–150 s and keeping 30% of the error) |
++| Sensor rigs | Phone; wide-angle phone (100°); chest stereo camera (87°, 12 m depth); the same seeing glass; chest LiDAR (25 m, low noise) |
++| A person | Reacts 0.45 s after an instruction; walks 1.0 m/s, turns 60°/s; scans ±60° every 4 s, tilting down; ±3° sway; also cautious (0.8 s, 0.6 m/s), hurried (0.3 s, 1.3 m/s) and never-tilts profiles |
++| A robot | Follows the engine's path (below) |
++
++**31 scenarios** with their own pass criteria: 11 pass (corridors, a table that must not become the
++floor, stairwells and escalator heads that must not be fallen down, tracking loss, room 314 by its
++plate, a 1.5 m office corridor, clutter, a lift lobby), and 20 are recorded `KNOWN_LIMITATION`s
++whose notes say what the simulator showed (doorways, glass, dark carpet, blind corners, most
++school and mall searches).
+ 
+ ```bash
+ cd my-app/navigation-sim && ./gradlew test
+ ```
+ 
++### Robot mode
++
++The research question was narrowed to a free-moving robot: placed anywhere on one floor of an
++unseen building, can it reach a destination named in text? `UserProfile.ROBOT` replaces the person.
++Any design runs with it when prefixed `robot-` (`robot-current`, `robot-oracle-advice`).
++
++- It follows the engine's planned path itself, aiming 0.6 m along it from the engine's own pose
++  estimate — never the simulator's truth — and reacts on the next frame.
++- It only moves forward while the engine says `STRAIGHT`; it turns in place (up to 90°/s, easing
++  in proportionally) on a turn, stops on `STOP`, sweeps the camera on `SCAN`. Safety stays with the
++  engine.
++- While hunting a room it sweeps its camera ±40° every 4 s. It drives at 1.0 m/s with no sway.
++
++How it was tuned (5 seeds unless noted, so differences of a few points are noise):
++
++| Version | Success | Note |
++|---|---|---|
++| First robot, steering at the engine's 1.5 m lookahead | 42.3% (20 seeds), mall 14.0% | 8.6% of runs collided; cut corners into the inflation margin and deadlocked on `OBSTACLE_AHEAD` until the 20 s stall timeout |
++| Same, signs ignored | 33.3% (20 seeds), mall 4.3% | |
++| Slower: 0.7 m/s / 0.5 m/s | 41.5% / 37.0% (40 trips) | fewer trips finish in time; rejected |
++| ±40° sweep every 2 s | 52.0% (40 trips) | aliased with the 1 s capture: the same two angles every time |
++| Sweep every 2.6 s / 3.3 s / 4 s | 42.7% / 44.5% / 48.2% | not significantly different; 4 s kept |
++| **Final: 0.6 m lookahead on the path, 4 s sweep** | **45.6%** (20 seeds), mall 17.0% | +3.3 over the first robot (CI −0.9 to +8.0); collisions down to 2.6% of runs |
++
++Against the simulated person on the same 10 seeds: alone, 45.9% against 51.1% (−5.2, CI −12.5 to
+++2.5: not significant); with a perfect adviser, 69.3% against 90.0% (−20.7, CI −27.3 to −14.5).
++Most robot failures never see the destination: smooth driving past plates at a grazing angle reads
++fewer of them than a person's sway and pauses do.
++
++### Benchmark
++
++44 trips — 5 simple scenes, 24 school, 15 mall — plus 15 trips in three held-out mall layouts,
++run only with `--filter heldout`. A trip succeeds when the agent declares arrival within 2 m of a
++true destination before 120 s + 6 s per metre of the shortest walk (at most 480 s). SPL weights
++each success by the shortest walk over the walk taken. Results record the commit, the design and
++the agent. `--compare` pairs two results by trip and seed, bootstraps a 95% interval over trips
++(10,000 resamples), and rejects any design that adds falls or more than a point of false arrivals —
++and, for a person, more than 5% instruction churn. Use 20 seeds for decisions: at 10, differences
++of about 3 points are noise.
++
++#### The engine's history, simulated person
++
++| Stage (result file) | Engine alone | With a perfect route adviser |
++|---|---|---|
++| Original engine (`v0-original-10`) | 28.0% (mall 0.0) | — |
++| `deterministic-reference` | 34.3% | — |
++| `deterministic-v2` / `oracle-v2` | 38.9% (mall 2.0) | 67.0% |
++| `w9-current` / `w9-level` | 37.7% | 90.0% |
++| `g2`, 20 seeds | — | 91.5% |
++| `i1-oracle-advice`, 20 seeds | — | 89.7%, 0 falls in 880 runs |
++| **Shipped** (`p0-current`, `p0-oracle-advice`) | **51.1%** (simple 94.0, school 66.3, mall 12.7), SPL 0.305 | **90.0%** (mall 87.3), SPL 0.671 |
++
++10 seeds unless stated. Of the shipped engine's failures, 206 of 215 never located the destination;
++in the mall, exploration typically entered a shop through its 3 m opening and stayed there.
++
++#### What each feature was worth, simulated person
++
++| Change | Result | Verdict |
++|---|---|---|
++| A capture every 1 s instead of 2.5 s, with the oracle | 73.9% against 59.3% | kept |
++| Tilting the phone up 10° for shop names, with the oracle, 7 mall shop trips × 40 seeds | 87.1% against 56.1% without | kept |
++| Shop tilt angle: level / +10° / +20° | 85.7% / 88.0% / 80.9% | +10° kept |
++| Following up plates read without depth ("glimpses"), 20 seeds | 91.5% against 89.7% without | kept |
++| Assumed fascia height for ranging 3.5 / 4.0 / 4.5 m, with the oracle | 63.6% / 67.0% / 66.1% | 4.0 m kept |
++| Sweeping the phone while hunting a room, person | 80.2% against 84.8% | off for a person; the robot sweeps |
++| Advice turning to look / releasing a commitment, 20 seeds | both 90.1%, neither 89.7%, no release 88.0%, no turn 90.3% | not significant; both now off |
++| Close-range floor check, 20 seeds | 89.7% against 90.2% without | kept for safety |
++| Shape cues, no adviser: axis 1 / axis 2 / clutter 1 / clutter 3 | 51.8% / 51.1% / 52.5% / 53.4% against 51.1% | none significant; clutter 3 added glass contacts; off |
++| Advice strength with the oracle: full / half / quarter weight | 90.0% / 78.9% / 68.0% against 51.1% | — |
++
++#### Robot results
++
++2026-10-04, one build (`b3c715c+dirty`), 18,060 runs, no falls. 20 seeds for the first block, 10 for
++the rest; the 10-seed changes are against the engine alone on the same seeds (45.9%).
++
++| Design | Success | SPL | Simple | School | Mall | Change (95% CI) |
++|---|---|---|---|---|---|---|
++| `robot-current` — the engine alone | 45.6% | 0.283 | 87.0% | 54.8% | 17.0% | reference |
++| `robot-frontier-only` — signs ignored | 36.0% | 0.218 | 80.0% | 46.0% | 5.3% | −9.5 (−14.9 to −4.4) |
++| `robot-numbering-off` | 45.2% | 0.281 | 87.0% | 54.2% | 17.0% | −0.3 (−1.7 to +1.0) |
++| `robot-oracle-advice` — perfect adviser | 69.2% | 0.491 | 86.0% | 70.6% | 61.3% | +23.6 (+16.2 to +31.5) |
++| Held-out malls, engine alone | 44.3% | 0.248 | | | | reference |
++| Held-out malls, signs ignored | 14.7% | 0.080 | | | | −29.7 (−42.7 to −16.7) |
++| Held-out malls, perfect adviser | 83.7% | 0.533 | | | | +39.3 (+27.3 to +50.7) |
++| `robot-planner-oracle` — perfect planner | 60.5% | 0.421 | 88.0% | 62.1% | 48.7% | +14.5 (+7.3 to +21.8) |
++| `robot-planner-noisy-a80` | 58.6% | 0.395 | 88.0% | 62.9% | 42.0% | +12.7 (+5.7 to +19.8) |
++| `robot-planner-noisy-a60` | 56.6% | 0.377 | 88.0% | 62.5% | 36.7% | +10.7 (+4.1 to +17.5) |
++| `robot-planner-noisy-a40` | 55.9% | 0.369 | 88.0% | 60.8% | 37.3% | +10.0 (+2.5 to +18.0) |
++| `robot-two-tier-a80` — both tiers right 80% | 60.5% | 0.427 | 80.0% | 66.7% | 44.0% | +14.5 (+7.5 to +21.6) |
++| `robot-two-tier-a60` | 56.8% | 0.387 | 82.0% | 63.3% | 38.0% | +10.9 (+3.9 to +18.0) |
++| `robot-two-tier-a40` | 52.0% | 0.363 | 76.0% | 58.3% | 34.0% | +6.1 (−1.8 to +14.1) |
++
++Both tiers beat the short-term adviser alone at 80% (+6.4, CI +1.4 to +11.4); at 60% the gain is
++not significant (+5.7, CI −0.9 to +12.5).
++
++#### The accuracy curve
++
++A short-term adviser right a given share of the time (`robot-noisy-aNN-wNN`), each answer at a
++given weight; when wrong, it points at an opening the true route does not take. Success, robot,
++10 seeds; the engine alone scores 45.9% on these seeds and a perfect adviser 69.2% (20 seeds).
++
++| Right | Full weight | Half weight | Quarter weight | Full weight vs alone (95% CI) |
++|---|---|---|---|---|
++| 40% | 46.8% | 48.2% | 47.3% | +0.9 (−5.5 to +7.3) |
++| 50% | 49.3% | 47.0% | 46.8% | +3.4 (−2.7 to +9.8) |
++| 60% | 52.3% | 51.1% | 48.6% | +6.4 (−0.5 to +13.4) |
++| 70% | 54.8% | 51.4% | 49.8% | +8.9 (+0.2 to +17.5) |
++| 80% | 58.6% | 54.1% | 52.3% | +12.7 (+4.5 to +21.1) |
++| 90% | 65.9% | 55.5% | 52.3% | +20.0 (+11.4 to +28.9) |
++
++A wrong adviser costs nothing — at 40% success stays where it was — and help becomes significant
++from about 70% right at full weight. Weight matters most when the adviser is good: at 90%, half
++weight gives +9.5 (CI +2.3 to +16.8) and quarter weight +6.4 (CI +0.0 to +12.7).
++
++#### Follow the Signs' mechanism
++
++[Cao, Kumar and Curtis, 2026](https://arxiv.org/abs/2601.06652), rebuilt as `FollowTheSignsAdviser`:
++one of four map-axis directions every 2 s, right with a given probability, accumulated in a
++confidence grid (1 m cells, decay 0.9 per answer, searched cells within 2 m zeroed), the agent
++heading for the centroid of the cells within 90% of the best. `robot-fts-aNN` gives that subgoal
++an advice weight of 10, so it decides the frontier as in their method; `robot-fts-soft-aNN` fuses it
++at the usual weight of 2.
++
++| Accuracy | Subgoal decides | vs alone (95% CI) | Subgoal fused | Decides vs fused |
++|---|---|---|---|---|
++| 60% | 56.6% | +10.7 (+0.7 to +20.5) | 56.8% | +0.2 (−5.9 to +6.4) |
++| 80% | 61.6% | +15.7 (+5.7 to +25.7) | 61.8% | +0.2 (−5.9 to +6.4) |
++| 100% | 68.6% | +22.7 (+12.7 to +32.5) | 63.2% | −5.5 (−11.8 to +0.9) |
++
++How much authority the stand-in has made no significant difference, and at 80% their mechanism
++matches both tiers together (61.6% against 60.5%, −1.1, CI −8.0 to +6.4).
++
++#### Caveats
++
++- `NoisyPlanner`'s one wrong belief per trip is spent once searched, which flatters a 40%-accurate
++  planner; real models err less tidily.
++- Accuracy is defined differently for each stand-in (the right opening, the right side of the map,
++  the right place), so equal percentages are only roughly comparable.
++- The held-out malls are easier than the main malls (44.3% against 17.0% for the engine alone).
++- Navigation success is simulated; perception is a statistical stand-in for the detector and OCR,
++  not images. Depth noise is plausible, not measured on a device.
++
++```bash
++cd my-app/navigation-sim
++./gradlew installDist
++JAVA_OPTS=-Xmx2g BENCH_THREADS=3 build/install/navigation-sim/bin/navigation-sim \
++  --benchmark --name r1-current --design robot-current --seeds 20
++build/install/navigation-sim/bin/navigation-sim --compare benchmarks/r1-current.json benchmarks/r1-frontier-only.json
++build/install/navigation-sim/bin/navigation-sim --filter school-f2 --design robot-current --diagnose 1,2
++```
++
+ ---
+ 
+ ## 10. Device verification
+@@ -806,6 +1116,9 @@ cd my-app/android
+ The release APK (94 MB) embeds `index.android.bundle`, so it runs standalone — no laptop, no cable,
+ no Metro. Debug builds require all three.
+ 
++The JVM builds (`navigation-core`, `navigation-sim`) need `JAVA_HOME`; Android Studio's bundled JDK
++works: `export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"`.
++
+ ---
+ 
+ ## 11. Known limitations
+@@ -830,5 +1143,14 @@ no Metro. Debug builds require all three.
+   from `PerceptionFrame.immediateHazard` both drive the same `hazard.detected` flag. Nobody owns
+   merging them, so one can mask the other. **Open.**
+ - **Single session per process.** `NavigationRuntime` is a singleton.
++- **No adviser or planner in the app.** Both inputs exist in the core and are exercised only in the
++  simulator; no language-model result exists on the current engine (the one pilot ran on an older
++  one, for one seed).
++- **The robot gains less from guidance than a person.** Alone it is not significantly worse
++  (−5.2 points, CI −12.5 to +2.5), but with a perfect adviser it reaches 69.3% against the person's
++  90.0%. Most of its failures never see the destination (§9).
++- **No real-world navigation result.** Every success rate here is simulated; the device check in §10
++  covers the pipeline running, not trips completed.
++- **The numbering model has not moved the benchmark.** It is kept for what it tells a planner.
+ - **Android only.** The iOS adapter is out of scope; the core is structured to move to
+   `commonMain` without algorithm changes.
+diff --git a/my-app/docs/README.md b/my-app/docs/README.md
+index a2556c9..01074cc 100644
+--- a/my-app/docs/README.md
++++ b/my-app/docs/README.md
+@@ -18,6 +18,18 @@ Kept up to date. If one of these disagrees with the code, the document is wrong.
+ | Consuming the perception contract | [`perception/TEAMMATE_INTEGRATION.md`](perception/TEAMMATE_INTEGRATION.md) |
+ | Hybrid YOLO / OCR / VLM design | [`perception/HYBRID_YOLO_OCR_VLM.md`](perception/HYBRID_YOLO_OCR_VLM.md) |
+ | Camera permission behaviour | [`perception/CAMERA_PERMISSIONS_NOTE.md`](perception/CAMERA_PERMISSIONS_NOTE.md) |
++| Similar research, summarised | [`RELATED_WORK.md`](RELATED_WORK.md) |
++
++## Plans
++
++Proposals for work not yet done. They describe intent, not the code; where one disagrees with the
++code, the code is what exists.
++
++| Topic | Where |
++| --- | --- |
++| Layered navigation in simulation: the active design | [`LAYERED_NAVIGATION_DESIGN.md`](LAYERED_NAVIGATION_DESIGN.md) |
++| Hypothesis-conditioned active perception: research spec, diagrams, prototype config | [`hypothesis-active-perception/`](hypothesis-active-perception/technical_implementation.md) |
++| Belief-driven navigation: research plan to supervised wearable demo (real-world parts shelved) | [`BELIEF_DRIVEN_NAVIGATION_PLAN.md`](BELIEF_DRIVEN_NAVIGATION_PLAN.md) |
+ 
+ ## Build log
+ 
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationConfig.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationConfig.kt
+index ec129c9..892286c 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationConfig.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationConfig.kt
+@@ -241,10 +241,23 @@ data class NavigationConfig(
+     val adviceHalfAngleDegrees: Float = 60f,
+     /** Advice older than this is ignored: the user has moved on from where it was given. */
+     val adviceMaxAgeMillis: Long = 20_000,
+-    /** New advice releases a committed frontier it does not point at, when it points at another. */
+-    val adviceReleasesCommitment: Boolean = true,
+-    /** Advice pointing where no frontier lies turns the user to look that way, once per answer. */
+-    val adviceTurnsToLook: Boolean = true,
++    /**
++     * New advice releases a committed frontier it does not point at, when it points at another.
++     * Off by default: advice then reaches the engine only through the frontier score.
++     */
++    val adviceReleasesCommitment: Boolean = false,
++    /**
++     * Advice pointing where no frontier lies turns the user to look that way, once per answer.
++     * Off by default for the same reason: with it on, advice steers.
++     */
++    val adviceTurnsToLook: Boolean = false,
++    /**
++     * Weight of the long-term planner's guesses (see [com.navassist.navcore.semantic.PlannerHypothesis]):
++     * like advice, a nudge on frontier choice, never a path or a stop. No planner, no effect.
++     */
++    val weightPlanner: Float = 2.0f,
++    /** A plan's guesses fade to 1/e of their confidence over this long, until the next plan. */
++    val plannerFadeMillis: Long = 90_000,
+     /** A frontier counts as reached within this distance. */
+     val frontierReachedMeters: Float = 0.9f,
+     /** Frontiers we failed to route to are blacklisted within this radius. */
+@@ -435,6 +448,15 @@ data class NavigationConfig(
+     val glimpseReachedMeters: Float = 1.0f,
+     val glimpseSpentRadiusMeters: Float = 1.5f,
+     val glimpseMemoryMillis: Long = 60_000,
++    /**
++     * Room numbers: fit how they run along the corridor from every nearby plate read
++     * (see RoomNumberModel) and steer towards where the target's should be. Off falls back to
++     * comparing the first and last plate seen. With fewer than three plates, the fallback is used
++     * either way.
++     */
++    val roomNumberModel: Boolean = true,
++    /** Most the numbering estimate adds to a frontier's semantic score, at full confidence. */
++    val roomNumberModelMaxScore: Float = 0.8f,
+ 
+     // ---------------------------------------------------------------- phone aim (see AimPolicy)
+     /** Looking for a shop: hold the camera this far above horizontal; null = the usual hold. */
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationEngine.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationEngine.kt
+index d263746..acc9f3a 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationEngine.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/NavigationEngine.kt
+@@ -16,6 +16,7 @@ import com.navassist.navcore.planning.NavigationController
+ import com.navassist.navcore.planning.PathSmoother
+ import com.navassist.navcore.semantic.AdviceDirection
+ import com.navassist.navcore.semantic.NavigationTarget
++import com.navassist.navcore.semantic.PlannerHypothesis
+ import com.navassist.navcore.semantic.SemanticHintStore
+ import com.navassist.navcore.semantic.SemanticObservation
+ import com.navassist.navcore.semantic.Situation
+@@ -357,6 +358,7 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
+         val nowMillis = frame.timestampNanos / 1_000_000
+         clockMillis = nowMillis
+         lastPose = frame.pose
++        semantics.noteSearched(frame.pose.position2D)
+ 
+         if (!started || stateMachine.status == NavigationStatus.IDLE) {
+             return finish(nowMillis, frame, NavigationCommand.STOP, null, null, stopReason = StopReason.NOT_STARTED)
+@@ -1132,6 +1134,16 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
+         }
+     }
+ 
++    /**
++     * A long-term planner's guesses at where the destination is. Like advice, they only bias
++     * frontier choice; they fade over [NavigationConfig.plannerFadeMillis], and each is spent once
++     * the user has searched its place. Each plan replaces the last.
++     */
++    fun submitPlan(hypotheses: List<PlannerHypothesis>, nowMillis: Long = clockMillis) {
++        semantics.setPlan(hypotheses, nowMillis)
++        lastFrontierMillis = 0
++    }
++
+     /** What the engine knows right now, for an adviser. Perceived state only, never ground truth. */
+     fun situation(): Situation = Situation(
+         target = target,
+@@ -1142,11 +1154,38 @@ class NavigationEngine(val config: NavigationConfig = NavigationConfig()) {
+         elapsedMillis = sessionStartMillis?.let { clockMillis - it } ?: 0L,
+         frontiers = exploration.frontiers,
+         signs = semantics.seenSigns(clockMillis, limit = 60),
++        numbering = semantics.numberingEstimate(target),
++        targetLikelyOnAnotherFloor = semantics.targetLikelyOnAnotherFloor(target),
++        plan = semantics.planWeights(clockMillis),
+     )
+ 
+     /** The goal currently being steered at, for debug rendering. */
+     fun currentGoalWorld(): Vec2? = currentGoal
+ 
++    /** Everything the engine is remembering, for viewers and diagnostics. Never for the bridge. */
++    fun memory(): com.navassist.navcore.state.NavigationMemory {
++        val (advice, adviceAge) = semantics.currentAdvice(clockMillis)
++        val nodes = topology.nodes.toList()
++        return com.navassist.navcore.state.NavigationMemory(
++            nowMillis = clockMillis,
++            signs = semantics.seenSigns(clockMillis, limit = 200),
++            plates = semantics.numberingPlates(),
++            numbering = semantics.numberingEstimate(target),
++            targetLikelyOnAnotherFloor = semantics.targetLikelyOnAnotherFloor(target),
++            sighting = semantics.targetSighting,
++            frontiers = exploration.frontiers,
++            selectedFrontier = exploration.selected,
++            goal = currentGoal,
++            blacklisted = exploration.blacklistedAreas(),
++            nodes = nodes,
++            // Each edge is stored from both ends; keep one copy.
++            edges = nodes.flatMap { topology.edgesFrom(it.id) }.filter { it.fromId < it.toId },
++            advice = advice,
++            adviceAgeMillis = adviceAge,
++            plan = semantics.planWeights(clockMillis),
++        )
++    }
++
+     /** Where the engine believes the destination is, and how it placed it; null if unknown. */
+     fun targetSighting(): com.navassist.navcore.semantic.TargetSighting? = semantics.targetSighting
+ 
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/ExplorationManager.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/ExplorationManager.kt
+index f246629..8a67905 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/ExplorationManager.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/ExplorationManager.kt
+@@ -42,6 +42,9 @@ class ExplorationManager(
+ 
+     private val blacklist = ArrayList<Blacklisted>()
+ 
++    /** Areas currently ruled out for exploration, with their failure counts. For observability. */
++    fun blacklistedAreas(): List<Pair<Vec2, Int>> = blacklist.map { it.position to it.failures }
++
+     private var selectedCentroid: Vec2? = null
+     private var lastProgressMillis: Long = 0
+     private var bestDistanceMeters = Float.POSITIVE_INFINITY
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/Frontier.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/Frontier.kt
+index 0ad252d..f71097c 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/Frontier.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/Frontier.kt
+@@ -25,6 +25,10 @@ data class Frontier(
+     val revisitPenalty: Float = 0f,
+     /** Positive penalty for frontiers hugging obstacles / hard to reach safely. */
+     val riskPenalty: Float = 0f,
++    /** How much an outside adviser favours this frontier, -1..1 (0 with no adviser). */
++    val adviceScore: Float = 0f,
++    /** How much the long-term planner's guesses favour it, 0..1 (0 with no planner). */
++    val planScore: Float = 0f,
+     /** Weighted total produced by [FrontierScorer]. */
+     val score: Float = 0f,
+ )
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/FrontierScorer.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/FrontierScorer.kt
+index ec7e36e..04d5e19 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/FrontierScorer.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/exploration/FrontierScorer.kt
+@@ -17,6 +17,7 @@ import com.navassist.navcore.topology.TopologicalMap
+  *         + weightRevisit     * revisitPenalty
+  *         + weightRisk        * riskPenalty
+  *         + weightAdvice      * adviceScore   (only when an adviser has spoken)
++ *         + weightPlanner     * planScore     (only when a long-term planner has spoken)
+  *         + weightAxis        * along the space's long axis   (off by default)
+  *         + weightClutter     * obstacles around the frontier (off by default)
+  *
+@@ -53,6 +54,7 @@ class FrontierScorer(private val config: NavigationConfig) {
+                 val semanticScore =
+                     semantics.semanticScoreFor(frontier.centroid, userPose, target, nowMillis)
+                 val adviceScore = semantics.adviceScoreFor(frontier.centroid, nowMillis)
++                val planScore = semantics.planScoreFor(frontier.centroid, userPosition, nowMillis)
+                 val revisit = topology.revisitDensity(frontier.centroid, config.topoNodeSpacingMeters)
+                 val risk = riskOf(frontier, inflated)
+ 
+@@ -74,13 +76,16 @@ class FrontierScorer(private val config: NavigationConfig) {
+                         config.weightDistance * normalizedDistance +
+                         config.weightRevisit * revisit +
+                         config.weightRisk * risk +
+-                        config.weightAdvice * adviceScore
++                        config.weightAdvice * adviceScore +
++                        config.weightPlanner * planScore
+ 
+                 frontier.copy(
+                     distanceMeters = distance,
+                     semanticScore = semanticScore,
+                     revisitPenalty = revisit,
+                     riskPenalty = risk,
++                    adviceScore = adviceScore,
++                    planScore = planScore,
+                     score = total,
+                 )
+             }
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/Advice.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/Advice.kt
+index 0fbfea7..1135aed 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/Advice.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/Advice.kt
+@@ -16,6 +16,26 @@ import com.navassist.navcore.state.NavigationStatus
+  */
+ data class AdviceDirection(val origin: Vec2, val direction: Vec2, val weight: Float)
+ 
++/**
++ * A long-term planner's guess at where the destination is: "the 300s run east past the lifts, so
++ * Room 319 is about here". Like advice it only biases which frontier is chosen - towards the
++ * guess - and it fades with age. Unlike advice it is a place, not a direction, so it stays
++ * meaningful as the user moves; and once the user has searched that place without finding the
++ * destination, the guess is spent.
++ *
++ * @param position where the destination should be (canonical x, z).
++ * @param radiusMeters how precise the guess is; searching within this of [position] spends it.
++ * @param confidence 0..1, the planner's own.
++ * @param check what would confirm or refute it ("the next plate should be about 320"), for logs
++ *        and for the planner's next turn; the engine does not read it.
++ */
++data class PlannerHypothesis(
++    val position: Vec2,
++    val radiusMeters: Float,
++    val confidence: Float,
++    val check: String? = null,
++)
++
+ /** A sign or landmark the engine has been told about, as an adviser may see it. */
+ data class SeenSign(
+     /** ROOM, ROOM_RANGE, EXIT, DOOR, STAIRS, ELEVATOR. */
+@@ -45,4 +65,10 @@ data class Situation(
+     val elapsedMillis: Long,
+     val frontiers: List<Frontier>,
+     val signs: List<SeenSign>,
++    /** Where the room numbering puts the destination, when it is a numbered room and enough plates were read. */
++    val numbering: RoomNumberModel.Estimate? = null,
++    /** The destination's number is in another hundreds block from every plate read: likely another floor. */
++    val targetLikelyOnAnotherFloor: Boolean = false,
++    /** The planner's guesses the engine still holds, with how much each still counts (0..1). */
++    val plan: List<Pair<PlannerHypothesis, Float>> = emptyList(),
+ )
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/SemanticHintStore.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/SemanticHintStore.kt
+index 8b5a889..2e10a2e 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/SemanticHintStore.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/SemanticHintStore.kt
+@@ -63,6 +63,9 @@ class SemanticHintStore(private val config: NavigationConfig) {
+     /** Rooms seen so far, in arrival order, with where they were seen. Drives the number gradient. */
+     private val roomTrail = ArrayList<Pair<Int, Vec2>>()
+ 
++    /** Every numbered plate read this trip, where it is: how the numbering runs (see [numberingScore]). */
++    private val numbering = RoomNumberModel()
++
+     var currentFloorId: String? = null
+         private set
+ 
+@@ -107,6 +110,61 @@ class SemanticHintStore(private val config: NavigationConfig) {
+         return GeometryUtils.clamp(score, -1f, 1f)
+     }
+ 
++    /** The planner's latest guesses, when they arrived, and which have been searched. */
++    private var plan: List<PlannerHypothesis> = emptyList()
++    private var planAtMillis = 0L
++    private val searched = HashSet<PlannerHypothesis>()
++
++    /** Replaces the plan: each answer is the planner's whole current belief. */
++    fun setPlan(hypotheses: List<PlannerHypothesis>, nowMillis: Long) {
++        plan = hypotheses
++        planAtMillis = nowMillis
++        searched.retainAll(hypotheses.toSet())
++    }
++
++    /**
++     * How much each guess still counts: its confidence, fading exponentially with the plan's age,
++     * and nothing once its place has been searched.
++     */
++    fun planWeights(nowMillis: Long): List<Pair<PlannerHypothesis, Float>> {
++        if (plan.isEmpty()) return emptyList()
++        val fade = kotlin.math.exp(-(nowMillis - planAtMillis).toFloat() / config.plannerFadeMillis)
++        return plan.map { it to if (it in searched) 0f else it.confidence * fade }
++    }
++
++    /**
++     * The user walked within a guess's radius and the destination was not there: spend it, so the
++     * engine stops being drawn back to an empty place (Follow the Signs zeroes its confidence grid
++     * the same way). Called every frame with the user's position.
++     */
++    fun noteSearched(user: Vec2) {
++        for (h in plan) {
++            if (h !in searched && user.distanceTo(h.position) <= max(h.radiusMeters, MIN_SEARCH_RADIUS_METERS)) searched += h
++        }
++    }
++
++    /**
++     * How strongly the plan favours a frontier, in 0..1: for each live guess, frontiers in its
++     * direction from the user, or near it once the user is close, weighted by what it still counts.
++     */
++    fun planScoreFor(frontierCentroid: Vec2, userPosition: Vec2, nowMillis: Long): Float {
++        var score = 0f
++        for ((h, weight) in planWeights(nowMillis)) {
++            if (weight <= 0f) continue
++            val toGuess = h.position - userPosition
++            val reach = max(h.radiusMeters, MIN_SEARCH_RADIUS_METERS) + NUMBERING_NEAR_METERS
++            val factor = if (toGuess.length() < reach) {
++                GeometryUtils.clamp(1f - frontierCentroid.distanceTo(h.position) / (2f * reach), 0f, 1f)
++            } else {
++                val toFrontier = frontierCentroid - userPosition
++                if (toFrontier.lengthSquared() < 1e-4f) continue
++                max(0f, toFrontier.normalized().dot(toGuess.normalized()))
++            }
++            score += factor * weight
++        }
++        return GeometryUtils.clamp(score, 0f, 1f)
++    }
++
+     /** What has been read or detected recently, newest first, for an adviser. */
+     fun seenSigns(nowMillis: Long, limit: Int = 20): List<SeenSign> = hints.asReversed().asSequence().mapNotNull { hint ->
+         val o = hint.observation
+@@ -134,7 +192,10 @@ class SemanticHintStore(private val config: NavigationConfig) {
+     fun reset() {
+         hints.clear()
+         roomTrail.clear()
++        numbering.clear()
+         advice = emptyList()
++        plan = emptyList()
++        searched.clear()
+         currentFloorId = null
+         targetSighting = null
+         spentGlimpses.clear()
+@@ -192,6 +253,12 @@ class SemanticHintStore(private val config: NavigationConfig) {
+                 TargetMatcher.numericPart(observation.label)?.let { number ->
+                     roomTrail.add(number to observerPose.position2D)
+                     if (roomTrail.size > MAX_ROOM_TRAIL) roomTrail.removeAt(0)
++                    // The plate itself where depth placed it, else a short way along its bearing:
++                    // plates are small, so one legible without depth was near.
++                    val plate = observation.worldPosition?.toVec2()
++                        ?: bearings.getOrNull(index)?.let { observerPose.position2D + it * config.glimpseRangeMeters }
++                        ?: observerPose.position2D
++                    numbering.add(number, plate)
+                 }
+             }
+ 
+@@ -351,10 +418,49 @@ class SemanticHintStore(private val config: NavigationConfig) {
+             score += angular * recency * hint.observation.confidence * relevance
+         }
+ 
+-        score += roomNumberGradientScore(frontierCentroid, userPose, target)
++        score += numberingScore(frontierCentroid, userPose, target)
+         return GeometryUtils.clamp(score, -1f, 1.5f)
+     }
+ 
++    /** Where the numbering puts the target's plate, if the plates read so far say. */
++    fun numberingEstimate(target: NavigationTarget): RoomNumberModel.Estimate? {
++        val number = (target as? NavigationTarget.Room)?.number ?: return null
++        return if (config.roomNumberModel) numbering.estimate(number) else null
++    }
++
++    /** Every numbered plate read this trip and where it is, oldest first. For observability. */
++    fun numberingPlates(): List<RoomNumberModel.Plate> = numbering.plates.toList()
++
++    /** The advice currently held and how old it is, for observability; empty when none or stale. */
++    fun currentAdvice(nowMillis: Long): Pair<List<AdviceDirection>, Long> =
++        if (advice.isEmpty() || nowMillis - adviceAtMillis > config.adviceMaxAgeMillis) emptyList<AdviceDirection>() to 0L
++        else advice to nowMillis - adviceAtMillis
++
++    /** The target's number is in a different hundreds block from every plate on this floor. */
++    fun targetLikelyOnAnotherFloor(target: NavigationTarget): Boolean {
++        val number = (target as? NavigationTarget.Room)?.number ?: return false
++        return numbering.targetLikelyOnAnotherFloor(number)
++    }
++
++    /**
++     * Towards where the numbering puts the target: frontiers in that direction from the user, or
++     * once the user is nearly there, frontiers near the spot itself.
++     */
++    private fun numberingScore(frontierCentroid: Vec2, userPose: Pose3D, target: NavigationTarget): Float {
++        val estimate = numberingEstimate(target)
++            ?: return roomNumberGradientScore(frontierCentroid, userPose, target)
++        val user = userPose.position2D
++        val toEstimate = estimate.position - user
++        val factor = if (toEstimate.length() < NUMBERING_NEAR_METERS) {
++            GeometryUtils.clamp(1f - frontierCentroid.distanceTo(estimate.position) / (2f * NUMBERING_NEAR_METERS), 0f, 1f)
++        } else {
++            val toFrontier = frontierCentroid - user
++            if (toFrontier.lengthSquared() < 1e-4f) return 0f
++            max(0f, toFrontier.normalized().dot(toEstimate.normalized()))
++        }
++        return factor * estimate.confidence * config.roomNumberModelMaxScore
++    }
++
+     private fun relevanceOf(observation: SemanticObservation, target: NavigationTarget): Float =
+         when (observation) {
+             is SemanticObservation.RoomRange -> TargetMatcher.rangeRelevance(observation, target)
+@@ -471,6 +577,12 @@ class SemanticHintStore(private val config: NavigationConfig) {
+         const val RANGED_CONFIDENCE = 0.5f
+         const val MAX_GRADIENT_SCORE = 0.5f
+ 
++        /** Within this of the numbering's estimate, steer to the spot rather than the direction. */
++        const val NUMBERING_NEAR_METERS = 3f
++
++        /** A guess counts as searched once the user is this close, however precise it claims to be. */
++        const val MIN_SEARCH_RADIUS_METERS = 2f
++
+         /** A new depth sighting replaces one measured from at most this much nearer. */
+         const val NEARER_SLACK_METERS = 1f
+     }
+diff --git a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/TargetMatcher.kt b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/TargetMatcher.kt
+index e6ffd27..67b6890 100644
+--- a/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/TargetMatcher.kt
++++ b/my-app/navigation-core/src/main/kotlin/com/navassist/navcore/semantic/TargetMatcher.kt
+@@ -8,13 +8,27 @@ package com.navassist.navcore.semantic
+  */
+ object TargetMatcher {
+ 
+-    /** Uppercases and strips everything that is not a letter or digit: "Rm. 314" -> "RM314". */
+-    fun normalizeLabel(label: String): String = buildString {
+-        for (ch in label) {
+-            if (ch.isLetterOrDigit()) append(ch.uppercaseChar())
++    /**
++     * Uppercases and strips everything that is not a letter or digit: "Rm. 314" -> "RM314".
++     * Every name for a washroom becomes "WASHROOM": "Restrooms", "Men's toilets" and "WC" are the
++     * same place to someone looking for one.
++     */
++    fun normalizeLabel(label: String): String {
++        val plain = buildString {
++            for (ch in label) {
++                if (ch.isLetterOrDigit()) append(ch.uppercaseChar())
++            }
+         }
++        return if (isWashroomName(plain)) WASHROOM else plain
+     }
+ 
++    const val WASHROOM = "WASHROOM"
++
++    private val washroomWords = listOf("WASHROOM", "RESTROOM", "TOILET", "BATHROOM", "LAVATOR")
++
++    private fun isWashroomName(plain: String): Boolean =
++        plain == "WC" || washroomWords.any { plain.contains(it) }
++
+     /** Extracts the leading run of digits anywhere in the label: "B314a" -> 314. */
+     fun numericPart(label: String): Int? {
+         var start = -1
+diff --git a/my-app/navigation-core/src/test/kotlin/com/navassist/navcore/NavigationEngineScenarioTest.kt b/my-app/navigation-core/src/test/kotlin/com/navassist/navcore/NavigationEngineScenarioTest.kt
+index 544cd0f..e68a82b 100644
+--- a/my-app/navigation-core/src/test/kotlin/com/navassist/navcore/NavigationEngineScenarioTest.kt
++++ b/my-app/navigation-core/src/test/kotlin/com/navassist/navcore/NavigationEngineScenarioTest.kt
+@@ -481,7 +481,8 @@ class NavigationEngineScenarioTest {
+     fun `advice for the way behind releases the way ahead`() {
+         // In a corridor running both ways, after the scan facing north: south is unmapped.
+         val world = SyntheticWorld.corridor(halfWidth = 1.0f, fromZ = -14f, toZ = 14f)
+-        val engine = NavigationEngine(NavigationConfig())
++        // Both behaviours are opt-in: by default advice only re-weights frontiers.
++        val engine = NavigationEngine(NavigationConfig(adviceTurnsToLook = true, adviceReleasesCommitment = true))
+         engine.start(NavigationTarget.Explore)
+         var sweep = 0.0
+         var snapshot: NavigationSnapshot? = null
+diff --git a/my-app/navigation-sim/README.md b/my-app/navigation-sim/README.md
+index 15446c7..8073015 100644
+--- a/my-app/navigation-sim/README.md
++++ b/my-app/navigation-sim/README.md
+@@ -88,10 +88,11 @@ controller also writes `controllers/sim_replay/replay.log`.
+ | Multi-storey buildings: stairs as steps (up is in the way, down is a drop), escalators, atriums | Climbing stairs or riding a lift: a run stays on one floor |
+ | Portrait phone at chest height, pitch, walking sway | The phone rolling, or being put in a pocket |
+ | Depth: z-depth in mm, sensor orientation, range-squared noise, dropouts, grazing-angle loss, flying pixels at edges, glass seen through, 15 Hz one frame late | ARCore's own depth smoothing and temporal filtering; noise calibrated on a real device |
+-| Tracking loss windows | Pose drift, relocalisation jumps |
++| Tracking loss windows; pose drift (`drift-mild`, `drift-strong`: yaw and scale error, occasional relocalisation) | Visual loop closure |
+ | Plane tracking: a surface appears once enough of it is seen, extent grows | Plane merging, vertical planes |
+ | Perception: signs in view, occlusion, apparent size, the shipped model's recall per class, OCR misreads, a capture every 1 s (0.3–0.8 s on device; every 4th may wait 0.6–2.5 s on Gemini), capture timestamps | Pixels. No image is rendered; YOLO and OCR are not run |
+ | A person: reaction time, turn rate, speed, scanning habits, holding the phone as asked (tilt, point, sweep), collisions, falls | Hearing the wrong instruction, or ignoring one |
++| A robot (`robot-` designs): follows the engine's path at 0.6 m lookahead, turns in place, sweeps its camera ±40° while hunting a room | Wheel slip, motor limits, a real robot's camera mount |
+ 
+ The perception stand-in re-implements the label mapping of `src/perception/perceptionToSemantic.ts`
+ (TypeScript can't run here). Keep the two in step.
+@@ -116,6 +117,25 @@ stair openings and the atrium, drawn see-through in Webots and Foxglove). Draw a
+ `SceneBuilder.storey(elevation) { ... }` and `stairwell(...)`. Their scenarios are prefixed
+ `school-` and `mall-`; most are `KNOWN_LIMITATION`s, and their notes say what the runs showed.
+ 
++## Benchmark
++
++```bash
++./gradlew run --args="--episodes"                                       # the 44 trips (+15 held out)
++./gradlew run --args="--benchmark --name my-run --design robot-current --seeds 20"
++./gradlew run --args="--compare benchmarks/a.json benchmarks/b.json"    # paired, 95% CI
++./gradlew run --args="--filter school-f2 --design robot-current --diagnose 1,2"
++```
++
++A design changes every run's settings so two can be compared on the same trips and seeds:
++`current`, `frontier-only`, `numbering-off`, `oracle-advice`, `noisy-aNN-wNN` (an adviser of known
++accuracy and weight), `planner-oracle`, `planner-noisy-aNN`, `two-tier-aNN`, `fts-aNN` /
++`fts-soft-aNN` (Follow the Signs' mechanism), `llm-advice` (paid), and more in `bench/BenchmarkCli.kt`.
++Prefix any of them with `robot-` to run it with the robot instead of the person. Held-out malls run
++only with `--filter heldout`. Results and what they showed are in `../../TECHNICAL.md` §9.
++
++The machine is short of memory: cap threads and heap (`BENCH_THREADS=3`, `JAVA_OPTS=-Xmx2g` on the
++installed launcher), and run one design at a time.
++
+ ## Adding a scenario
+ 
+ Buildings are drawn in floor-plan coordinates in `world/Buildings.kt`; scenarios, with their pass
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/LiveRunner.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/LiveRunner.kt
+index 26afb2c..23d0c14 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/LiveRunner.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/LiveRunner.kt
+@@ -3,6 +3,7 @@ package com.navassist.sim
+ import com.navassist.navcore.state.NavigationCommand
+ import com.navassist.sim.foxglove.FoxglovePublisher
+ import com.navassist.sim.foxglove.FoxgloveWebSocketSink
++import com.navassist.sim.foxglove.InsightPublisher
+ 
+ /**
+  * Runs one scenario in REAL time and streams it to Foxglove.
+@@ -34,6 +35,7 @@ object LiveRunner {
+             val simulation = Simulation(scenario.settings(seed))
+             val publisher = FoxglovePublisher(sink)
+             simulation.listeners += publisher::onFrame
++            InsightPublisher(sink).attach(simulation)
+ 
+             println("Waiting for Foxglove to connect to ws://localhost:$port ...")
+             while (!sink.connected) Thread.sleep(100)
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Main.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Main.kt
+index 1326cd1..8d775d8 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Main.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Main.kt
+@@ -17,6 +17,8 @@ Navigation simulator
+   --live PORT            run the first scenario in real time, streaming to Foxglove at
+                          ws://localhost:PORT; publish a Twist on /cmd_vel to drive it yourself
+   --list                 list scenarios and exit
++  --episode ID           run one benchmark trip as a scenario (repeatable), with --design; works
++                         with --live, --mcap, --webots, --trace and --snapshots
+ 
+ Benchmark (start -> destination episodes, success rate, paired comparison):
+   --benchmark            run the episode set on --seeds seeds (default 5 here)
+@@ -30,6 +32,7 @@ Benchmark (start -> destination episodes, success rate, paired comparison):
+ 
+ fun main(args: Array<String>) {
+     val names = ArrayList<String>()
++    val episodeIds = ArrayList<String>()
+     var seeds = 3
+     var reportDir = File("sim-reports")
+     var snapshotAll = false
+@@ -48,6 +51,7 @@ fun main(args: Array<String>) {
+         when (args[i]) {
+             "--all" -> Unit
+             "--scenario" -> names += args[++i]
++            "--episode" -> episodeIds += args[++i]
+             "--seeds" -> { seeds = args[++i].toInt(); seedsGiven = true }
+             "--benchmark" -> benchmark = true
+             "--name" -> benchName = args[++i]
+@@ -83,7 +87,16 @@ fun main(args: Array<String>) {
+         BenchmarkCli.run(benchName, if (seedsGiven) seeds else 5, filter, design, pictures)
+         return
+     }
+-    val scenarios = if (names.isEmpty()) Scenarios.all else names.map { Scenarios.named(it) }
++    val trips = episodeIds.map { id ->
++        com.navassist.sim.bench.Benchmark.asScenario(
++            com.navassist.sim.bench.Benchmark.episodeNamed(id), design, com.navassist.sim.bench.Designs.named(design),
++        )
++    }
++    val scenarios = when {
++        names.isEmpty() && trips.isNotEmpty() -> trips
++        names.isEmpty() -> Scenarios.all
++        else -> names.map { Scenarios.named(it) } + trips
++    }
+     livePort?.let { port ->
+         LiveRunner.run(scenarios.first(), seed = 1, port = port)
+         return
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Runner.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Runner.kt
+index d304a91..8e540d8 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Runner.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Runner.kt
+@@ -2,6 +2,7 @@ package com.navassist.sim
+ 
+ import com.navassist.navcore.state.NavigationSnapshot
+ import com.navassist.sim.foxglove.FoxglovePublisher
++import com.navassist.sim.foxglove.InsightPublisher
+ import com.navassist.sim.foxglove.McapSink
+ import com.navassist.sim.foxglove.McapWriter
+ import com.navassist.sim.report.TopDownRenderer
+@@ -34,6 +35,7 @@ object Runner {
+             McapSink(McapWriter.open(file)).also { sink ->
+                 val publisher = FoxglovePublisher(sink)
+                 simulation.listeners += publisher::onFrame
++                InsightPublisher(sink).attach(simulation)
+             }
+         }
+         val webots = webotsTo?.let { WebotsExporter.Recorder().also { r -> simulation.listeners += r::onFrame } }
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Simulation.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Simulation.kt
+index 8f97bd7..0aa5e76 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Simulation.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/Simulation.kt
+@@ -49,6 +49,11 @@ data class SimSettings(
+     /** How often the adviser is asked while exploring, and how long its answer takes to arrive. */
+     val adviceIntervalSeconds: Double = 8.0,
+     val adviceLatencySeconds: Double = 2.0,
++    /** A long-term planner asked where the destination is; null for none. */
++    val planner: com.navassist.sim.advice.Planner? = null,
++    /** The planner is asked far less often than the adviser, and thinks for longer. */
++    val plannerIntervalSeconds: Double = 45.0,
++    val plannerLatencySeconds: Double = 5.0,
+     /** The camera: field of view and resolution, shared by depth and perception. */
+     val cameraIntrinsics: com.navassist.navcore.sensing.CameraIntrinsics = com.navassist.sim.sensor.DepthCamera.DEFAULT_RGB,
+     /** How the tracker's reported pose wanders from the truth; null for perfect tracking. */
+@@ -154,6 +159,20 @@ class Simulation(val settings: SimSettings) {
+     /** Diagnostics: every batch of observations as placed, before the engine gets it. */
+     var onLocated: ((List<SemanticLocator.Located>) -> Unit)? = null
+ 
++    /**
++     * One observation as it reached the engine, with the sign it really came from: where depth put
++     * it on the floor plan (null when depth could not), and how far that is from the truth.
++     */
++    class Placement(
++        val sign: com.navassist.sim.world.Sign,
++        val located: SemanticLocator.Located,
++        val planPosition: Pair<Float, Float>?,
++        val errorMeters: Float?,
++    )
++
++    /** Observability: every batch of observations as delivered, with their true signs. */
++    var onPlaced: ((Double, List<Placement>) -> Unit)? = null
++
+     /** How many times the adviser was asked. */
+     var adviceRequests = 0
+         private set
+@@ -216,6 +235,9 @@ class Simulation(val settings: SimSettings) {
+         lastFrame = frame
+         lastSnapshot = snapshot
+         user.hear(snapshot.command, snapshot.stopReason, seconds)
++        if (settings.user.followsPath) {
++            user.hearHeading(snapshot.headingErrorDegrees, engine.currentPathWorld(), engine.currentPose())
++        }
+         user.hearAim(snapshot.aim, seconds)
+ 
+         // Perception, on the app's cadence: observations placed with the depth of THEIR frame.
+@@ -223,6 +245,12 @@ class Simulation(val settings: SimSettings) {
+         if (arrived.isNotEmpty()) {
+             val located = SemanticLocator.locate(arrived, assembler)
+             onLocated?.invoke(located)
++            onPlaced?.let { listener ->
++                listener(seconds, located.zip(perception.lastDeliveredSigns) { l, sign ->
++                    val plan = l.observation.worldPosition?.let { canonicalToPlan(it.toVec2()) }
++                    Placement(sign, l, plan, plan?.let { (x, y) -> kotlin.math.hypot(x - sign.x, y + sign.z) })
++                })
++            }
+             SemanticLocator.submit(engine, located)
+         }
+         if (tracking && perception.wantsCapture(seconds)) {
+@@ -231,6 +259,7 @@ class Simulation(val settings: SimSettings) {
+         }
+ 
+         settings.adviser?.let { consult(it) }
++        settings.planner?.let { consultPlanner(it) }
+ 
+         val sample = TraceSample(
+             seconds, user.body, user.phoneYaw, snapshot.command, snapshot.status, snapshot.stopReason,
+@@ -258,6 +287,33 @@ class Simulation(val settings: SimSettings) {
+         pendingAdvice = (seconds + settings.adviceLatencySeconds) to advice
+     }
+ 
++    private var nextPlanSeconds = 0.0
++    private var pendingPlan: Pair<Double, List<com.navassist.navcore.semantic.PlannerHypothesis>>? = null
++
++    /** How many times the planner was asked. */
++    var planRequests = 0
++        private set
++
++    /** As [consult], at the planner's slower cadence and longer latency. */
++    private fun consultPlanner(planner: com.navassist.sim.advice.Planner) {
++        pendingPlan?.let { (due, plan) ->
++            if (seconds < due) return
++            engine.submitPlan(plan)
++            pendingPlan = null
++        }
++        if (seconds < nextPlanSeconds || engine.status != NavigationStatus.EXPLORING) return
++        nextPlanSeconds = seconds + settings.plannerIntervalSeconds
++        planRequests++
++        val plan = planner.plan(engine.situation(), this) ?: return
++        pendingPlan = (seconds + settings.plannerLatencySeconds) to plan
++    }
++
++    /** Floor-plan point (x, y) -> engine canonical (x, z). Null until the frame is established. */
++    fun planToCanonical(x: Float, y: Float): Vec2? {
++        val (ox, oy, _) = canonicalOrigin ?: return null
++        return planDirectionToCanonical(x - ox, y - oy)
++    }
++
+     /** Plan position and yaw of the phone where the engine fixed its canonical frame. */
+     fun canonicalOriginPlan(): Triple<Float, Float, Float>? = canonicalOrigin
+ 
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/Benchmark.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/Benchmark.kt
+index d0386e6..b773d4f 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/Benchmark.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/Benchmark.kt
+@@ -218,6 +218,37 @@ object Benchmark {
+     }
+ 
+     /** The episodes a filter picks: the main set, or the held-out set when the filter names it. */
++    /** One trip by its exact id, from the main set or the held-out malls. */
++    fun episodeNamed(id: String): Episode =
++        (episodes + heldOut).firstOrNull { it.id == id }
++            ?: error("no episode '$id'; see --episodes (and --episodes --filter heldout)")
++
++    /**
++     * A trip with a design, as a [com.navassist.sim.Scenario], so everything built for scenarios -
++     * the live Foxglove stream, MCAP recordings, Webots, traces, pictures - works for it. Passes
++     * when the run counts as a benchmark success.
++     */
++    fun asScenario(episode: Episode, design: String, configure: (SimSettings) -> SimSettings): com.navassist.sim.Scenario {
++        val p = prepare(listOf(episode)).single()
++        return com.navassist.sim.Scenario(
++            name = "${episode.id}-$design",
++            description = "${episode.id}: ${episode.target.description}, design $design (shortest walk ${"%.1f".format(p.shortest)} m)",
++            expectation = com.navassist.sim.Expectation.KNOWN_LIMITATION,
++            settings = { seed ->
++                configure(SimSettings(episode.scene(), episode.start, target = episode.target, maxSeconds = p.maxSeconds, seed = seed))
++            },
++            check = { result, _ ->
++                val miss = p.goals.minOf { (x, y) -> hypot(result.finalBody.x - x, result.finalBody.y - y) }
++                when {
++                    result.outcome == Outcome.FELL -> listOf("fell")
++                    result.outcome != Outcome.ARRIVED -> listOf("did not arrive (${result.outcome}), %.1f m from the nearest destination".format(miss))
++                    miss > SUCCESS_RADIUS -> listOf("arrived %.1f m from the nearest destination".format(miss))
++                    else -> emptyList()
++                }
++            },
++        )
++    }
++
+     fun select(filter: String?): List<Episode> =
+         if (filter != null && "heldout" in filter) {
+             heldOut.filter { filter == "heldout" || filter in it.id }
+@@ -351,12 +382,17 @@ object Benchmark {
+ 
+     // ------------------------------------------------------------------ results files
+ 
+-    fun write(file: File, name: String, seeds: Int, prepared: List<Prepared>, runs: List<RunRecord>) {
++    fun write(file: File, name: String, seeds: Int, prepared: List<Prepared>, runs: List<RunRecord>, design: String? = null) {
+         val byEpisode = runs.groupBy { it.episode }
+         file.parentFile?.mkdirs()
+         file.writeText(
+             json {
+                 "name" to name
++                design?.let {
++                    "design" to it
++                    // Who acted on the instructions: a robot following the path, or a person.
++                    "agent" to if (it.startsWith("robot-")) "robot" else "person"
++                }
+                 gitCommit()?.let { "commit" to it }
+                 "seeds" to seeds
+                 "successRadius" to SUCCESS_RADIUS
+@@ -425,6 +461,10 @@ object Benchmark {
+         if (dirty) "$head+dirty" else head
+     }.getOrNull()
+ 
++    /** "robot" or "person" for files that record it; null for older results. */
++    @Suppress("UNCHECKED_CAST")
++    fun agentOf(file: File): String? = (MiniJson.parse(file.readText()) as Map<String, Any?>)["agent"] as String?
++
+     /** Reads a results file back as run records. */
+     @Suppress("UNCHECKED_CAST")
+     fun read(file: File): Pair<String, List<RunRecord>> {
+@@ -472,6 +512,8 @@ object Benchmark {
+         val high: Double,
+         val gained: List<String>,
+         val lost: List<String>,
++        /** Instruction churn matters to a person being guided, not to a robot following the path. */
++        private val judgeChurn: Boolean = true,
+     ) {
+         val verdict: String get() = when {
+             candidateSummary.fallRate > baselineSummary.fallRate -> "REJECT: more falls"
+@@ -485,6 +527,7 @@ object Benchmark {
+ 
+         /** Instruction changes per minute up by more than [CHURN_TOLERANCE]; unknown for older results. */
+         private val moreChurn: Boolean get() {
++            if (!judgeChurn) return false
+             val before = baselineSummary.meanChangesPerMinute ?: return false
+             val after = candidateSummary.meanChangesPerMinute ?: return false
+             return after > before * (1 + CHURN_TOLERANCE)
+@@ -507,7 +550,13 @@ object Benchmark {
+     /** A design may raise instruction changes per minute by at most this fraction before it is rejected. */
+     const val CHURN_TOLERANCE = 0.05
+ 
+-    fun compare(baselineName: String, baseline: List<RunRecord>, candidateName: String, candidate: List<RunRecord>): Comparison {
++    fun compare(
++        baselineName: String,
++        baseline: List<RunRecord>,
++        candidateName: String,
++        candidate: List<RunRecord>,
++        judgeChurn: Boolean = true,
++    ): Comparison {
+         val a = baseline.associateBy { it.episode to it.seed }
+         val b = candidate.associateBy { it.episode to it.seed }
+         val keys = a.keys.intersect(b.keys)
+@@ -531,6 +580,7 @@ object Benchmark {
+             delta, means[249], means[9750],
+             gained = perEpisode.filter { it.value > 0 }.keys.sorted(),
+             lost = perEpisode.filter { it.value < 0 }.keys.sorted(),
++            judgeChurn = judgeChurn,
+         )
+     }
+ }
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/BenchmarkCli.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/BenchmarkCli.kt
+index bcb1f31..34e20e7 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/BenchmarkCli.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/bench/BenchmarkCli.kt
+@@ -1,7 +1,10 @@
+ package com.navassist.sim.bench
+ 
+ import com.navassist.sim.SimSettings
++import com.navassist.sim.advice.FollowTheSignsAdviser
+ import com.navassist.sim.advice.LlmAdviser
++import com.navassist.sim.advice.NoisyPlanner
++import com.navassist.sim.advice.OraclePlanner
+ import com.navassist.sim.advice.LlmClient
+ import com.navassist.sim.advice.NoisyOracleAdviser
+ import com.navassist.sim.advice.OracleAdviser
+@@ -10,6 +13,7 @@ import com.navassist.sim.advice.SituationRecorder
+ import com.navassist.sim.perception.PerceptionProfile
+ import com.navassist.sim.sensor.DriftModel
+ import com.navassist.sim.sensor.SensorRig
++import com.navassist.sim.user.UserProfile
+ import java.io.File
+ 
+ /**
+@@ -80,14 +84,32 @@ object Designs {
+         // A full turn on the spot before setting off (off by default).
+         "look-around" to { s -> s.copy(engineConfig = s.engineConfig.copy(initialLookAroundDegrees = 330f)) },
+         "oracle-look-around" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(initialLookAroundDegrees = 330f)) },
++        // Sweep the camera side to side while hunting a numbered room: plates sit on the side walls.
++        "sweep-25" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 25f)) },
++        "sweep-40" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 40f)) },
++        // Walking or driving speed, and how fast a requested sweep goes (period of one side-to-side).
++        "speed-0.7" to { s -> s.copy(user = s.user.copy(walkMetersPerSecond = 0.7f)) },
++        "speed-0.5" to { s -> s.copy(user = s.user.copy(walkMetersPerSecond = 0.5f)) },
++        "pan-2.6" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 2.6f)) },
++        "pan-3.3" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 3.3f)) },
++        "pan-4" to { s -> s.copy(user = s.user.copy(scanPeriodSeconds = 4f)) },
++        "sweep-40-fast" to { s ->
++            s.copy(engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 40f), user = s.user.copy(scanPeriodSeconds = 2f))
++        },
+         "oracle-sweep-25" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = 25f)) },
+         // Plates read without depth are not followed up.
+         "oracle-no-glimpse" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(glimpseMaxAgeMillis = 0)) },
+-        "oracle-no-advice-turn" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = false)) },
+-        "oracle-no-advice-release" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceReleasesCommitment = false)) },
+-        "oracle-no-advice-either" to { s ->
+-            s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = false, adviceReleasesCommitment = false))
++        // Advice acting outside the frontier score (both off by default): turning to look where it
++        // points, and dropping a committed frontier it does not point at.
++        "oracle-advice-turn" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = true)) },
++        "oracle-advice-release" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceReleasesCommitment = true)) },
++        "oracle-advice-either" to { s ->
++            s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(adviceTurnsToLook = true, adviceReleasesCommitment = true))
+         },
++        // Room numbers judged from the first and last plate only, as before the numbering model.
++        "numbering-off" to { s -> s.copy(engineConfig = s.engineConfig.copy(roomNumberModel = false)) },
++        // Classic frontier exploration: signs never steer, only a sighting of the goal itself does.
++        "frontier-only" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightSemantic = 0f)) },
+         // Floor ahead seen from any range counts as walkable (no close-range check).
+         "oracle-no-near-check" to { s -> s.copy(adviser = OracleAdviser(s.scene, s.target), engineConfig = s.engineConfig.copy(nearFloorVerifyMeters = 100f)) },
+         "no-near-check" to { s -> s.copy(engineConfig = s.engineConfig.copy(nearFloorVerifyMeters = 100f)) },
+@@ -122,7 +144,34 @@ object Designs {
+         "clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -1f)) },
+         "clutter-3" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightClutter = -3f)) },
+         "axis-1-clutter-1" to { s -> s.copy(engineConfig = s.engineConfig.copy(weightAxis = 1f, weightClutter = -1f)) },
++        // The long-term planner alone: the ceiling, then guesses of known accuracy.
++        "planner-oracle" to { s -> s.copy(planner = OraclePlanner(s.scene, s.target)) },
+     ).apply {
++        for (accuracy in listOf(40, 60, 80)) {
++            put("planner-noisy-a$accuracy") { s -> s.copy(planner = NoisyPlanner(s.scene, s.target, accuracy / 100f, 1f, s.seed)) }
++            // Both tiers at the same accuracy: openings scored at half weight, plus the planner.
++            put("two-tier-a$accuracy") { s ->
++                s.copy(
++                    adviser = NoisyOracleAdviser(s.scene, s.target, accuracy / 100f, 0.5f, s.seed),
++                    planner = NoisyPlanner(s.scene, s.target, accuracy / 100f, 1f, s.seed),
++                )
++            }
++        }
++        // Follow the Signs' mechanism at a given accuracy (see FollowTheSignsAdviser): asked every
++        // 2 s. "fts" lets the subgoal decide the frontier, as in their method; "fts-soft" fuses it
++        // with the usual advice weight, so the two differ only in how much authority it has.
++        for (accuracy in listOf(60, 80, 100)) {
++            put("fts-a$accuracy") { s ->
++                s.copy(
++                    adviser = FollowTheSignsAdviser(s.scene, s.target, accuracy / 100f, s.seed),
++                    adviceIntervalSeconds = 2.0,
++                    engineConfig = s.engineConfig.copy(weightAdvice = FTS_DOMINANT_WEIGHT),
++                )
++            }
++            put("fts-soft-a$accuracy") { s ->
++                s.copy(adviser = FollowTheSignsAdviser(s.scene, s.target, accuracy / 100f, s.seed), adviceIntervalSeconds = 2.0)
++            }
++        }
+         // An adviser of known quality, for free: right a given share of the time, each answer at a
+         // given weight. noisy-a60-w50 is right 60% of the time, at half weight.
+         for (accuracy in listOf(40, 50, 60, 70, 80, 90)) {
+@@ -134,7 +183,28 @@ object Designs {
+         }
+     }
+ 
+-    fun named(name: String) = all[name] ?: error("no design '$name'; known: ${all.keys.joinToString()}")
++    /**
++     * A design by name. "robot-<design>" runs that design with a path-following robot in place of
++     * the person (UserProfile.ROBOT): "robot-current", "robot-noisy-a60-w50".
++     */
++    fun named(name: String): (SimSettings) -> SimSettings {
++        if (name.startsWith(ROBOT_PREFIX)) {
++            val base = named(name.removePrefix(ROBOT_PREFIX))
++            // The robot first, so the design can still adjust it (its speed, say). A robot drives
++            // past plates without the sway and pauses that let a person read them, so it sweeps its
++            // camera across the walls while hunting a room (measured: school 52.9% -> 62.5%).
++            return { s ->
++                base(s.copy(user = UserProfile.ROBOT, engineConfig = s.engineConfig.copy(roomSearchSweepDegrees = ROBOT_SWEEP_DEGREES)))
++            }
++        }
++        return all[name] ?: error("no design '$name'; known: ${all.keys.joinToString()}, each also as $ROBOT_PREFIX<design>")
++    }
++
++    private const val ROBOT_PREFIX = "robot-"
++    private const val ROBOT_SWEEP_DEGREES = 40f
++
++    /** Advice weight at which the subgoal outweighs every other frontier term combined. */
++    private const val FTS_DOMINANT_WEIGHT = 10f
+ }
+ 
+ object BenchmarkCli {
+@@ -166,7 +236,7 @@ object BenchmarkCli {
+             }
+         }
+         val file = File(resultsDir, "$name.json")
+-        Benchmark.write(file, name, seeds, prepared, runs)
++        Benchmark.write(file, name, seeds, prepared, runs, design)
+         println()
+         println("overall   ${Summary.of(runs).line()}")
+         val building = prepared.associate { it.episode.id to it.episode.building }
+@@ -216,6 +286,7 @@ object BenchmarkCli {
+     fun compare(baseline: File, candidate: File) {
+         val (a, runsA) = Benchmark.read(baseline)
+         val (b, runsB) = Benchmark.read(candidate)
+-        print(Benchmark.compare(a, runsA, b, runsB).report())
++        val robots = Benchmark.agentOf(baseline) == "robot" && Benchmark.agentOf(candidate) == "robot"
++        print(Benchmark.compare(a, runsA, b, runsB, judgeChurn = !robots).report())
+     }
+ }
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/foxglove/FoxglovePublisher.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/foxglove/FoxglovePublisher.kt
+index 3e24dfc..d997399 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/foxglove/FoxglovePublisher.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/foxglove/FoxglovePublisher.kt
+@@ -35,7 +35,7 @@ interface FoxgloveSink : AutoCloseable {
+  * Topics (all JSON, Foxglove well-known schemas unless noted):
+  *   /world               SceneUpdate   walls, floors, glass, signs
+  *   /user                SceneUpdate   body, phone direction, what they are being told
+- *   /tf                  FrameTransform plan -> engine
++ *   /tf                  FrameTransform plan -> engine, plan -> body (the user, +x forward)
+  *   /engine/grid         Grid          occupancy, int8: -1 unknown, 0 free, 100 occupied ("map" colours)
+  *   /engine/plan         SceneUpdate   path, frontiers, goal
+  *   /engine/points       PointCloud    the depth returns the engine integrated
+@@ -73,6 +73,7 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
+             lastUserAt = sample.seconds
+             sink.publish(user, t, userScene(sim, sample, t))
+             frameTransform(sim, t)?.let { sink.publish(tf, t, it) }
++            sink.publish(tf, t, bodyTransform(sample, t))
+             sink.publish(plan, t, planScene(sim, t))
+         }
+         if (sample.seconds - lastGridAt >= GRID_PERIOD) {
+@@ -211,6 +212,18 @@ class FoxglovePublisher(private val sink: FoxgloveSink) {
+         }
+     }
+ 
++    /** plan -> body: the user (or robot) at floor level, +x the way the body faces. For follow cameras. */
++    private fun bodyTransform(sample: TraceSample, t: Long): String {
++        val half = (PI / 2 - sample.body.heading).toFloat() / 2f
++        return json {
++            "timestamp" to time(t)
++            "parent_frame_id" to "plan"
++            "child_frame_id" to "body"
++            "translation" to vec(sample.body.x, sample.body.y, 0f)
++            "rotation" to obj { "x" to 0; "y" to 0; "z" to sin(half); "w" to cos(half) }
++        }
++    }
++
+     private fun gridMessage(sim: Simulation, t: Long): String {
+         val g = sim.engine.occupancyGrid()
+         val n = g.cells
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/perception/PerceptionModel.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/perception/PerceptionModel.kt
+index bdd8c06..ed3459a 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/perception/PerceptionModel.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/perception/PerceptionModel.kt
+@@ -72,7 +72,41 @@ class PerceptionModel(
+     private val intrinsics: CameraIntrinsics,
+     private val random: Random,
+ ) {
+-    private class Pending(val dueSeconds: Double, val observations: List<SemanticObservation>)
++    /**
++     * What happened to one sign at one capture, for observability: every sign in front of the
++     * camera and inside the frame, read or not, and why.
++     *
++     * @param fate `seen` (detected, or read and parsed), or why not: `too-close`, `behind-or-oblique`,
++     *        `occluded`, `too-small`, `not-detected`, `ocr-failed`, `unparsed`.
++     * @param box the sign's bounding box in the SENSOR image, 0..1: left, top, right, bottom.
++     * @param apparentPixels its smaller side in image pixels, as the size gates judge it.
++     * @param reported what perception reported: the text read, or the class detected.
++     */
++    class SignSighting(
++        val sign: Sign,
++        val fate: String,
++        val distanceMeters: Float,
++        val box: FloatArray,
++        val apparentPixels: Float,
++        val reported: String? = null,
++        val misread: Boolean = false,
++    )
++
++    /** One capture: when, from where (camera-to-world, column-major), and every sign in frame. */
++    class Capture(val seconds: Double, val timestampNanos: Long, val cameraToWorld: FloatArray, val sightings: List<SignSighting>)
++
++    /** Observability: told about every capture. Null (the default) records nothing. */
++    var onCapture: ((Capture) -> Unit)? = null
++
++    private class Pending(val dueSeconds: Double, val observations: List<SemanticObservation>, val signs: List<Sign>)
++
++    /** The sign each observation in the last [deliver] came from, in the same order. */
++    var lastDeliveredSigns: List<Sign> = emptyList()
++        private set
++
++    private var sightings: ArrayList<SignSighting>? = null
++    private var lastRead: String? = null
++    private var lastMisread = false
+ 
+     private var pending: Pending? = null
+     private var nextCaptureSeconds = profile.captureIntervalSeconds
+@@ -100,7 +134,13 @@ class PerceptionModel(
+     fun capture(nowSeconds: Double, timestampNanos: Long, scene: Scene, cameraToWorld: FloatArray) {
+         captures++
+         nextCaptureSeconds = nowSeconds + profile.captureIntervalSeconds
+-        val observations = scene.signs.mapNotNull { observe(it, scene, cameraToWorld, timestampNanos) }
++        sightings = if (onCapture != null) ArrayList() else null
++        val sources = ArrayList<Sign>()
++        val observations = scene.signs.mapNotNull { sign ->
++            observe(sign, scene, cameraToWorld, timestampNanos)?.also { sources += sign }
++        }
++        sightings?.let { onCapture?.invoke(Capture(nowSeconds, timestampNanos, cameraToWorld.copyOf(), it)) }
++        sightings = null
+         detections += observations.size
+         val slow = profile.slowEveryNth > 0 && captures % profile.slowEveryNth == 0
+         val latency = if (slow) {
+@@ -108,7 +148,7 @@ class PerceptionModel(
+         } else {
+             profile.latencyMinSeconds + random.nextDouble() * (profile.latencyMaxSeconds - profile.latencyMinSeconds)
+         }
+-        pending = Pending(nowSeconds + latency, observations)
++        pending = Pending(nowSeconds + latency, observations, sources)
+     }
+ 
+     /** Observations whose analysis has finished by now. */
+@@ -116,6 +156,7 @@ class PerceptionModel(
+         val due = pending ?: return emptyList()
+         if (due.dueSeconds > nowSeconds) return emptyList()
+         pending = null
++        lastDeliveredSigns = due.signs
+         return due.observations
+     }
+ 
+@@ -127,26 +168,41 @@ class PerceptionModel(
+         val ty = sign.y - oy
+         val tz = sign.z - oz
+         val distance = sqrt(tx * tx + ty * ty + tz * tz)
+-        if (distance < 0.3f) return miss(sign, "too-close")
+-
+-        // Only readable from in front.
+-        if ((-tx * sign.normalX - tz * sign.normalZ) / distance < 0.3f) return miss(sign, "behind-or-oblique")
+ 
+-        // Camera space: project onto the camera axes (columns of the rotation).
++        // Camera space: project onto the camera axes (columns of the rotation). Geometry only - no
++        // random draws - so the sightings record can say where in the frame a sign was, whatever
++        // its fate, without changing any run.
+         val cx = tx * m[0] + ty * m[1] + tz * m[2]
+         val cy = tx * m[4] + ty * m[5] + tz * m[6]
+         val cz = tx * m[8] + ty * m[9] + tz * m[10]
+-        if (cz >= -0.1f) return miss(sign, "behind-camera")
+         val depth = -cz
+-        val u = intrinsics.cx + intrinsics.fx * cx / depth
+-        val v = intrinsics.cy - intrinsics.fy * cy / depth
+-        if (u < 0f || v < 0f || u >= intrinsics.width || v >= intrinsics.height) return miss(sign, "out-of-frame")
++        val u = if (depth > 0.1f) intrinsics.cx + intrinsics.fx * cx / depth else Float.NaN
++        val v = if (depth > 0.1f) intrinsics.cy - intrinsics.fy * cy / depth else Float.NaN
++        val inFrame = depth > 0.1f && u >= 0f && v >= 0f && u < intrinsics.width && v < intrinsics.height
++        val apparent = if (depth > 0.1f) intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth else 0f
++
++        fun record(fate: String) {
++            val list = sightings ?: return
++            if (!inFrame) return
++            list += SignSighting(sign, fate, distance, boxOf(sign, m), apparent, lastRead, lastMisread)
++        }
++        fun missed(why: String): SemanticObservation? {
++            record(why)
++            return miss(sign, why)
++        }
++        lastRead = null
++        lastMisread = false
++
++        if (distance < 0.3f) return missed("too-close")
++        // Only readable from in front.
++        if ((-tx * sign.normalX - tz * sign.normalZ) / distance < 0.3f) return missed("behind-or-oblique")
++        if (cz >= -0.1f) return miss(sign, "behind-camera")
++        if (!inFrame) return miss(sign, "out-of-frame")
+ 
+         // Occluded? Glass does not block the view, only depth-like surfaces do.
+         val hit = scene.raycast(ox, oy, oz, tx, ty, tz, 1f, skipGlass = true)
+-        if (hit != null && hit.t < 1f - 0.12f / distance) return miss(sign, "occluded")
++        if (hit != null && hit.t < 1f - 0.12f / distance) return missed("occluded")
+ 
+-        val apparent = intrinsics.fy * minOf(sign.widthMeters, sign.heightMeters) / depth
+         val sensorX = u / intrinsics.width
+         val sensorY = v / intrinsics.height
+         seenAt?.invoke(sign, sensorX, sensorY)
+@@ -157,20 +213,43 @@ class PerceptionModel(
+ 
+         return when (sign.kind) {
+             SignKind.ROOM_PLATE, SignKind.ROOM_RANGE -> {
+-                if (apparent < profile.minReadPixels) return miss(sign, "too-small")
+-                if (random.nextFloat() >= profile.ocrReadRate) return miss(sign, "ocr-failed")
+-                (text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight) ?: miss(sign, "unparsed"))
+-                    ?.also { probe?.invoke(sign, "seen") }
++                if (apparent < profile.minReadPixels) return missed("too-small")
++                if (random.nextFloat() >= profile.ocrReadRate) return missed("ocr-failed")
++                (text(sign.text, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight) ?: missed("unparsed"))
++                    ?.also { probe?.invoke(sign, "seen"); record("seen") }
+             }
+             else -> {
+-                if (apparent < profile.minDetectPixels) return miss(sign, "too-small")
+-                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return miss(sign, "not-detected")
++                if (apparent < profile.minDetectPixels) return missed("too-small")
++                if (random.nextFloat() >= (profile.recall[sign.kind] ?: 0f)) return missed("not-detected")
+                 detected(sign.kind, confidence, sensorX, sensorY, uprightX, timestampNanos)?.withBox(boxWidth, boxHeight)
+-                    ?.also { probe?.invoke(sign, "seen") }
++                    ?.also { probe?.invoke(sign, "seen"); lastRead = sign.kind.name; record("seen") }
+             }
+         }
+     }
+ 
++    /** The sign's box in the SENSOR image, 0..1: left, top, right, bottom, clamped to the frame. */
++    private fun boxOf(sign: Sign, m: FloatArray): FloatArray {
++        val rightX = -sign.normalZ
++        val rightZ = sign.normalX
++        var minU = Float.MAX_VALUE; var maxU = -Float.MAX_VALUE
++        var minV = Float.MAX_VALUE; var maxV = -Float.MAX_VALUE
++        for (sx in listOf(-0.5f, 0.5f)) for (sy in listOf(-0.5f, 0.5f)) {
++            val px = sign.x + rightX * sign.widthMeters * sx - m[12]
++            val py = sign.y + sign.heightMeters * sy - m[13]
++            val pz = sign.z + rightZ * sign.widthMeters * sx - m[14]
++            val depth = -(px * m[8] + py * m[9] + pz * m[10])
++            if (depth <= 0.05f) continue
++            val u = intrinsics.cx + intrinsics.fx * (px * m[0] + py * m[1] + pz * m[2]) / depth
++            val v = intrinsics.cy - intrinsics.fy * (px * m[4] + py * m[5] + pz * m[6]) / depth
++            minU = minOf(minU, u); maxU = maxOf(maxU, u)
++            minV = minOf(minV, v); maxV = maxOf(maxV, v)
++        }
++        if (minU > maxU) return floatArrayOf(0f, 0f, 0f, 0f)
++        val w = intrinsics.width.toFloat()
++        val h = intrinsics.height.toFloat()
++        return floatArrayOf((minU / w).coerceIn(0f, 1f), (minV / h).coerceIn(0f, 1f), (maxU / w).coerceIn(0f, 1f), (maxV / h).coerceIn(0f, 1f))
++    }
++
+     /** The sign's bounding box in the SENSOR image, 0..1: its four corners, projected. */
+     private fun boxSize(sign: Sign, m: FloatArray): Pair<Float, Float> {
+         // Along the sign's face: horizontal, perpendicular to its normal; and straight up.
+@@ -228,6 +307,8 @@ class PerceptionModel(
+     /** Mirrors `fromText` in perceptionToSemantic.ts. */
+     private fun text(raw: String, x: Float, y: Float, uprightX: Float, timestampNanos: Long): SemanticObservation? {
+         val read = if (random.nextFloat() < profile.ocrMisreadRate) misread(raw) else raw
++        lastRead = read
++        lastMisread = read != raw
+         val direction = when {
+             uprightX < 0.35f -> SemanticDirection.LEFT
+             uprightX > 0.65f -> SemanticDirection.RIGHT
+diff --git a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/user/VirtualUser.kt b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/user/VirtualUser.kt
+index e7a5f28..8e6fa51 100644
+--- a/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/user/VirtualUser.kt
++++ b/my-app/navigation-sim/src/main/kotlin/com/navassist/sim/user/VirtualUser.kt
+@@ -32,9 +32,31 @@ data class UserProfile(
+     val swayDegrees: Float = 3f,
+     val hold: PhoneHold = PhoneHold(),
+     val bodyRadiusMeters: Float = 0.25f,
++    /**
++     * A robot rather than a person: it reads the engine's heading error to the next waypoint and
++     * steers along the path continuously, instead of acting on the coarse spoken commands alone.
++     * The commands still gate it - it only moves forward on STRAIGHT, and stops and scans as told.
++     */
++    val followsPath: Boolean = false,
++    /** Turn rate per unit of heading error when following the path, per second. */
++    val steerGain: Float = 3f,
++    /** Slowest in-place turn while the engine says turn, so a small error still closes. */
++    val minTurnDegreesPerSecond: Float = 15f,
+ ) {
+     companion object {
+         val TYPICAL = UserProfile()
++
++        /** A wheeled robot carrying the phone: acts on the next frame, follows the path, no sway. */
++        val ROBOT = UserProfile(
++            name = "robot",
++            reactionSeconds = 0f,
++            turnDegreesPerSecond = 90f,
++            swayDegrees = 0f,
++            // One side-to-side every 4 s. Not 2 s: with a capture every second, a 2 s sweep caught
++            // the camera at the same two angles every time.
++            scanPeriodSeconds = 4f,
++            followsPath = true,
++        )
+         val CAUTIOUS = UserProfile(name = "cautious", reactionSeconds = 0.8f, walkMetersPerSecond = 0.6f, turnDegreesPerSecond = 40f)
+ 
+         /** Sweeps side to side but never tilts the phone at the floor: the near-field worst case. */
+@@ -105,6 +127,48 @@ class VirtualUser(
+         heardAims.addLast(nowSeconds + profile.reactionSeconds to next)
+     }
+ 
++    /** The engine's latest heading error to its next waypoint, relative to the phone; path followers only. */
++    private var headingErrorRadians: Float? = null
++
++    /**
++     * Called with every engine output; only a path-following robot reads it. With the engine's
++     * planned path (canonical frame) and its pose estimate, the robot aims at a point
++     * [PATH_LOOKAHEAD_METERS] along the path - close enough to follow its bends instead of cutting
++     * inside them, as steering at the engine's own 1.5 m lookahead does. Without a path, the
++     * engine's heading error to its lookahead is used.
++     */
++    fun hearHeading(
++        errorDegrees: Float?,
++        path: List<com.navassist.navcore.geometry.Vec2> = emptyList(),
++        pose: com.navassist.navcore.geometry.Pose3D? = null,
++    ) {
++        if (!profile.followsPath) return
++        headingErrorRadians = pathError(path, pose) ?: errorDegrees?.let { GeometryUtils.degreesToRadians(it) }
++    }
++
++    /** Heading error, relative to the phone as the engine sees it, to a point a little way along the path. */
++    private fun pathError(path: List<com.navassist.navcore.geometry.Vec2>, pose: com.navassist.navcore.geometry.Pose3D?): Float? {
++        if (pose == null || path.size < 2) return null
++        val here = pose.position2D
++        var nearest = 0
++        for (i in path.indices) if (path[i].distanceSquaredTo(here) < path[nearest].distanceSquaredTo(here)) nearest = i
++        var aim = path.last()
++        for (i in nearest + 1 until path.size) {
++            if (path[i].distanceTo(here) >= PATH_LOOKAHEAD_METERS) { aim = path[i]; break }
++        }
++        val toAim = aim - here
++        if (toAim.lengthSquared() < 1e-4f) return null
++        return GeometryUtils.angleDifference(pose.yawRadians, toAim.yawRadians())
++    }
++
++    /**
++     * The heading error relative to the BODY: the engine measures it from the phone, which a robot
++     * knows it has panned by (phone yaw - body heading).
++     */
++    private fun bodyHeadingError(): Float? = headingErrorRadians?.let {
++        GeometryUtils.normalizeAngle(it + GeometryUtils.angleDifference(body.heading, phoneYaw))
++    }
++
+     private val heard = ArrayDeque<Heard>()
+     private var lastHeard: Pair<NavigationCommand, StopReason?>? = null
+     private var scanClock = 0f
+@@ -136,7 +200,16 @@ class VirtualUser(
+         val aimYaw = GeometryUtils.degreesToRadians(aim?.yawDegrees ?: 0f)
+         when (acting) {
+             NavigationCommand.STRAIGHT -> {
+-                walk(profile.walkMetersPerSecond * dt)
++                val error = if (profile.followsPath) bodyHeadingError() else null
++                if (error != null) {
++                    // Steer onto the path while driving, slowing as the error grows.
++                    val maxTurn = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond)
++                    val turn = (profile.steerGain * error).coerceIn(-maxTurn, maxTurn) * dt
++                    body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
++                    walk(profile.walkMetersPerSecond * cos(error).coerceAtLeast(0f) * dt)
++                } else {
++                    walk(profile.walkMetersPerSecond * dt)
++                }
+                 strideClock += dt
+                 val sway = GeometryUtils.degreesToRadians(profile.swayDegrees) * sin(strideClock * 2f * PI.toFloat() * 0.9f)
+                 val sweepDegrees = aim?.sweepDegrees ?: 0f
+@@ -149,7 +222,13 @@ class VirtualUser(
+             }
+             NavigationCommand.TURN_LEFT, NavigationCommand.TURN_RIGHT -> {
+                 val direction = if (acting == NavigationCommand.TURN_RIGHT) 1f else -1f
+-                val turn = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond) * dt * direction
++                val maxRate = GeometryUtils.degreesToRadians(profile.turnDegreesPerSecond)
++                // A robot eases into the path's heading instead of turning at full rate until told to stop.
++                val rate = bodyHeadingError()?.let {
++                    (profile.steerGain * kotlin.math.abs(it))
++                        .coerceIn(GeometryUtils.degreesToRadians(profile.minTurnDegreesPerSecond), maxRate)
++                } ?: maxRate
++                val turn = rate * dt * direction
+                 body = body.copy(heading = GeometryUtils.normalizeAngle(body.heading + turn))
+                 if (profile.walkWhileTurningMetersPerSecond > 0f) walk(profile.walkWhileTurningMetersPerSecond * dt)
+                 phoneYaw = GeometryUtils.normalizeAngle(body.heading + aimYaw)
+@@ -209,4 +288,9 @@ class VirtualUser(
+         distanceWalked += meters
+         if (!scene.hasFloorAt(nx, -ny)) fell = true
+     }
++
++    private companion object {
++        /** How far along the engine's path a robot aims: short, so it follows bends, not cuts them. */
++        const val PATH_LOOKAHEAD_METERS = 0.6f
++    }
+ }
+diff --git a/my-app/navigation-sim/src/main/resources/foxglove/README.md b/my-app/navigation-sim/src/main/resources/foxglove/README.md
+index 86a6d37..f15d684 100644
+--- a/my-app/navigation-sim/src/main/resources/foxglove/README.md
++++ b/my-app/navigation-sim/src/main/resources/foxglove/README.md
+@@ -3,3 +3,6 @@ https://github.com/foxglove/foxglove-sdk/tree/main/schemas/jsonschema (MIT, see
+ 
+ They are embedded in every MCAP file and advertised on the live WebSocket so Foxglove
+ recognises the messages (it matches on the schema name, e.g. `foxglove.SceneUpdate`).
++
++`CompressedImage.json` was written to match the published `foxglove.CompressedImage` schema
++(timestamp, frame_id, base64 data, format); it is not a byte-for-byte copy.

@@ -1,0 +1,2 @@
+2172
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.15, "D": 0.25, "E": 0.15, "F": 0.10, "G": 0.10}, "reason": "Straight ahead (D) most likely continues main corridor. Phone Repair sign suggests shops nearby; Music likely further along main route."}

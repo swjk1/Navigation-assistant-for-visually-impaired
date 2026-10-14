@@ -1,0 +1,2 @@
+1489
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.15}, "reason": "Exit signs at 5 and 7 o'clock suggest stairs nearby. Option D (5 o'clock, 6.2m) aligns with exit sign direction. A (straight ahead) likely continues main corridor."}

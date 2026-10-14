@@ -1,0 +1,2 @@
+943
+{"probabilities": {"A": 0.1, "B": 0.8, "C": 0.1}, "reason": "Sign says Rooms 101-106 left; turning left aligns with opening B at 7 o'clock."}

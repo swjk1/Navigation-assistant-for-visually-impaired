@@ -1,0 +1,2 @@
+1963
+{"probabilities": {"A": 0.55, "B": 0.25, "C": 0.05, "D": 0.15}, "reason": "Exit sign at 12 suggests main corridor. Sign 'Rooms 117-120' left indicates 116 nearby. Continue forward most likely."}

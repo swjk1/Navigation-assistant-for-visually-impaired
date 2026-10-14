@@ -1,0 +1,2 @@
+1613
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.12, "D": 0.20, "E": 0.25, "F": 0.08, "G": 0.05, "H": 0.05}, "reason": "Door at 11 o'clock suggests corridor. E toward 11 o'clock most aligned with exit-leading corridor direction."}

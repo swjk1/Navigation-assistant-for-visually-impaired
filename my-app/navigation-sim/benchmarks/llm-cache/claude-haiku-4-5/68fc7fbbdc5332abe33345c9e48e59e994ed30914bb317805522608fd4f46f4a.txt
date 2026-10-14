@@ -1,0 +1,2 @@
+2039
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.10, "E": 0.25, "F": 0.15}, "reason": "Pizza likely ahead or right. Noodle Bar/Tea House/Salon signs left suggest shops. Continue forward or right corridor."}

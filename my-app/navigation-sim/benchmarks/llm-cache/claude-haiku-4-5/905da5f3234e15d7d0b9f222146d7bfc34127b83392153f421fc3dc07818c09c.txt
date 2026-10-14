@@ -1,0 +1,2 @@
+1742
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign 312 ahead suggests corridor continuation. Room numbers 312-314 indicate sequential layout. Straight ahead more likely than angled turn."}

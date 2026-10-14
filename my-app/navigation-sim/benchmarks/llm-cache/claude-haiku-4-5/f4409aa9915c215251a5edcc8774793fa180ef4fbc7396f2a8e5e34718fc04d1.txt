@@ -1,0 +1,2 @@
+1603
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.05, "D": 0.60, "E": 0.10, "F": 0.05, "G": 0.03, "H": 0.02}, "reason": "Direction sign 'Rooms 107-120' points right; lift at 11 o'clock and door at 10 o'clock suggest corridor. D (10 o'clock) aligns with signs and lift."}

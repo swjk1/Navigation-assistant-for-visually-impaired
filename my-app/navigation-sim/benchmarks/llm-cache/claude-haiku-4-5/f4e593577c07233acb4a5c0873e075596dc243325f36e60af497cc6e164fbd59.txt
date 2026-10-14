@@ -1,0 +1,2 @@
+1996
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Sign points right (3 o'clock). Opening A at 1 o'clock aligns better with rightward direction than B at 9 o'clock."}

@@ -1,0 +1,2 @@
+2039
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.6}, "reason": "Door at 10 o'clock suggests corridor. Closest opening C (1 o'clock, 0.2m) likely continues corridor toward lift."}

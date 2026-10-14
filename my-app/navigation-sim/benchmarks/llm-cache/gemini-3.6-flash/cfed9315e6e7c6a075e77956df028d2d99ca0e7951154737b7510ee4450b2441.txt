@@ -1,0 +1,2 @@
+1138
+{"probabilities": {"A": 0.45, "B": 0.45, "C": 0.02, "D": 0.02, "E": 0.02, "F": 0.01, "G": 0.02, "H": 0.01}, "reason": "A and B continue straight ahead along the main corridor away from dead-end facilities."}

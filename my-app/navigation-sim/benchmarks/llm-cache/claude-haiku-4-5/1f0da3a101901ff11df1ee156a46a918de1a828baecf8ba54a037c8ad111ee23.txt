@@ -1,0 +1,2 @@
+2251
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.25, "D": 0.05, "E": 0.10, "F": 0.15, "G": 0.15, "H": 0.10}, "reason": "Continue straight (C) along apparent main corridor. Side openings (B, F, G) may branch to Music. Avoid dead-end shops."}

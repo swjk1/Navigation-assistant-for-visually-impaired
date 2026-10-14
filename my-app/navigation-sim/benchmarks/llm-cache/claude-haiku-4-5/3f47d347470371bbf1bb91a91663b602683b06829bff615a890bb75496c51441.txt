@@ -1,0 +1,2 @@
+1645
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.10, "D": 0.30, "E": 0.05, "F": 0.05}, "reason": "Forward-left directions (B, D) suggest corridor continuation. Doors detected left suggest that direction. Avoid sharp angles."}

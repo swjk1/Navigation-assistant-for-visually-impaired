@@ -1,0 +1,2 @@
+1361
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 102 is lower numbered than 116-120 detected ahead. Straight ahead (A) likely continues main corridor backward. Side opening (B) may be side corridor."}

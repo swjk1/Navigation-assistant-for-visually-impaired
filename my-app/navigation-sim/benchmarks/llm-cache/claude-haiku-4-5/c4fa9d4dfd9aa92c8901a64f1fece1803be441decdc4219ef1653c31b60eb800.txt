@@ -1,0 +1,2 @@
+1479
+{"probabilities": {"A": 0.55, "B": 0.25, "C": 0.20}, "reason": "Door ahead suggests main corridor. Option A continues forward direction; B/C veer right, likely side corridors or rooms."}

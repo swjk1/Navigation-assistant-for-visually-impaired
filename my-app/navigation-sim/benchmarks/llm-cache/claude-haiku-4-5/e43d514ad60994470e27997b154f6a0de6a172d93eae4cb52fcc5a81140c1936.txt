@@ -1,0 +1,2 @@
+2295
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.12, "D": 0.08, "E": 0.10, "F": 0.15, "G": 0.15, "H": 0.15}, "reason": "Left side (7-11 o'clock) shows repeated shops/services. Continue forward or explore forward-left for main corridor."}

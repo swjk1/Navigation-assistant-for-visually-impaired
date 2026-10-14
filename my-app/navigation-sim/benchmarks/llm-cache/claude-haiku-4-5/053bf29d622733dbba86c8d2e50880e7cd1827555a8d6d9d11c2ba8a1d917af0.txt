@@ -1,0 +1,2 @@
+2044
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.08, "E": 0.12, "F": 0.08, "G": 0.10, "H": 0.12}, "reason": "Pharmacy sign at 10 o'clock suggests corridor direction. Options E and H align with sign. A continues straight ahead, typical corridor pattern."}

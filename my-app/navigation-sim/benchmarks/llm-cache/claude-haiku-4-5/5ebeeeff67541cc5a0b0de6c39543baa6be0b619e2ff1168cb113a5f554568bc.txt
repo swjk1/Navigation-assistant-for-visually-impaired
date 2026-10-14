@@ -1,0 +1,2 @@
+1734
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "Sign at 1 o'clock shows rooms 317-320 ahead. Direction signs point left repeatedly. B aligns with sign direction."}

@@ -1,0 +1,2 @@
+2305
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.05, "E": 0.15, "F": 0.05, "G": 0.20, "H": 0.10}, "reason": "Jewellery sign ahead suggests main corridor. Lifts typically off side corridors. Prefer forward/near options over distant ones."}

@@ -1,0 +1,2 @@
+1567
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.05, "E": 0.20, "F": 0.10, "G": 0.25, "H": 0.15}, "reason": "Sign 'Rooms 107-120' points right. Options B, E, G are rightward. G (2 o'clock, 5.3m) best continues corridor toward room 119."}

@@ -1,0 +1,2 @@
+1905
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.25, "D": 0.25}, "reason": "No signs detected yet. All openings equally likely. Prefer continuing straight or slight turns over sharp left turns."}

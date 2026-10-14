@@ -1,0 +1,2 @@
+1847
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.15}, "reason": "Continue forward-left (11 o'clock) toward signs. Avoid right turns and dead ends."}

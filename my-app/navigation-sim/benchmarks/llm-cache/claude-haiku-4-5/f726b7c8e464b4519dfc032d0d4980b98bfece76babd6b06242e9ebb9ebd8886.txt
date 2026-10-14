@@ -1,0 +1,2 @@
+2549
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.05, "E": 0.30, "F": 0.25, "G": 0.05}, "reason": "Sign points left (9 o'clock). Room 308 at 11 o'clock suggests corridor runs left-right. Rooms 317-320 ahead left. Prefer E, F (10 o'clock) or C (11 o'clock) continuing corridor direction."}

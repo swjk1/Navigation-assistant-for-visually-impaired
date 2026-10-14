@@ -1,0 +1,2 @@
+2215
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.15}, "reason": "Sign 208 at 11 o'clock suggests corridor direction. Option D (11 o'clock) aligns with sign. A (12 o'clock) continues forward. E toward lift is likely side corridor."}

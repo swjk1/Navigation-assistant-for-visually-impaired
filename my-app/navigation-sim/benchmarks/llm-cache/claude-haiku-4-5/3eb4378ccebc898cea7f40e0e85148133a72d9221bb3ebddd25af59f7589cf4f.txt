@@ -1,0 +1,2 @@
+1590
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.75}, "reason": "Sign points left toward 217-220. Room 212 at 3 o'clock suggests corridor runs left-right. Continue left (8 o'clock) along corridor toward higher room numbers."}

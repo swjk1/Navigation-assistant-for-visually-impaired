@@ -1,0 +1,2 @@
+2107
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.25, "D": 0.05, "E": 0.10, "F": 0.05, "G": 0.15, "H": 0.10}, "reason": "Cinema sign at 1 o'clock suggests forward direction. Prefer straight ahead (B, C) as main corridor. Side openings less likely."}

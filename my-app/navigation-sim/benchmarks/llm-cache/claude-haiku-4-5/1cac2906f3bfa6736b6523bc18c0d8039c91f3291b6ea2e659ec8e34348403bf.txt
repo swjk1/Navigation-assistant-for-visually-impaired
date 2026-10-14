@@ -1,0 +1,2 @@
+2216
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.15, "F": 0.05, "G": 0.20, "H": 0.10}, "reason": "Straight ahead (12 o'clock) options most likely continue main corridor. G closest, suggests main passage. Side openings less likely for lifts."}

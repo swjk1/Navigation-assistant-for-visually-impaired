@@ -1,0 +1,2 @@
+2020
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.20, "D": 0.25, "E": 0.15, "F": 0.10}, "reason": "Pharmacy likely ahead or side corridor. Prefer forward (A) or continuing 5 o'clock direction (D). Avoid backtracking (B)."}

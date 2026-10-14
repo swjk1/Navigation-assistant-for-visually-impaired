@@ -1,0 +1,2 @@
+1723
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25}, "reason": "C/D continue straight (main corridor). B toward lift area. A is side corridor, likely dead-end."}

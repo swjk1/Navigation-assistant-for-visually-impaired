@@ -1,0 +1,2 @@
+2373
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.1, "E": 0.1, "F": 0.55, "G": 0.05, "H": 0.05}, "reason": "Sign points left towards rooms 101-106; 9 o'clock aligns directly with the left corridor."}

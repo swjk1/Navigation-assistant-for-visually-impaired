@@ -1,0 +1,2 @@
+1084
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Forward direction (1 o'clock) more likely continues corridor. Washrooms typically off main paths."}

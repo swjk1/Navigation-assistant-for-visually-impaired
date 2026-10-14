@@ -1,0 +1,2 @@
+1676
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 206 detected 5 o'clock behind. Continue forward (A) along corridor; avoid side opening (B)."}

@@ -1,0 +1,2 @@
+2278
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.15, "D": 0.25, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "D (11 o'clock) continues straight ahead toward Electronics signs. Lifts typically on main corridors. Avoid side rooms."}

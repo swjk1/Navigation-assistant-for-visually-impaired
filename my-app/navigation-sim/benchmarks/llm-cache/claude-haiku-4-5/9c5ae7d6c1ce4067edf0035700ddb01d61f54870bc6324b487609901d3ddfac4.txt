@@ -1,0 +1,2 @@
+2215
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.25, "D": 0.30, "E": 0.10, "F": 0.05, "G": 0.12, "H": 0.05}, "reason": "Continue forward/left along main corridor. Avoid right-side shops. D/C most promising for florist."}

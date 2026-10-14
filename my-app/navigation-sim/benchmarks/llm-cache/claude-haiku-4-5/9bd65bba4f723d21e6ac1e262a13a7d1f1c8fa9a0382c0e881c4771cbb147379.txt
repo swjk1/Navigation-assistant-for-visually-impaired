@@ -1,0 +1,2 @@
+1970
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.05, "D": 0.35}, "reason": "Exit sign at 12 o'clock suggests forward direction. Room numbers 209-216 indicate corridor. Avoid backtracking."}

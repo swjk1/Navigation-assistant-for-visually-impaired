@@ -1,0 +1,2 @@
+1531
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.15, "D": 0.30, "E": 0.05, "F": 0.10, "G": 0.08, "H": 0.02}, "reason": "Multiple shop signs ahead suggest main corridor. Direction 12 and 11 o'clock most promising for continuing forward."}

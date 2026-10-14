@@ -1,0 +1,2 @@
+1741
+{"probabilities": {"A": 0.55, "B": 0.45}, "reason": "Both at 11 o'clock ahead. A slightly closer, better positioned for corridor continuation toward stairs."}

@@ -1,0 +1,2 @@
+2265
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.10, "E": 0.15, "F": 0.10, "G": 0.15, "H": 0.05}, "reason": "Multiple shop signs ahead suggest main concourse. Side corridors (A, C, E, G) likely lead to lifts. C most promising: straight ahead direction."}

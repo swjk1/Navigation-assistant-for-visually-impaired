@@ -1,0 +1,2 @@
+2235
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.15, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Pharmacy signs suggest retail area. Forward openings (A, B, C) likely continue main corridor toward exit. Avoid side shops (E, F)."}

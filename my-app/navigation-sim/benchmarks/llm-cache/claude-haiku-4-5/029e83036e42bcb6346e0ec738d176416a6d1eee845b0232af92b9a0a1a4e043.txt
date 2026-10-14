@@ -1,0 +1,2 @@
+1985
+{"probabilities": {"A": 0.25, "B": 0.35, "C": 0.15, "D": 0.25}, "reason": "B and D continue forward trajectory. B at 4 o'clock slightly favored as moderate angle suggests corridor continuation."}

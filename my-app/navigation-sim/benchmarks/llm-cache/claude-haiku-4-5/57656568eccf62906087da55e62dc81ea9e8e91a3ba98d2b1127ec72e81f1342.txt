@@ -1,0 +1,2 @@
+1699
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.15, "D": 0.10, "E": 0.15, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Signs ahead suggest forward corridor. Prefer straight/forward paths over side corridors for main destinations."}

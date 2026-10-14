@@ -1,0 +1,2 @@
+2297
+{"probabilities": {"A": 0.35, "B": 0.15, "C": 0.08, "D": 0.12, "E": 0.05, "F": 0.10, "G": 0.03, "H": 0.12}, "reason": "Sign 'Rooms 117-120' points left; room 111 likely nearby. Door at 2 o'clock most promising corridor continuation."}

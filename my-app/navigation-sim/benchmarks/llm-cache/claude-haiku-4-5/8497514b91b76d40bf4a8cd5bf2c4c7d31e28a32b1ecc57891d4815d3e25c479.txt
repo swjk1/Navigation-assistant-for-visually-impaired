@@ -1,0 +1,2 @@
+2348
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.08, "D": 0.15, "E": 0.08, "F": 0.15, "G": 0.12, "H": 0.12}, "reason": "Washrooms typically off side corridors. Forward directions (1-4 o'clock) most likely corridor continuations. Avoid shop areas (7-8 o'clock)."}

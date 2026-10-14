@@ -1,0 +1,2 @@
+1826
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.40, "E": 0.10}, "reason": "Room 111 nearby (signs 110, 112 at 8 o'clock). Continue straight (12 o'clock) along corridor most likely. Left (11 o'clock) also promising."}

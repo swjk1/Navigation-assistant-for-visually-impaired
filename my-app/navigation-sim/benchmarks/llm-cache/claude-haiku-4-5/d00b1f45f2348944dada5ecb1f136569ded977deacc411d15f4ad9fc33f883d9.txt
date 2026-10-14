@@ -1,0 +1,2 @@
+1725
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "B continues straight ahead past Home Goods sign. A, D continue forward. Side corridors E, C may lead to lifts. Avoid dead-end shops."}

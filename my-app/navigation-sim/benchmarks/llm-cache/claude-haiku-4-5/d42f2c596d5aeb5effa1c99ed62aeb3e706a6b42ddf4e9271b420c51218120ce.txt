@@ -1,0 +1,2 @@
+2751
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.12, "D": 0.25, "E": 0.15, "F": 0.25, "G": 0.05, "H": 0.05}, "reason": "Multiple signs ahead (Pharmacy, door) suggest main corridor. D and F both lead straight ahead at 12 o'clock, most promising for exit."}

@@ -1,0 +1,2 @@
+1454
+{"probabilities": {"A": 0.45, "B": 0.15, "C": 0.10, "D": 0.05, "E": 0.10, "F": 0.05, "G": 0.10}, "reason": "Straight ahead (A) most likely continues main corridor. Side openings less probable for cinema destination."}

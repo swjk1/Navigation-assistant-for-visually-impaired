@@ -1,0 +1,2 @@
+1643
+{"probabilities": {"A": 0.5, "B": 0.5}, "reason": "Both identical openings ahead. Consistent door sightings suggest main corridor. Continue straight."}

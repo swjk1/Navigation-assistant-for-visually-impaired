@@ -1,0 +1,2 @@
+2374
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.05, "E": 0.05, "F": 0.10, "G": 0.10, "H": 0.25}, "reason": "Straight ahead (H) most likely continues main corridor. Left side (C) has retail signs suggesting corridor. Right side (F,G) near washroom signs, likely side corridor."}

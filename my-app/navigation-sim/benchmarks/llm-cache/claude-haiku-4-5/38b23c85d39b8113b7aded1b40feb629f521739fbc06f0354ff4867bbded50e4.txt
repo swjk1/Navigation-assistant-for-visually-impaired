@@ -1,0 +1,2 @@
+1951
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.60}, "reason": "Room 206 seen at 5 o'clock. Room 208 at 4 o'clock suggests corridor curves left. Opening C at 11 o'clock continues that direction."}

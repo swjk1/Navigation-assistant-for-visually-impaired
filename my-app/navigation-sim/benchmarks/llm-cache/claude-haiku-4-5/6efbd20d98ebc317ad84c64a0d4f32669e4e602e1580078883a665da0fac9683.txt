@@ -1,0 +1,2 @@
+1736
+{"probabilities": {"A": 0.05, "B": 0.10, "C": 0.05, "D": 0.15, "E": 0.25, "F": 0.15, "G": 0.15, "H": 0.10}, "reason": "Straight ahead (E, H) most likely continues main corridor. Coffee House sign at 11 suggests retail area nearby. Avoid side corridors (A, B, C) as likely dead ends."}

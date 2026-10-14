@@ -1,0 +1,2 @@
+1388
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.35, "D": 0.15, "E": 0.15, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Continue straight (12 o'clock) toward Noodle Bar sign. Side corridors (10 o'clock) may lead to lifts."}

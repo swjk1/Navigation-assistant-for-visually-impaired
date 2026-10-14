@@ -1,0 +1,2 @@
+2080
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.05, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.05, "H": 0.20}, "reason": "Lift door detected at 2 o'clock. Opening B toward 2 o'clock most likely leads there directly."}

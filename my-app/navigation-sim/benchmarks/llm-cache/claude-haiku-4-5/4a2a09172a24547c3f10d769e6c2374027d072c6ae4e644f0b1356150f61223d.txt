@@ -1,0 +1,2 @@
+1571
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.25, "D": 0.10, "E": 0.05, "F": 0.05, "G": 0.05, "H": 0.10}, "reason": "Forward/left openings (B,C) likely main corridor. Noodle Bar sign suggests shops ahead. Avoid dead-ends."}

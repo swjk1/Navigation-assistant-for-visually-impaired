@@ -1,0 +1,2 @@
+1635
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.25, "E": 0.10, "F": 0.10, "G": 0.05, "H": 0.05}, "reason": "Prefer forward directions (12 o'clock) as main corridors. D and H ahead most likely. Avoid backtracking (6 o'clock)."}

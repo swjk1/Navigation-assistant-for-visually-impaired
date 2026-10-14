@@ -1,0 +1,2 @@
+2109
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.70, "E": 0.05, "F": 0.05, "G": 0.03, "H": 0.02}, "reason": "Exit sign and door repeatedly detected at 11 o'clock. Option D aligns with this direction, closest distance."}

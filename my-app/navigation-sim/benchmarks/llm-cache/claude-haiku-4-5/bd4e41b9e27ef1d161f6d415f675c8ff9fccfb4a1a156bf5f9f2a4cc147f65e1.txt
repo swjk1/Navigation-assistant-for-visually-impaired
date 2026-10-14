@@ -1,0 +1,2 @@
+1777
+{"probabilities": {"A": 0.35, "B": 0.65}, "reason": "B is closer, more aligned with corridor direction. Room numbers 303-306 suggest corridor layout."}

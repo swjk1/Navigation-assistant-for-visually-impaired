@@ -1,0 +1,2 @@
+2324
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.25, "D": 0.05, "E": 0.05, "F": 0.05, "G": 0.35, "H": 0.15}, "reason": "Sign 'Rooms 107-120' points right (3 o'clock). G is right, closest match. H and C are left-side alternatives if corridor turns."}

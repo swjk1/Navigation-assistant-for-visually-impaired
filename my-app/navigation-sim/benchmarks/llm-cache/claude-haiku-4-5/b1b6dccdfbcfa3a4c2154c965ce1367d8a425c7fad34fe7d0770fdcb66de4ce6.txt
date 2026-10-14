@@ -1,0 +1,2 @@
+1917
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.40}, "reason": "C continues corridor direction. A slightly left. B and C both right but C closer, more likely corridor continuation."}

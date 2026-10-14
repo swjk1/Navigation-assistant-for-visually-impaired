@@ -1,0 +1,2 @@
+1425
+{"probabilities": {"A": 0.35, "B": 0.40, "C": 0.15, "D": 0.10}, "reason": "Ahead-right openings (A, B) suggest corridor continuation. B slightly favored for better distance/angle alignment with typical building layouts."}

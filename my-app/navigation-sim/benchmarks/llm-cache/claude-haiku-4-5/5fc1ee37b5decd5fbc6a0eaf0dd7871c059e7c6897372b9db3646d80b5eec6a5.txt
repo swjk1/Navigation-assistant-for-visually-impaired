@@ -1,0 +1,2 @@
+2280
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.20, "D": 0.25, "E": 0.15}, "reason": "Side corridors (8, 10 o'clock) likely lead to lifts. Prefer 8 and 10 o'clock positions over extreme angles."}

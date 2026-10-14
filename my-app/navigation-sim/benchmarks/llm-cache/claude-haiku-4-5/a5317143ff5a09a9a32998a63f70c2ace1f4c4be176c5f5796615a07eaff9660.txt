@@ -1,0 +1,2 @@
+2276
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.25, "D": 0.05, "E": 0.05, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "Exit sign at 12 o'clock suggests forward direction. Continuing straight (C) most likely. Side corridors (A, B, F) possible. Backward unlikely."}

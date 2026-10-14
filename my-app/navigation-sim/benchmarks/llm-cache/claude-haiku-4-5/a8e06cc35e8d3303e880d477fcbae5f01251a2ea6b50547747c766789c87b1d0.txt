@@ -1,0 +1,2 @@
+1778
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Room 114 is lower than 117-118 seen behind. Continue straight ahead (12 o'clock) along corridor."}

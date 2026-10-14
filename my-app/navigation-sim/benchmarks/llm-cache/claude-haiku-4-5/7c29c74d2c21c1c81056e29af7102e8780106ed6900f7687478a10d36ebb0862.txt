@@ -1,0 +1,2 @@
+1742
+{"probabilities": {"A": 0.25, "B": 0.10, "C": 0.05, "D": 0.05, "E": 0.20, "F": 0.10, "G": 0.15, "H": 0.10}, "reason": "Straight ahead (A) or backward (G/H) likely continue main corridor. Side shops detected; avoid C, F. E explores alternative."}

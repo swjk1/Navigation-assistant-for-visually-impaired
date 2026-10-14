@@ -1,0 +1,2 @@
+2181
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.15, "D": 0.35, "E": 0.10, "F": 0.15}, "reason": "Pharmacy likely ahead or behind. D (6 o'clock/behind) most promising for corridor continuation. Jewellery sign suggests retail area."}

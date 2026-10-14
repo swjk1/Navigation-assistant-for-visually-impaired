@@ -1,0 +1,2 @@
+2315
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Continuing straight (B) toward Toy World sign suggests main corridor. Side corridors (A, D) may lead to lifts. Avoid dead-end shops."}

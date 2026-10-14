@@ -1,0 +1,2 @@
+1639
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.10, "E": 0.10, "F": 0.05, "G": 0.15, "H": 0.15}, "reason": "Signs point 2 o'clock direction. B continues that bearing. Avoid F (too close, likely shop). Explore main corridors."}

@@ -1,0 +1,2 @@
+1707
+{"probabilities": {"A": 0.15, "B": 0.08, "C": 0.25, "D": 0.12, "E": 0.08, "F": 0.05, "G": 0.07, "H": 0.20}, "reason": "Lift detected ahead suggests main corridor. Exits at corridor ends. Explore backward (C) or side corridors (H, B, D) for stairs."}

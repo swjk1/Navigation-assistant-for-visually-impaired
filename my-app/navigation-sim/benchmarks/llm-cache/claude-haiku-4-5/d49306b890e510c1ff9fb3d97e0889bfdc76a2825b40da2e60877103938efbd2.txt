@@ -1,0 +1,2 @@
+2323
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.25, "E": 0.35, "F": 0.05}, "reason": "Sign 'Rooms 107-120' points right; room 111 in that range. Continue corridor left (E) or explore left doors (B, D)."}

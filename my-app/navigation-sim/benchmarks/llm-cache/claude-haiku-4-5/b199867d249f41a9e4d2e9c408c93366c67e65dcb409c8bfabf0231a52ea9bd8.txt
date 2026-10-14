@@ -1,0 +1,2 @@
+1482
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.20, "E": 0.10, "F": 0.05, "G": 0.05, "H": 0.15}, "reason": "Continue forward (A) or slightly left (D, H) following corridor pattern. Avoid side shops (E, F, G)."}

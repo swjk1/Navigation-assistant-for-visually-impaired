@@ -1,0 +1,2 @@
+2000
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.10, "G": 0.10, "H": 0.05}, "reason": "Straight ahead (A) most likely continues main corridor. Left side (D, C, B) shows shops/pharmacy suggesting corridor. Avoid right (H) and duplicates (E, F)."}

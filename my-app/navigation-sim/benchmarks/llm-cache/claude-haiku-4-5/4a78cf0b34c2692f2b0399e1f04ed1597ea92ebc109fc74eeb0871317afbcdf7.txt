@@ -1,0 +1,2 @@
+1777
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Exit sign at 2 o'clock suggests main corridor. Room numbers 314-316 indicate side corridor, likely dead end."}

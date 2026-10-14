@@ -1,0 +1,2 @@
+1817
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.10, "D": 0.25, "E": 0.15, "F": 0.10, "G": 0.03, "H": 0.02}, "reason": "Continue straight (D) or left (B,E) toward main corridor. Avoid shops (Pet Shop, Travel Agent, Salon). Washroom suggests lift nearby."}

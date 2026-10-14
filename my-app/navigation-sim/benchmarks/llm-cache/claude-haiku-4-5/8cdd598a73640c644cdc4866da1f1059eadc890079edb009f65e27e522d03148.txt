@@ -1,0 +1,2 @@
+2379
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.15, "D": 0.10, "E": 0.15, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Electronics sign at 1 o'clock suggests retail area. Lifts often near shops. Options F, B, C near sign direction."}

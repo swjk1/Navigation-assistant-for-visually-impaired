@@ -1,0 +1,2 @@
+1686
+{"probabilities": {"A": 0.25, "B": 0.75}, "reason": "Sign points right; continuing forward (12 o'clock) more likely follows main corridor toward room 314."}

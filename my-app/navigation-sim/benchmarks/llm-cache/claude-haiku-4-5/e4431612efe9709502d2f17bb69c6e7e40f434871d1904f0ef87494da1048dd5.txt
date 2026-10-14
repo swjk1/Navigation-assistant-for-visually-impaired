@@ -1,0 +1,2 @@
+4250
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.10, "D": 0.20, "E": 0.25, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Lift detected at 11 o'clock. Washrooms often near lifts. E (11 o'clock) most likely. D also promising."}

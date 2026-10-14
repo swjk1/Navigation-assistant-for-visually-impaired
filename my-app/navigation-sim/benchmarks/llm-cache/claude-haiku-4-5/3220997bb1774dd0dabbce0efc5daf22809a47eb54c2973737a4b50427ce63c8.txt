@@ -1,0 +1,2 @@
+3258
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.05, "D": 0.1, "E": 0.2, "F": 0.25}, "reason": "Prefer forward/slightly left directions (B, F) as main corridors typically extend ahead. Avoid close right (D) and left (C) as likely side rooms."}

@@ -1,0 +1,2 @@
+1664
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.15, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Signs point toward 2-3 o'clock. Openings A, B, E, F, H align with that direction. Prefer continuing straight (A) or slightly angled (B, F) over sharp turns."}

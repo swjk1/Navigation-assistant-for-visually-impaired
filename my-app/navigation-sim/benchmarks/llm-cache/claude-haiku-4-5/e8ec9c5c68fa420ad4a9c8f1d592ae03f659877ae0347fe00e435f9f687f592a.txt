@@ -1,0 +1,2 @@
+3774
+{"probabilities": {"A": 0.6, "B": 0.4}, "reason": "Opening A ahead-right more likely continues corridor toward room 309. B behind-left suggests backtracking."}

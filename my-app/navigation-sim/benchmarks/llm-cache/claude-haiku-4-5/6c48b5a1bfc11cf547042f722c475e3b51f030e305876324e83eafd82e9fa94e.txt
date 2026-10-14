@@ -1,0 +1,2 @@
+1676
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.05, "D": 0.20, "E": 0.15, "F": 0.05, "G": 0.20, "H": 0.05}, "reason": "Exit signs at 11 and 10 o'clock suggest main corridor. Options B, D, G align with signs. Continue forward or explore signed directions."}

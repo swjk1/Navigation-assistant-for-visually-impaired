@@ -1,0 +1,2 @@
+2262
+{"probabilities": {"A": 0.25, "B": 0.20, "C": 0.10, "D": 0.05, "E": 0.25, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (A) or right (E) likely continue main corridor. Left signs suggest side corridors, dead ends."}

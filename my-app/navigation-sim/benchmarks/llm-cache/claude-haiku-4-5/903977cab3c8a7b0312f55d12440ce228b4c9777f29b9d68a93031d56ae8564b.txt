@@ -1,0 +1,2 @@
+1936
+{"probabilities": {"A": 0.35, "B": 0.25, "C": 0.05, "D": 0.35}, "reason": "Lift seen 7 o'clock recently. A and D continue that direction. C enters room 210. B diverges away."}

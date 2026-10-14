@@ -1,0 +1,2 @@
+2733
+{"probabilities": {"A": 0.65, "B": 0.25, "C": 0.10}, "reason": "Right (3 o'clock) continues corridor pattern. Room numbers increasing: 311→316→317-320. Right aligns with sign direction."}

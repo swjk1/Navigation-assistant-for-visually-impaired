@@ -1,0 +1,2 @@
+1571
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.08, "D": 0.20, "E": 0.18, "F": 0.12, "G": 0.10, "H": 0.07}, "reason": "Signs behind suggest main corridor. Openings 7-8 o'clock align with detected shops direction, likely corridor continuing past them."}

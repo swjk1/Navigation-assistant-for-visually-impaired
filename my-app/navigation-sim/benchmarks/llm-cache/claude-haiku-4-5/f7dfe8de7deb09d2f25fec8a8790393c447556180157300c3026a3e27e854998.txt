@@ -1,0 +1,2 @@
+1914
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Rooms 317-320 sign points right. Room 309 is lower numbered, likely behind or left. Straight ahead (A) continues corridor toward lower numbers."}

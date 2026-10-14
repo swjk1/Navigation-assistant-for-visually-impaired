@@ -1,0 +1,2 @@
+1565
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.05, "D": 0.05, "E": 0.15, "F": 0.25, "G": 0.35, "H": 0.05}, "reason": "Washroom sign detected at 9 o'clock. Opening G at 9 o'clock most direct. F at 10 o'clock near lift door also promising."}

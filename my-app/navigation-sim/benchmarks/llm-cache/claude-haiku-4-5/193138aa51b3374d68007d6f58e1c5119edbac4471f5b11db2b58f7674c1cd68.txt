@@ -1,0 +1,2 @@
+1065
+{"probabilities": {"A": 0.65, "B": 0.35}, "reason": "Door at 11 o'clock repeatedly detected suggests main corridor. Side corridor at 10 o'clock may lead to lift."}

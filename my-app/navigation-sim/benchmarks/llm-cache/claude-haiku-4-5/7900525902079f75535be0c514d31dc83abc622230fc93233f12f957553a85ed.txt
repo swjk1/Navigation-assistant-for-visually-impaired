@@ -1,0 +1,2 @@
+1561
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.10, "D": 0.25, "E": 0.05, "F": 0.10}, "reason": "Straight ahead (B, D) most likely continues main corridor toward exit. Recent door at 1 o'clock (C) less promising. Side openings less likely."}

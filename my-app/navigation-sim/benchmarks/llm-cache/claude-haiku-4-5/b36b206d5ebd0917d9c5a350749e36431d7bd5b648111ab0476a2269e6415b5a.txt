@@ -1,0 +1,2 @@
+1808
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.08, "D": 0.25, "E": 0.05, "F": 0.07, "G": 0.10, "H": 0.20}, "reason": "Door at 11 o'clock (A, H) and straight ahead (D) most likely corridor continuations. Pharmacy sign suggests retail area, not exit."}

@@ -1,0 +1,2 @@
+2319
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.15, "D": 0.10, "E": 0.10, "F": 0.05, "G": 0.10, "H": 0.10}, "reason": "Straight ahead (A) most likely continues main corridor. Nearby shops detected suggest retail area layout. Avoid dead-end shops."}

@@ -1,0 +1,2 @@
+2285
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.10, "F": 0.15, "G": 0.10, "H": 0.10}, "reason": "Signs left suggest retail area. Forward/right directions (A,B,D,F) likely continue main corridor toward shops."}

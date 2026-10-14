@@ -1,0 +1,2 @@
+2212
+{"probabilities": {"A": 0.15, "B": 0.20, "C": 0.25, "D": 0.10, "E": 0.15, "F": 0.05, "G": 0.05, "H": 0.05}, "reason": "Prefer forward/left-forward directions. Closest option E at 11 o'clock suggests corridor continuation."}

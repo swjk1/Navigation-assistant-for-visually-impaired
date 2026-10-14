@@ -1,0 +1,2 @@
+2266
+{"probabilities": {"A": 0.25, "B": 0.05, "C": 0.05, "D": 0.20, "E": 0.20, "F": 0.15, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (A) and left-forward (D, E) likely continue main corridor toward exit. Avoid shops and side corridors."}

@@ -1,0 +1,2 @@
+1662
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Straight ahead (12 o'clock) more likely continues main corridor. Backward (7 o'clock) suggests backtracking."}

@@ -1,0 +1,2 @@
+1707
+{"probabilities": {"A": 0.05, "B": 0.25, "C": 0.15, "D": 0.10, "E": 0.05, "F": 0.02, "G": 0.10, "H": 0.28}, "reason": "Sign points left toward rooms 117-120. H continues straight (corridor). B explores left opening. Avoid exits, washrooms, dead ends."}

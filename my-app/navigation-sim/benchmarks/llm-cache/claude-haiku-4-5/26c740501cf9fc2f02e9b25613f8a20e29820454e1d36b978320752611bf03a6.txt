@@ -1,0 +1,2 @@
+1732
+{"probabilities": {"A": 0.25, "B": 0.75}, "reason": "Sign at 11 o'clock shows rooms 101, 171. Opening B continues toward signs; A goes backward."}

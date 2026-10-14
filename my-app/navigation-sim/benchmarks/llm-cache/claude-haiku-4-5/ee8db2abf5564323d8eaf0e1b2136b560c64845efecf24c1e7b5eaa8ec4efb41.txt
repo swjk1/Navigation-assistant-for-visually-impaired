@@ -1,0 +1,2 @@
+1189
+{"probabilities": {"A": 0.45, "B": 0.55}, "reason": "B continues corridor direction. Room 206 likely ahead; 210, 218 suggest ascending numbers nearby."}

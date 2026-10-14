@@ -1,0 +1,2 @@
+1136
+{"probabilities": {"A": 0.9, "B": 0.1}, "reason": "Continue straight along the corridor as room numbers increase sequentially towards room 111."}

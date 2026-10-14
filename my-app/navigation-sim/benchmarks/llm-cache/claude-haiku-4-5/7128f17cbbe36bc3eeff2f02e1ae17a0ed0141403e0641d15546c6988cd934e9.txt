@@ -1,0 +1,2 @@
+2047
+{"probabilities": {"A": 0.65, "B": 0.25, "C": 0.10}, "reason": "Straight ahead (A) most likely continues main corridor. Lift behind suggests we're in building interior; room 102 likely ahead."}

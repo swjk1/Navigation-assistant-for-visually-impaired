@@ -1,0 +1,2 @@
+1550
+{"probabilities": {"A": 0.05, "B": 0.35, "C": 0.10, "D": 0.15, "E": 0.05, "F": 0.10, "G": 0.10, "H": 0.10}, "reason": "B continues straight ahead past Shoe Palace sign. Multiple shops detected left suggest corridor. Avoid dead-end shops."}

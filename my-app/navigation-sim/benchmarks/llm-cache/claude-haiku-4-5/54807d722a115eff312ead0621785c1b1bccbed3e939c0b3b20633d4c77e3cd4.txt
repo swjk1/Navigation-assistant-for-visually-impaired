@@ -1,0 +1,2 @@
+1814
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.20, "D": 0.25, "E": 0.12, "F": 0.08, "G": 0.05, "H": 0.05}, "reason": "Straight ahead (D) most likely continues main corridor. Left-forward options (C, F) suggest side corridors where lifts typically locate."}

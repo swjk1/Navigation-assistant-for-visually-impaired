@@ -1,0 +1,2 @@
+1899
+{"probabilities": {"A": 0.05, "B": 0.08, "C": 0.12, "D": 0.25, "E": 0.15, "F": 0.12, "G": 0.08, "H": 0.15}, "reason": "Direction signs (Electronics, ElectronAcs) point 1-2 o'clock. Opening D (1 o'clock) most likely continues toward signposted destination. H is closest but wrong direction."}

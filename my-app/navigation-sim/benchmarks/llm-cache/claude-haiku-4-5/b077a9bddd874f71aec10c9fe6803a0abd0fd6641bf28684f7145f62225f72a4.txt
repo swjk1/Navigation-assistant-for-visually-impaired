@@ -1,0 +1,2 @@
+1839
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Direction sign points left toward 317-320. A continues forward along corridor; B goes left toward sign."}

@@ -1,0 +1,2 @@
+1295
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.30, "D": 0.20}, "reason": "B continues rightward past shops. C/D explore further. Avoid left (A) backtracking."}

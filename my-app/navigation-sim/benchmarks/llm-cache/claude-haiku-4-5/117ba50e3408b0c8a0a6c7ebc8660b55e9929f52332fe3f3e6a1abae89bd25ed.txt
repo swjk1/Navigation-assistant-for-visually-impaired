@@ -1,0 +1,2 @@
+1460
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.10, "E": 0.10, "F": 0.10, "G": 0.20}, "reason": "Continue straight (A) or explore right side (G). Avoid left turns toward detected shops (Taco, Noodle, Kitchen)."}

@@ -1,0 +1,2 @@
+2418
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.08, "F": 0.12, "G": 0.05, "H": 0.20}, "reason": "Washroom signs point 2 o'clock. D (3 o'clock) and H (7 o'clock, 5.4m) align with corridor logic. Prefer D's proximity and direction alignment."}

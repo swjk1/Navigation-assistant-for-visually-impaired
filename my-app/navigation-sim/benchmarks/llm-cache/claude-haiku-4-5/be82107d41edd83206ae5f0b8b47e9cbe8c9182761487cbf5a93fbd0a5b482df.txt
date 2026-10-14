@@ -1,0 +1,2 @@
+1500
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.10, "D": 0.25, "E": 0.30, "F": 0.10, "G": 0.02, "H": 0.03}, "reason": "Continue forward (E) or explore side corridors (D, F). Art Supplies sign suggests shops nearby."}

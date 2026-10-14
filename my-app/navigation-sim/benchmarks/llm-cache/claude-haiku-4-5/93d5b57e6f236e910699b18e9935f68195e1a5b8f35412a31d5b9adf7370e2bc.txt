@@ -1,0 +1,2 @@
+1568
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.10, "D": 0.05, "E": 0.25, "F": 0.05, "G": 0.20, "H": 0.25}, "reason": "Pet Shop sign at 2 o'clock suggests shops cluster rightward. H and G align with that direction. E continues straight ahead, typical corridor pattern."}

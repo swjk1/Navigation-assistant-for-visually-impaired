@@ -1,0 +1,2 @@
+2197
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.05, "D": 0.10, "E": 0.20, "F": 0.05, "G": 0.25, "H": 0.15}, "reason": "Bank and Pharmacy signs at 2-3 o'clock suggest commercial area. Cinema likely nearby. Explore rightward openings toward detected signs."}

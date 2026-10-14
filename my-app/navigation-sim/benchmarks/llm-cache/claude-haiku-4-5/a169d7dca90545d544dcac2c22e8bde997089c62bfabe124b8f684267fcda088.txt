@@ -1,0 +1,2 @@
+1310
+{"probabilities": {"A": 0.25, "B": 0.25, "C": 0.15, "D": 0.15, "E": 0.10, "F": 0.10}, "reason": "Forward-left directions (A, B) suggest continuing main corridor. B closer. Side angles less likely main path."}

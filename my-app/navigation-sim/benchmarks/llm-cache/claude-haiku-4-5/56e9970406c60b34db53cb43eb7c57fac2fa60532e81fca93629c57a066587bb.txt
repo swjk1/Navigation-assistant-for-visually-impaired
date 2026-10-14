@@ -1,0 +1,2 @@
+2243
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.10, "D": 0.15, "E": 0.35}, "reason": "Straight ahead (E) most likely continues main corridor. Phone Repair at 5 o'clock suggests shops nearby; avoid C. Left openings (B, D) less likely main route."}

@@ -1,0 +1,2 @@
+1644
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.10, "D": 0.20, "E": 0.08, "F": 0.12, "G": 0.05, "H": 0.05}, "reason": "Travel Agent sign ahead suggests continuing forward (B). Pet Shop to left suggests side corridor (A, D). Avoid dead-end shops."}

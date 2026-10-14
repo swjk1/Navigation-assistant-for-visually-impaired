@@ -1,0 +1,2 @@
+1772
+{"probabilities": {"A": 0.35, "B": 0.50, "C": 0.15}, "reason": "Exit sign at 5 o'clock suggests rightward direction. Opening B at 4 o'clock aligns best with exit bearing."}

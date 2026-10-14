@@ -1,0 +1,2 @@
+2124
+{"probabilities": {"A": 0.15, "B": 0.15, "C": 0.20, "D": 0.25, "E": 0.10, "F": 0.15}, "reason": "Continue forward/right along main corridor. Pizza/Music signs suggest retail area. Avoid backtracking (E). Pet Shop likely ahead."}

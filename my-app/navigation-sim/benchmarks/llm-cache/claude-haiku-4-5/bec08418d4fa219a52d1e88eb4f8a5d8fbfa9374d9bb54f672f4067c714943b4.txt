@@ -1,0 +1,2 @@
+1773
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Door at 1 o'clock likely corridor/washroom access. Backward (6 o'clock) less promising for exploration."}

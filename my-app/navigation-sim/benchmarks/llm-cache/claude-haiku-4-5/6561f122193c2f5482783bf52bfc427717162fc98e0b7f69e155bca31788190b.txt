@@ -1,0 +1,2 @@
+4037
+{"probabilities": {"A": 0.25, "B": 0.15, "C": 0.05, "D": 0.25, "E": 0.15, "F": 0.10, "G": 0.03, "H": 0.02}, "reason": "Door at 10 o'clock suggests corridor. Options A and D continue that direction. Prefer A's distance and alignment."}

@@ -1,0 +1,14 @@
+1315
+{
+  "probabilities": {
+    "A": 0.05,
+    "B": 0.05,
+    "C": 0.70,
+    "D": 0.05,
+    "E": 0.05,
+    "F": 0.02,
+    "G": 0.04,
+    "H": 0.04
+  },
+  "reason": "Direction sign points right to Rooms 107-120; opening C is at 3 o'clock."
+}

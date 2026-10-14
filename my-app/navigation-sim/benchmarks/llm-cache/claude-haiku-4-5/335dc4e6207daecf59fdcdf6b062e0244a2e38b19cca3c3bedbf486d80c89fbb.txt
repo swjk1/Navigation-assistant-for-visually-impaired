@@ -1,0 +1,2 @@
+2142
+{"probabilities": {"A": 0.15, "B": 0.05, "C": 0.25, "D": 0.35, "E": 0.10, "F": 0.05, "G": 0.05}, "reason": "Straight ahead (D) most likely continues main corridor. Right (C) is secondary option. Avoid shop areas (Jewellery, Optician)."}

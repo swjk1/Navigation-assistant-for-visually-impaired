@@ -1,0 +1,2 @@
+2030
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.05, "D": 0.05, "E": 0.05, "F": 0.10, "G": 0.20, "H": 0.15}, "reason": "Straight ahead (B) most likely continues main corridor. Side corridors (A, G) may lead to lifts. Avoid shops (C, D, E)."}

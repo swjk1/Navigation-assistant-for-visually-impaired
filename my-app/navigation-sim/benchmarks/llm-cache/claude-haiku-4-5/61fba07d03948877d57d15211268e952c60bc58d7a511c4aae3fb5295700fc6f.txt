@@ -1,0 +1,2 @@
+1616
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.12, "D": 0.08, "E": 0.18, "F": 0.20, "G": 0.07, "H": 0.10}, "reason": "Coffee House sign at 2 o'clock suggests forward direction. Prefer forward/left openings (F, H, E, A) over right/back options."}

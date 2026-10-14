@@ -1,0 +1,2 @@
+1980
+{"probabilities": {"A": 0.75, "B": 0.25}, "reason": "Lift detected 7 o'clock previously. A continues that direction. B leads toward higher room numbers."}

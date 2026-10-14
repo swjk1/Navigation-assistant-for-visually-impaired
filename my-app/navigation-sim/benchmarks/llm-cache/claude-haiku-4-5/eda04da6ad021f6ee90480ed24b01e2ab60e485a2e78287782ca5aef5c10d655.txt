@@ -1,0 +1,2 @@
+2064
+{"probabilities": {"A": 0.05, "B": 0.15, "C": 0.50, "D": 0.05, "E": 0.05, "F": 0.05, "G": 0.10, "H": 0.05}, "reason": "Sign points left (9 o'clock) toward rooms 117-120. Room 116 likely nearby. Continue left corridor."}

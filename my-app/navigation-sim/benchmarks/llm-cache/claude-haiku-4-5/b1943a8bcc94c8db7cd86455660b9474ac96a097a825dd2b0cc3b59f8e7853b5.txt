@@ -1,0 +1,2 @@
+1497
+{"probabilities": {"A": 0.15, "B": 0.35, "C": 0.12, "D": 0.08, "E": 0.18, "F": 0.05, "G": 0.04, "H": 0.03}, "reason": "Straight ahead (B) most likely continues main corridor. Right angles (E, H) secondary. Left angles less likely."}

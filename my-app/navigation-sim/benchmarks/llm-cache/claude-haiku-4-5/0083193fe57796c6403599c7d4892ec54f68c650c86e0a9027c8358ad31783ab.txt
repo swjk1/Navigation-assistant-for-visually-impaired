@@ -1,0 +1,2 @@
+2148
+{"probabilities": {"A": 0.05, "B": 0.05, "C": 0.15, "D": 0.05, "E": 0.35, "F": 0.1, "G": 0.1, "H": 0.15}, "reason": "Pizza sign at 1 o'clock recently seen. Opening E (3 o'clock) closest to that direction. Continue corridor logic."}

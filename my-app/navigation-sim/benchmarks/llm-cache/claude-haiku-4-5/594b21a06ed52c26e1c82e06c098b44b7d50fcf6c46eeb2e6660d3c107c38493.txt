@@ -1,0 +1,2 @@
+2057
+{"probabilities": {"A": 0.45, "B": 0.05, "C": 0.15, "D": 0.35}, "reason": "Sign points right; A and D ahead-right likely corridor. A closer, preferred. B backward unlikely. C side corridor possible."}

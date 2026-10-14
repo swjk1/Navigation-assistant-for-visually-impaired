@@ -1,0 +1,2 @@
+2393
+{"probabilities": {"A": 0.15, "B": 0.10, "C": 0.25, "D": 0.12, "E": 0.08, "F": 0.05, "G": 0.05, "H": 0.20}, "reason": "Continue forward (C) or backward (H) along main corridor. Avoid side corridors with lifts/washrooms (A,D). Shops are dead ends (B). Prefer main paths."}

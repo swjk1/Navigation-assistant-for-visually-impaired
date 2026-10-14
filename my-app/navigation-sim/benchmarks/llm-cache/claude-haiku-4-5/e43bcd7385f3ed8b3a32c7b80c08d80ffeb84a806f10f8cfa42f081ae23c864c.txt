@@ -1,0 +1,2 @@
+1836
+{"probabilities": {"A": 0.15, "B": 0.25, "C": 0.60}, "reason": "Sign 209 at 5 o'clock suggests room corridor. Opening C at 4 o'clock continues that direction toward stairs."}
